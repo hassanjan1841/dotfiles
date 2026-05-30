@@ -68,9 +68,10 @@
       become: true
       shell: |
         curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | \
-        gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+        gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
       args:
         creates: /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+      ignore_errors: true
 
     - name: Add Cloudflare WARP apt repo (Ubuntu)
       when: ansible_os_family == "Debian"
@@ -79,6 +80,7 @@
         dest: /etc/apt/sources.list.d/cloudflare-client.list
         content: |
           deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ {{ ansible_distribution_release }} main
+      ignore_errors: true
 
     - name: Install Cloudflare WARP (Ubuntu)
       when: ansible_os_family == "Debian" and not ansible_check_mode
@@ -87,6 +89,7 @@
         name: cloudflare-warp
         state: present
         update_cache: true
+      ignore_errors: true
 
     # ── duf (Ubuntu) ─────────────────────────────────────────────────────────
     - name: Install duf (Ubuntu)
