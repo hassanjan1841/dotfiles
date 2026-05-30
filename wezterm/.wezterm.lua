@@ -25,6 +25,25 @@ config.scrollback_lines = 10000
 -- ── Clipboard (native Wayland) ────────────────────────────────────────────────
 config.enable_wayland = true
 
+-- ── Bell → desktop toast notification ────────────────────────────────────────
+config.audible_bell = 'Disabled'   -- no sound, just notify
+
+wezterm.on('bell', function(window, pane)
+  window:toast_notification(
+    'WezTerm — ' .. window:active_workspace(),
+    '✓ Done: ' .. (pane:get_title() or ''),
+    nil,
+    4000
+  )
+end)
+
+-- ── Quick Select: extra patterns (on top of built-in URLs/paths) ──────────────
+config.quick_select_patterns = {
+  '[0-9a-f]{7,40}',           -- git hashes
+  '[\\w./:-]+:\\d+:\\d*',     -- file:line:col references
+  '\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}(?::\\d+)?', -- IP:port
+}
+
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 local HOME = os.getenv('HOME') or ''
 
@@ -120,6 +139,13 @@ config.keys = {
   { key = 'n', mods = 'CTRL|SHIFT',     action = act.SwitchWorkspaceRelative(1)  },
   { key = 'p', mods = 'CTRL|SHIFT',     action = act.SwitchWorkspaceRelative(-1) },
   { key = '$', mods = 'CTRL|SHIFT',     action = act.ShowLauncherArgs { flags = 'WORKSPACES' } },
+
+  -- Quick Select: highlight URLs / paths / git hashes / IPs for keyboard copy
+  { key = 'Space', mods = 'CTRL|SHIFT', action = act.QuickSelect },
+
+  -- Shell integration: jump between command prompts in scrollback
+  { key = 'UpArrow',   mods = 'CTRL|SHIFT', action = act.ScrollToPrompt(-1) },
+  { key = 'DownArrow', mods = 'CTRL|SHIFT', action = act.ScrollToPrompt(1)  },
 }
 
 -- ── Mouse: select → copy, right-click → paste ────────────────────────────────

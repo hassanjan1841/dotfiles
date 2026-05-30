@@ -163,6 +163,25 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 [ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh
 [ -f /usr/share/doc/fzf/examples/completion.zsh ]    && source /usr/share/doc/fzf/examples/completion.zsh
 
+# WezTerm shell integration
+# Emits OSC sequences so WezTerm can: track CWD (better tab titles + status bar),
+# mark prompt zones (Ctrl+Shift+Up/Down jumps between commands in scrollback),
+# and ring the bell when a long command finishes (triggers toast notification).
+if [[ -n "$WEZTERM_PANE" ]]; then
+  __wezterm_cwd()          { printf "\033]7;file://%s%s\033\\" "$HOST" "$PWD" }
+  __wezterm_prompt_start() { printf "\033]133;A\033\\" }
+  __wezterm_prompt_end()   { printf "\033]133;B\033\\" }
+  __wezterm_cmd_start()    { printf "\033]133;C\033\\" }
+  __wezterm_cmd_end()      { printf "\033]133;D;%s\033\\" "$?" }
+
+  precmd_functions+=(__wezterm_cmd_end __wezterm_cwd __wezterm_prompt_start)
+  preexec_functions+=(__wezterm_cmd_start)
+  PROMPT="${PROMPT}"$'\033]133;B\033\\'
+
+  # alert: append "; alert" to any long command to get a toast when it finishes
+  alias alert='printf "\a"'
+fi
+
 # zoxide (smarter cd)
 eval "$(zoxide init zsh)"
 
