@@ -22,7 +22,7 @@
       when: ansible_os_family == "Darwin"
       become: false
       community.general.homebrew:
-        name: [git, curl, tmux, stow, restic, node, gh, zed, copyq]
+        name: [git, curl, tmux, stow, restic, node, gh, zed, copyq, just]
         state: present
 
     # ── Ubuntu/Debian: apt packages ───────────────────────────────────────────
@@ -59,6 +59,15 @@
         name: cloudflare-warp
         state: present
         update_cache: true
+
+    # ── just (Ubuntu) — not in apt, install from GitHub releases ────────────
+    - name: Install just (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      shell: |
+        curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+      args:
+        creates: /usr/local/bin/just
 
     # ── Cloudflare WARP (macOS) ───────────────────────────────────────────────
     - name: Install Cloudflare WARP via Homebrew cask (macOS)

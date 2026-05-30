@@ -1,0 +1,48 @@
+name: Test Ansible Playbook
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Install community.general collection
+        run: ansible-galaxy collection install community.general
+
+      - name: Run playbook in check mode (dry run)
+        run: |
+          ansible-playbook setup.yml \
+            --inventory localhost, \
+            --connection local \
+            --check \
+            --diff
+        env:
+          ANSIBLE_FORCE_COLOR: "1"
+
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: pip3 install ansible
+
+      - name: Install community.general collection
+        run: ansible-galaxy collection install community.general
+
+      - name: Run playbook in check mode (dry run)
+        run: |
+          ansible-playbook setup.yml \
+            --inventory localhost, \
+            --connection local \
+            --check \
+            --diff
+        env:
+          ANSIBLE_FORCE_COLOR: "1"
