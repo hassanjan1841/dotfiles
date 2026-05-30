@@ -1,0 +1,17 @@
+# tmuxinator workspace config
+# To change the project: edit ~/.devrc and update PROJECT_PATH
+# Launch with: tmuxinator start workspace
+
+name: workspace
+root: <%= ENV.fetch("PROJECT_PATH", Dir.home + "/speaklogic-testing") %>
+
+windows:
+  - dev-server:
+      layout: main-vertical
+      panes:
+        - npm run dev-server
+
+  - claude:
+      layout: main-vertical
+      panes:
+        - claude

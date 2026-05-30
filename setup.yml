@@ -7,44 +7,30 @@
     user_home: "{{ ansible_env.HOME }}"
     dotfiles_dir: "{{ ansible_env.HOME }}/dotfiles"
     dotfiles_repo: "https://github.com/hassanjan1841/dotfiles.git"
-    project_path: "{{ ansible_env.HOME }}/speaklogic-testing"
 
   tasks:
 
-    # ── macOS: Homebrew ────────────────────────────────────────────────────────
+    # ── macOS: Homebrew + packages ────────────────────────────────────────────
     - name: Install Homebrew (macOS)
       when: ansible_os_family == "Darwin"
-      shell: |
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+      become: false
+      shell: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
       args:
         creates: /opt/homebrew/bin/brew
-      become: false
 
     - name: Install packages via Homebrew (macOS)
       when: ansible_os_family == "Darwin"
       become: false
       community.general.homebrew:
-        name:
-          - git
-          - curl
-          - tmux
-          - stow
-          - restic
-          - node
+        name: [git, curl, tmux, stow, restic, node, gh, zed]
         state: present
 
-    # ── Ubuntu/Debian: apt ────────────────────────────────────────────────────
+    # ── Ubuntu/Debian: apt packages ───────────────────────────────────────────
     - name: Install packages via apt (Ubuntu)
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name:
-          - git
-          - curl
-          - tmux
-          - stow
-          - zenity
-          - restic
+        name: [git, curl, tmux, stow, zenity, restic, gh, ruby, ruby-dev]
         state: present
         update_cache: true
 
@@ -52,25 +38,109 @@
       when: ansible_os_family == "Debian"
       become: true
       block:
-        - name: Download NodeSource setup script
-          get_url:
+        - get_url:
             url: https://deb.nodesource.com/setup_lts.x
             dest: /tmp/nodesource_setup.sh
             mode: "0755"
-        - name: Run NodeSource setup
-          command: bash /tmp/nodesource_setup.sh
-        - name: Install nodejs
-          apt:
+        - command: bash /tmp/nodesource_setup.sh
+        - apt:
             name: nodejs
             state: present
             update_cache: true
 
-    # ── Claude Code CLI (both platforms) ──────────────────────────────────────
-    - name: Install Claude Code CLI
+    # ── NVM (both platforms) ──────────────────────────────────────────────────
+    - name: Install NVM
       become: false
-      command: npm install -g @anthropic-ai/claude-code
+      shell: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
       args:
-        creates: "{{ user_home }}/.local/bin/claude"
+        creates: "{{ user_home }}/.nvm/nvm.sh"
+
+    # ── Global npm packages ───────────────────────────────────────────────────
+    - name: Install global npm packages
+      become: false
+      loop:
+        - "@anthropic-ai/claude-code"
+        - vercel
+        - typescript
+        - pnpm
+        - "@biomejs/biome"
+        - lighthouse
+        - opencode
+      command: "npm install -g {{ item }}"
+      ignore_errors: true
+
+    # ── Bun ───────────────────────────────────────────────────────────────────
+    - name: Install Bun
+      become: false
+      shell: curl -fsSL https://bun.sh/install | bash
+      args:
+        creates: "{{ user_home }}/.bun/bin/bun"
+
+    # ── uv (Python tool manager) ──────────────────────────────────────────────
+    - name: Install uv
+      become: false
+      shell: curl -LsSf https://astral.sh/uv/install.sh | sh
+      args:
+        creates: "{{ user_home }}/.local/bin/uv"
+
+    # ── aider via uv ─────────────────────────────────────────────────────────
+    - name: Install aider-chat via uv
+      become: false
+      command: "{{ user_home }}/.local/bin/uv tool install aider-chat"
+      args:
+        creates: "{{ user_home }}/.local/bin/aider"
+
+    # ── chezmoi ───────────────────────────────────────────────────────────────
+    - name: Install chezmoi
+      become: false
+      shell: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "{{ user_home }}/.local/bin"
+      args:
+        creates: "{{ user_home }}/.local/bin/chezmoi"
+
+    # ── tmuxinator ────────────────────────────────────────────────────────────
+    - name: Install tmuxinator gem
+      become: false
+      command: gem install tmuxinator
+      args:
+        creates: "{{ user_home }}/.local/share/gem/ruby/3.x/bin/tmuxinator"
+      ignore_errors: true
+
+    # ── Oh My Zsh ─────────────────────────────────────────────────────────────
+    - name: Install Oh My Zsh
+      become: false
+      shell: sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+      args:
+        creates: "{{ user_home }}/.oh-my-zsh"
+
+    - name: Install zsh-autosuggestions plugin
+      become: false
+      git:
+        repo: https://github.com/zsh-users/zsh-autosuggestions
+        dest: "{{ user_home }}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+      ignore_errors: true
+
+    - name: Install zsh-syntax-highlighting plugin
+      become: false
+      git:
+        repo: https://github.com/zsh-users/zsh-syntax-highlighting
+        dest: "{{ user_home }}/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
+      ignore_errors: true
+
+    - name: Install Powerlevel10k theme
+      become: false
+      git:
+        repo: https://github.com/romkatv/powerlevel10k.git
+        dest: "{{ user_home }}/.oh-my-zsh/custom/themes/powerlevel10k"
+        depth: 1
+      ignore_errors: true
+
+    # ── TPM (Tmux Plugin Manager) ─────────────────────────────────────────────
+    - name: Install TPM
+      become: false
+      git:
+        repo: https://github.com/tmux-plugins/tpm
+        dest: "{{ user_home }}/.tmux/plugins/tpm"
+      ignore_errors: true
 
     # ── Dotfiles via stow ─────────────────────────────────────────────────────
     - name: Clone dotfiles repo
@@ -81,12 +151,34 @@
         version: main
       ignore_errors: true
 
-    - name: Stow all dotfile packages
+    - name: Stow home dotfile packages
       become: false
-      shell: "cd {{ dotfiles_dir }} && stow -v bash git zsh dev"
+      shell: "cd {{ dotfiles_dir }} && stow -v bash git zsh dev tmux p10k"
       ignore_errors: true
 
-    # ── startup.sh + autostart (Ubuntu only) ─────────────────────────────────
+    - name: Ensure tmuxinator config dir exists
+      become: false
+      file:
+        path: "{{ user_home }}/.config/tmuxinator"
+        state: directory
+
+    - name: Stow tmuxinator config
+      become: false
+      shell: "stow -v --target={{ user_home }}/.config/tmuxinator --dir={{ dotfiles_dir }} tmuxinator"
+      ignore_errors: true
+
+    - name: Ensure Zed config dir exists
+      become: false
+      file:
+        path: "{{ user_home }}/.config/zed"
+        state: directory
+
+    - name: Stow Zed config
+      become: false
+      shell: "stow -v --target={{ user_home }}/.config/zed --dir={{ dotfiles_dir }} zed"
+      ignore_errors: true
+
+    # ── startup.sh + GNOME autostart (Ubuntu only) ────────────────────────────
     - name: Copy startup.sh (Ubuntu)
       when: ansible_os_family == "Debian"
       become: false
@@ -95,7 +187,7 @@
         dest: "{{ user_home }}/startup.sh"
         mode: "0755"
 
-    - name: Ensure autostart directory exists (Ubuntu)
+    - name: Ensure autostart dir exists (Ubuntu)
       when: ansible_os_family == "Debian"
       become: false
       file:
@@ -124,13 +216,3 @@
         src: "{{ dotfiles_dir }}/startup-mac.sh"
         dest: "{{ user_home }}/startup-mac.sh"
         mode: "0755"
-
-    - name: Add startup-mac.sh to macOS Login Items notice
-      when: ansible_os_family == "Darwin"
-      debug:
-        msg: >
-          On macOS, open System Settings → General → Login Items
-          and add {{ user_home }}/startup-mac.sh manually,
-          or run: osascript -e 'tell application "System Events"
-          to make login item at end with properties
-          {path:"{{ user_home }}/startup-mac.sh", hidden:false}'
