@@ -127,12 +127,12 @@ end)
 -- ── Key tables: resize mode (Ctrl+Shift+R → hjkl to resize → Esc to exit) ────
 config.key_tables = {
   resize_pane = {
-    { key = 'h',      action = act.AdjustPaneSize { 'Left',  3 } },
-    { key = 'l',      action = act.AdjustPaneSize { 'Right', 3 } },
-    { key = 'k',      action = act.AdjustPaneSize { 'Up',    3 } },
-    { key = 'j',      action = act.AdjustPaneSize { 'Down',  3 } },
-    { key = 'Escape', action = act.PopKeyTable },
-    { key = 'Enter',  action = act.PopKeyTable },
+    { key = 'LeftArrow',  action = act.AdjustPaneSize { 'Left',  3 } },
+    { key = 'RightArrow', action = act.AdjustPaneSize { 'Right', 3 } },
+    { key = 'UpArrow',    action = act.AdjustPaneSize { 'Up',    3 } },
+    { key = 'DownArrow',  action = act.AdjustPaneSize { 'Down',  3 } },
+    { key = 'Escape',     action = act.PopKeyTable },
+    { key = 'Enter',      action = act.PopKeyTable },
   },
 }
 
