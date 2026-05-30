@@ -4,7 +4,13 @@ local config  = wezterm.config_builder()
 
 -- ── Session persistence (resurrect.wezterm) ───────────────────────────────────
 local resurrect = wezterm.plugin.require('https://github.com/MLFlexer/resurrect.wezterm')
-resurrect.state_manager.periodic_save()  -- auto-saves every 15 min
+
+local function do_save()
+  resurrect.state_manager.save_state(resurrect.workspace_state.get_workspace_state())
+  wezterm.GLOBAL.last_save = wezterm.strftime '%H:%M:%S'
+end
+
+resurrect.state_manager.periodic_save({ interval_seconds = 60 })
 
 -- ── Appearance ────────────────────────────────────────────────────────────────
 config.color_scheme               = 'Tokyo Night'
@@ -97,10 +103,14 @@ wezterm.on('update-status', function(window, pane)
     { Text = '  ' .. window:active_workspace() .. '  ' },
   })
 
-  local branch = git_branch(pane_cwd(pane))
-  local time   = wezterm.strftime '%H:%M'
+  local branch    = git_branch(pane_cwd(pane))
+  local time      = wezterm.strftime '%H:%M'
+  local last_save = wezterm.GLOBAL.last_save
+  local save_info = last_save and ('  saved ' .. last_save .. '  ') or ''
 
   window:set_right_status(wezterm.format {
+    { Foreground = { Color = '#41a6b5' } },
+    { Text = save_info },
     { Foreground = { Color = '#7aa2f7' } },
     { Text = branch ~= '' and (branch .. '   ') or '' },
     { Foreground = { Color = '#565f89' } },
@@ -211,8 +221,8 @@ config.keys = {
 
   -- Session save/restore (resurrect.wezterm)
   { key = 's', mods = 'CTRL|SHIFT', action = wezterm.action_callback(function(win, pane)
-      resurrect.state_manager.save_state(resurrect.workspace_state.get_workspace_state())
-      resurrect.window_state.save_window_state(win)
+      do_save()
+      win:toast_notification('WezTerm', 'Session saved ✓  ' .. (wezterm.GLOBAL.last_save or ''), nil, 2000)
   end) },
   { key = 'o', mods = 'CTRL|SHIFT', action = wezterm.action_callback(function(win, pane)
       resurrect.fuzzy_loader.fuzzy_load(win, pane, function(id, label)
