@@ -83,8 +83,7 @@
     - name: Install tldr via npm
       become: false
       command: npm install -g tldr
-      args:
-        creates: "{{ user_home }}/.nvm/versions/node/v25.8.1/bin/tldr"
+      ignore_errors: true
 
     # ── just (Ubuntu) — not in apt, install from GitHub releases ────────────
     - name: Install just (Ubuntu)
