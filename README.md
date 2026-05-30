@@ -20,28 +20,28 @@ Personal dotfiles for Ubuntu and macOS, managed with [GNU Stow](https://www.gnu.
 
 ## Bootstrap a new machine
 
-### Step 1 — Install Ansible + just
+### One-liner (recommended)
+
+Paste this into a fresh terminal — prompts for sudo **once**, handles everything automatically:
 
 **Ubuntu:**
 ```bash
-sudo apt install ansible
-curl -fsSL https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
+bash <(curl -fsSL https://raw.githubusercontent.com/hassanjan1841/dotfiles/main/bootstrap.sh)
 ```
 **macOS:**
 ```bash
-brew install ansible just
+bash <(curl -fsSL https://raw.githubusercontent.com/hassanjan1841/dotfiles/main/bootstrap.sh)
 ```
 
-### Step 2 — Clone and run
+### Manual steps (if you prefer)
 
 ```bash
+sudo apt install ansible                                              # Ubuntu
+brew install ansible                                                  # macOS
+curl -fsSL https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin  # Ubuntu just
 git clone https://github.com/hassanjan1841/dotfiles.git ~/dotfiles
 just install
 ```
-
-`just install` runs `ansible-playbook setup.yml --ask-become-pass` — prompts **once** for your sudo password, uses it for all apt/system tasks silently.
-
-> On macOS most tasks use Homebrew and don't need sudo at all.
 
 ### Step 3 — Add your secrets
 

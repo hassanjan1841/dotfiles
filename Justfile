@@ -11,13 +11,24 @@ default:
     @just --list
 
 # Run the full Ansible playbook (will prompt for sudo password once)
+# If called from bootstrap.sh, sudo is already cached — use --become instead
 install:
-    ansible-playbook {{dotfiles}}/setup.yml --ask-become-pass
+    #!/usr/bin/env bash
+    if sudo -n true 2>/dev/null; then
+        ansible-playbook {{dotfiles}}/setup.yml --become
+    else
+        ansible-playbook {{dotfiles}}/setup.yml --ask-become-pass
+    fi
 
 # Pull latest dotfiles from GitHub then re-run the playbook
 update:
     cd {{dotfiles}} && git pull
-    ansible-playbook {{dotfiles}}/setup.yml --ask-become-pass
+    #!/usr/bin/env bash
+    if sudo -n true 2>/dev/null; then
+        ansible-playbook {{dotfiles}}/setup.yml --become
+    else
+        ansible-playbook {{dotfiles}}/setup.yml --ask-become-pass
+    fi
 
 # Commit all changes and push to GitHub (uses current date+time as message)
 sync:
