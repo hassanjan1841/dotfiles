@@ -35,7 +35,7 @@ alias ws='tmuxinator start workspace'
 # ── System ────────────────────────────────────────────────────────────────────
 alias ports='ss -tulnp'
 alias ip='curl -s ifconfig.me'
-alias reload='source ~/.zshrc'
+alias reload='exec zsh'
 alias df=duf
 alias du='ncdu --color dark'
 alias top=btop

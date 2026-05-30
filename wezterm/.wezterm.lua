@@ -207,6 +207,33 @@ config.keys = {
   { key = 'n', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(1)  },
   { key = 'p', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(-1) },
   { key = '$', mods = 'CTRL|SHIFT', action = act.ShowLauncherArgs { flags = 'WORKSPACES' } },
+
+  -- F1: show key bindings cheatsheet in a popup pane (press q to close)
+  { key = 'F1', mods = 'NONE', action = act.SplitPane {
+      direction = 'Right', size = { Percent = 35 },
+      command = { args = { 'zsh', '-c', [[
+printf "── WezTerm Shortcuts ────────────────\n"
+printf "  Ctrl+Shift+|    split left/right\n"
+printf "  Ctrl+Shift+-    split top/bottom\n"
+printf "  Ctrl+Shift+h/l/k/j  navigate panes\n"
+printf "  Ctrl+Shift+z    zoom pane\n"
+printf "  Ctrl+Shift+r    resize mode\n"
+printf "  Ctrl+Shift+t    new tab\n"
+printf "  Ctrl+Shift+w    close pane\n"
+printf "  Ctrl+1-5        switch tab\n"
+printf "  Ctrl+Shift+n/p  next/prev workspace\n"
+printf "  Ctrl+Shift+\$    workspace picker\n"
+printf "  F2              rename tab\n"
+printf "  Shift+F2        rename workspace\n"
+printf "  Ctrl+Shift+Space  quick select\n"
+printf "  Ctrl+Shift+f    search\n"
+printf "  Ctrl+Shift+↑/↓  jump prompts\n"
+printf "  Ctrl+Shift+c/v  copy/paste\n"
+printf "────────────────────────────────────\n"
+printf "  press q to close\n"
+read -sk1
+]] } },
+  }},
 }
 
 -- ── Mouse: select → copy, right-click → paste ────────────────────────────────
