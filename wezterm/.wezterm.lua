@@ -236,6 +236,8 @@ config.keys = {
             restore_text   = true,
             on_pane_restore = resurrect.tabs.default_on_pane_restore,
           })
+          -- auto-switch to the restored workspace so it's immediately visible
+          win:perform_action(act.SwitchToWorkspace { name = id }, pane)
         elseif type == 'window' then
           local state = resurrect.state_manager.load_state(id, 'window')
           resurrect.window_state.restore_window(pane:window(), state, {
