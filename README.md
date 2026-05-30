@@ -47,7 +47,7 @@ git clone https://github.com/hassanjan1841/dotfiles.git ~/dotfiles
 just install
 ```
 
-### Step 3 — Add your secrets
+### Step 2 — Add your secrets
 
 ```bash
 nano ~/.secrets
@@ -55,11 +55,11 @@ nano ~/.secrets
 #      export RESTIC_PASSWORD="your-backup-password"
 ```
 
-### Step 4 — Install Tmux plugins
+### Step 3 — Install Tmux plugins
 
 Open tmux and press `Ctrl+A` then `I` to install all TPM plugins.
 
-### Step 5 — Install Zed themes
+### Step 4 — Install Zed themes
 
 Open Zed → `Ctrl+Shift+P` → `zed: install extension` → search for your theme.
 Any custom theme JSON files saved to `~/.config/zed/themes/` are auto-synced via dotfiles.
@@ -88,7 +88,7 @@ PROJECT_PATH="$HOME/your-project"
 
 `startup.sh` runs at login (GNOME autostart, 8s delay) and asks:
 
-- **Dev Mode** — Chrome (Profile 9, restore session) + terminal window 1 (`npm run dev-server` + `claude`) + terminal window 2 (`claude`)
+- **Dev Mode** — Chrome (Profile 9, restore session) + WezTerm (`npm run dev-server` left pane, `claude` right pane)
 - **Chill Mode** — Chrome only
 
 Logs at `~/.local/share/startup.log`. On macOS use `startup-mac.sh` (System Settings → Login Items).

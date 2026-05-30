@@ -24,8 +24,8 @@
 
 ## Rules — always do this after any change
 1. All dotfile changes go in `~/dotfiles/` (stowed packages) — `startup.sh` is at `~/dotfiles/startup/startup.sh`
-3. After every change: `cd ~/dotfiles && git add -A && git commit -m "..." && git push`
-4. No Co-Author line in commits
+2. After every change: `cd ~/dotfiles && git add -A && git commit -m "..." && git push`
+3. No Co-Author line in commits
 
 ## Project
 - Active project: `~/speaklogic-testing` (set in `~/dotfiles/dev/.devrc` as `PROJECT_PATH`)
