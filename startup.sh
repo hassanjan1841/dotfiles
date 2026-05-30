@@ -44,7 +44,8 @@ case "$CHOICE" in
 
     # One ptyxis window with a tmuxinator session:
     # left pane = npm run dev-server, right pane = claude
-    ptyxis -- tmuxinator start dev &
+    TMUXINATOR="$HOME/.local/share/gem/ruby/3.3.0/bin/tmuxinator"
+    ptyxis -- "$TMUXINATOR" start dev &
 
     echo "Dev Mode launched"
     ;;
