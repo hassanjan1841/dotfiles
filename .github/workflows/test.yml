@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Ansible
-        run: pip3 install ansible
+        run: brew install ansible
 
       - name: Install community.general collection
         run: ansible-galaxy collection install community.general

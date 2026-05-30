@@ -59,6 +59,7 @@
         name: cloudflare-warp
         state: present
         update_cache: true
+      ignore_errors: "{{ ansible_check_mode }}"
 
     # ── duf (Ubuntu) ─────────────────────────────────────────────────────────
     - name: Install duf (Ubuntu)
@@ -128,6 +129,7 @@
         name: google-chrome-stable
         state: present
         update_cache: true
+      ignore_errors: "{{ ansible_check_mode }}"
 
     - name: Install Google Chrome via Homebrew cask (macOS)
       when: ansible_os_family == "Darwin"
@@ -161,6 +163,7 @@
         name: anydesk
         state: present
         update_cache: true
+      ignore_errors: "{{ ansible_check_mode }}"
 
     - name: Install AnyDesk via Homebrew cask (macOS)
       when: ansible_os_family == "Darwin"
@@ -172,6 +175,7 @@
     - name: Install Node.js via NodeSource (Ubuntu)
       when: ansible_os_family == "Debian"
       become: true
+      ignore_errors: "{{ ansible_check_mode }}"
       block:
         - get_url:
             url: https://deb.nodesource.com/setup_lts.x
@@ -320,6 +324,7 @@
         name: wezterm
         state: present
         update_cache: true
+      ignore_errors: "{{ ansible_check_mode }}"
 
     - name: Install WezTerm via Homebrew cask (macOS)
       when: ansible_os_family == "Darwin"
@@ -341,6 +346,7 @@
         src: "{{ dotfiles_dir }}/startup.sh"
         dest: "{{ user_home }}/startup.sh"
         mode: "0755"
+      ignore_errors: "{{ ansible_check_mode }}"
 
     - name: Ensure autostart dir exists (Ubuntu)
       when: ansible_os_family == "Debian"
@@ -371,3 +377,4 @@
         src: "{{ dotfiles_dir }}/startup-mac.sh"
         dest: "{{ user_home }}/startup-mac.sh"
         mode: "0755"
+      ignore_errors: "{{ ansible_check_mode }}"
