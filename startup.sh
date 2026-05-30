@@ -42,19 +42,9 @@ case "$CHOICE" in
     fix_chrome_exit
     google-chrome --profile-directory="Profile 9" &
 
-    # Kill any existing dev session — tmux-continuum may have restored one with
-    # a stale directory. We always want a clean layout.
-    tmux kill-session -t dev 2>/dev/null
-
-    # Build the session before opening the terminal so ptyxis just attaches.
-    # Left pane: dev-server  |  Right pane: claude
-    tmux new-session -d -s dev -c "$PROJECT_PATH"
-    tmux send-keys -t dev "npm run dev-server" Enter
-    tmux split-window -h -t dev -c "$PROJECT_PATH"
-    tmux send-keys -t dev "claude" Enter
-    tmux select-pane -t dev:1.1
-
-    ptyxis -- tmux attach -t dev &
+    # WezTerm reads ~/.wezterm.lua which defines the split layout on gui-startup:
+    # left pane = npm run dev-server, right pane = claude
+    wezterm start &
 
     echo "Dev Mode launched"
     ;;
