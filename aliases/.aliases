@@ -28,7 +28,8 @@ alias gp='git push'
 alias gl='git log --oneline --graph --decorate -10'
 alias gd='git diff'
 
-# Fuzzy git branch switch
+# Fuzzy git branch switch (unalias first — oh-my-zsh git plugin defines gco as alias)
+unalias gco 2>/dev/null
 gco() {
   local branch
   branch=$(git branch --all | sed 's/^\* //' | sed 's|remotes/origin/||' | sort -u | fzf --prompt="branch> " --height=40%)

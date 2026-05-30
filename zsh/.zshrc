@@ -165,7 +165,8 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 # atuin (shell history sync) — init after aliases so it can override Ctrl+R
 command -v atuin &>/dev/null && eval "$(atuin init zsh --disable-up-arrow)"
 
-# Show personal dashboard once per day on first interactive terminal open
+# Show personal dashboard once per day — deferred to precmd so it runs after
+# p10k instant prompt is fully initialized (avoids console-output warning)
 _dashboard_once() {
   local stamp="$HOME/.cache/dashboard-last-shown"
   local today
@@ -174,8 +175,10 @@ _dashboard_once() {
     echo "$today" > "$stamp"
     [ -f "$HOME/dotfiles/scripts/dashboard.sh" ] && bash "$HOME/dotfiles/scripts/dashboard.sh"
   fi
+  # Remove self after first run so it only fires once per session
+  precmd_functions=(${precmd_functions:#_dashboard_once})
 }
-[[ $- == *i* ]] && _dashboard_once
+[[ $- == *i* ]] && precmd_functions+=(_dashboard_once)
 
 # fzf
 [ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh
