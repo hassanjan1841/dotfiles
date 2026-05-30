@@ -82,6 +82,27 @@ backup:
     restic -r {{backups}} backup {{dotfiles}} {{project}} --verbose
     restic -r {{backups}} forget --keep-last 10 --prune
 
+# Print all WezTerm key bindings
+keys:
+    @printf "── WezTerm Key Bindings ────────────────────────────\n"
+    @printf "  Ctrl+Shift+|       Horizontal split (left/right)\n"
+    @printf "  Ctrl+Shift+-       Vertical split (top/bottom)\n"
+    @printf "  Ctrl+Shift+h/l/k/j Navigate panes (left/right/up/down)\n"
+    @printf "  Ctrl+Shift+z       Zoom pane toggle\n"
+    @printf "  Ctrl+Shift+r       Resize mode (arrow keys, Esc to exit)\n"
+    @printf "  Ctrl+Shift+t       New tab\n"
+    @printf "  Ctrl+Shift+w       Close pane\n"
+    @printf "  Ctrl+1..5          Switch tab\n"
+    @printf "  Ctrl+Shift+n/p     Next/prev workspace\n"
+    @printf "  Ctrl+Shift+\$       Workspace picker\n"
+    @printf "  Shift+F2           Rename workspace\n"
+    @printf "  F2                 Rename tab\n"
+    @printf "  Ctrl+Shift+Space   Quick select\n"
+    @printf "  Ctrl+Shift+f       Search\n"
+    @printf "  Ctrl+Shift+c/v     Copy/paste\n"
+    @printf "  Ctrl+Shift+↑/↓     Jump between prompts\n"
+    @printf "────────────────────────────────────────────────────\n"
+
 # Show task list (taskwarrior)
 tasks:
     task list
