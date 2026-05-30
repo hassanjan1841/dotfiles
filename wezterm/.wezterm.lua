@@ -2,6 +2,10 @@ local wezterm = require 'wezterm'
 local act     = wezterm.action
 local config  = wezterm.config_builder()
 
+-- ── Session persistence (resurrect.wezterm) ───────────────────────────────────
+local resurrect = wezterm.plugin.require('https://github.com/MLFlexer/resurrect.wezterm')
+resurrect.state_manager.periodic_save()  -- auto-saves every 15 min
+
 -- ── Appearance ────────────────────────────────────────────────────────────────
 config.color_scheme               = 'Tokyo Night'
 config.font                       = wezterm.font('JetBrainsMono Nerd Font', { weight = 'Regular' })
@@ -205,6 +209,34 @@ config.keys = {
   { key = 'p', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(-1) },
   { key = '$', mods = 'CTRL|SHIFT', action = act.ShowLauncherArgs { flags = 'WORKSPACES' } },
 
+  -- Session save/restore (resurrect.wezterm)
+  { key = 's', mods = 'CTRL|SHIFT', action = wezterm.action_callback(function(win, pane)
+      resurrect.state_manager.save_state(resurrect.workspace_state.get_workspace_state())
+      resurrect.window_state.save_window_state(win)
+  end) },
+  { key = 'o', mods = 'CTRL|SHIFT', action = wezterm.action_callback(function(win, pane)
+      resurrect.fuzzy_loader.fuzzy_load(win, pane, function(id, label)
+        local type = string.match(id, '^([^/]+)')
+        id = string.match(id, '([^/]+)$')
+        id = string.match(id, '(.+)%..+$') or id
+        if type == 'workspace' then
+          local state = resurrect.state_manager.load_state(id, 'workspace')
+          resurrect.workspace_state.restore_workspace(state, {
+            relative       = true,
+            restore_text   = true,
+            on_pane_restore = resurrect.tabs.default_on_pane_restore,
+          })
+        elseif type == 'window' then
+          local state = resurrect.state_manager.load_state(id, 'window')
+          resurrect.window_state.restore_window(pane:window(), state, {
+            relative       = true,
+            restore_text   = true,
+            on_pane_restore = resurrect.tabs.default_on_pane_restore,
+          })
+        end
+      end)
+  end) },
+
   -- F1: show key bindings cheatsheet in a popup pane (press q to close)
   { key = 'F1', mods = 'NONE', action = act.SplitPane {
       direction = 'Right', size = { Percent = 35 },
@@ -220,6 +252,8 @@ printf "  Ctrl+Shift+w    close pane\n"
 printf "  Ctrl+1-5        switch tab\n"
 printf "  Ctrl+Shift+n/p  next/prev workspace\n"
 printf "  Ctrl+Shift+\$    workspace picker\n"
+printf "  Ctrl+Shift+s    save session\n"
+printf "  Ctrl+Shift+o    restore session\n"
 printf "  F2              rename tab\n"
 printf "  Shift+F2        rename workspace\n"
 printf "  Ctrl+Shift+Space  quick select\n"
