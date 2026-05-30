@@ -304,7 +304,7 @@
       when: ansible_os_family == "Debian"
       become: true
       user:
-        name: "{{ ansible_env.USER }}"
+        name: "{{ ansible_user_id }}"
         shell: /usr/bin/zsh
 
     - name: Stow home dotfile packages
