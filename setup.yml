@@ -30,7 +30,7 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, tmux, stow, zenity, restic, gh, ruby, ruby-dev, copyq, vlc, fzf, bat, eza]
+        name: [git, curl, tmux, stow, zenity, restic, gh, ruby, ruby-dev, copyq, vlc, fzf, bat, eza, wmctrl]
         state: present
         update_cache: true
 
