@@ -30,6 +30,44 @@ jobs:
         env:
           ANSIBLE_FORCE_COLOR: "1"
 
+  # Simulates a fresh-machine `just link`: dry-run every stow package into a
+  # clean target, and assert that files referenced by configs actually exist
+  # in the repo. Catches stow conflicts + dangling references that the ansible
+  # --check job above cannot see (e.g. a missing statusline script or themes dir).
+  test-stow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install GNU Stow
+        run: sudo apt-get update -qq && sudo apt-get install -y stow
+
+      - name: Dry-run stow every package into a clean target
+        run: |
+          set -euo pipefail
+          fail=0
+          for pkg in aliases autostart bash claude dev git p10k startup taskwarrior wezterm zed; do
+            target="$(mktemp -d)"
+            echo "── stow -n $pkg ──"
+            if ! stow -n -v --no-folding --target="$target" --dir="$GITHUB_WORKSPACE" "$pkg" 2>&1; then
+              echo "::error::stow would fail for package '$pkg'"
+              fail=1
+            fi
+            rm -rf "$target"
+          done
+          exit $fail
+
+      - name: Assert config-referenced files exist
+        run: |
+          set -euo pipefail
+          # settings.json's statusLine command points at this script
+          test -f claude/.claude/statusline-command.sh \
+            || { echo "::error::claude/.claude/statusline-command.sh missing (referenced by settings.json)"; exit 1; }
+          # README promises ~/.config/zed/themes/ auto-syncs — dir must survive a fresh clone
+          test -d zed/themes \
+            || { echo "::error::zed/themes/ missing (referenced by README)"; exit 1; }
+          echo "All referenced files present ✓"
+
   test-macos:
     runs-on: macos-latest
     steps:
