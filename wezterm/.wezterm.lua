@@ -9,39 +9,58 @@ config.font_size                  = 13.0
 config.window_padding             = { left = 8, right = 8, top = 6, bottom = 6 }
 config.window_decorations         = 'RESIZE'
 config.enable_tab_bar             = true
-config.hide_tab_bar_if_only_one_tab = false   -- always show so workspace name is visible
+config.hide_tab_bar_if_only_one_tab = false
 config.use_fancy_tab_bar          = false
 config.tab_bar_at_bottom          = true
 
 -- ── Performance ───────────────────────────────────────────────────────────────
-config.front_end            = 'WebGpu'
-config.animation_fps        = 60
-config.max_fps              = 60
-config.status_update_interval = 2000   -- refresh status bar every 2 s
+config.front_end              = 'WebGpu'
+config.animation_fps          = 60
+config.max_fps                = 60
+config.status_update_interval = 2000
 
--- ── Scrollback ────────────────────────────────────────────────────────────────
+-- ── Scrollback / Wayland ──────────────────────────────────────────────────────
 config.scrollback_lines = 10000
+config.enable_wayland   = true
 
--- ── Clipboard (native Wayland) ────────────────────────────────────────────────
-config.enable_wayland = true
-
--- ── Bell → desktop toast notification ────────────────────────────────────────
-config.audible_bell = 'Disabled'   -- no sound, just notify
+-- ── Bell → desktop toast ──────────────────────────────────────────────────────
+config.audible_bell = 'Disabled'
 
 wezterm.on('bell', function(window, pane)
   window:toast_notification(
     'WezTerm — ' .. window:active_workspace(),
     '✓ Done: ' .. (pane:get_title() or ''),
-    nil,
-    4000
+    nil, 4000
   )
 end)
 
--- ── Quick Select: extra patterns (on top of built-in URLs/paths) ──────────────
+-- ── Quick Select patterns ─────────────────────────────────────────────────────
 config.quick_select_patterns = {
-  '[0-9a-f]{7,40}',           -- git hashes
-  '[\\w./:-]+:\\d+:\\d*',     -- file:line:col references
-  '\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}(?::\\d+)?', -- IP:port
+  '[0-9a-f]{7,40}',
+  '[\\w./:-]+:\\d+:\\d*',
+  '\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}(?::\\d+)?',
+}
+
+-- ── Hyperlink rules: file:line → open in Zed ─────────────────────────────────
+config.hyperlink_rules = wezterm.default_hyperlink_rules()
+table.insert(config.hyperlink_rules, {
+  regex   = [[[.\w/~-]+\.\w+:\d+(?::\d+)?]],
+  format  = 'fileref://$0',
+})
+
+wezterm.on('open-uri', function(window, pane, uri)
+  local path, line = uri:match('^fileref://(.+):(%d+)')
+  if path then
+    -- Expand ~ to home
+    path = path:gsub('^~', os.getenv('HOME') or '')
+    wezterm.run_child_process { 'zed', path .. ':' .. line }
+    return false  -- prevent default handler
+  end
+end)
+
+-- ── SSH domains — add your servers here ──────────────────────────────────────
+config.ssh_domains = {
+  -- { name = 'myserver', remote_address = 'user@hostname' },
 }
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
@@ -82,7 +101,7 @@ wezterm.on('update-status', function(window, pane)
   })
 end)
 
--- ── Dynamic tab titles: index + current directory ────────────────────────────
+-- ── Tab titles: red on error, shows current directory ────────────────────────
 wezterm.on('format-tab-title', function(tab, tabs, panes, cfg, hover, max_width)
   local pane    = tab.active_pane
   local cwd_uri = pane.current_working_dir
@@ -90,62 +109,80 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, cfg, hover, max_width)
 
   if cwd_uri then
     local path = (cwd_uri.file_path or tostring(cwd_uri)):gsub('^' .. HOME, '~')
-    label = path:match('([^/]+)/*$') or path   -- last path component
+    label = path:match('([^/]+)/*$') or path
   else
     label = pane.title
   end
 
-  return string.format(' %d: %s ', tab.tab_index + 1, label)
+  -- Turn red when last command exited with an error (set by shell integration)
+  local exit_ok = (pane.user_vars.LAST_EXIT or '0') == '0'
+  local color   = exit_ok and '#c0caf5' or '#f7768e'
+
+  return {
+    { Foreground = { Color = color } },
+    { Text = string.format(' %d: %s ', tab.tab_index + 1, label) },
+  }
 end)
+
+-- ── Key tables: resize mode (Ctrl+Shift+R → hjkl to resize → Esc to exit) ────
+config.key_tables = {
+  resize_pane = {
+    { key = 'h',      action = act.AdjustPaneSize { 'Left',  3 } },
+    { key = 'l',      action = act.AdjustPaneSize { 'Right', 3 } },
+    { key = 'k',      action = act.AdjustPaneSize { 'Up',    3 } },
+    { key = 'j',      action = act.AdjustPaneSize { 'Down',  3 } },
+    { key = 'Escape', action = act.PopKeyTable },
+    { key = 'Enter',  action = act.PopKeyTable },
+  },
+}
 
 -- ── Key bindings ──────────────────────────────────────────────────────────────
 config.keys = {
   -- Splits
-  { key = '|', mods = 'CTRL|SHIFT',     action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
-  { key = '-', mods = 'CTRL|SHIFT',     action = act.SplitVertical   { domain = 'CurrentPaneDomain' } },
+  { key = '|', mods = 'CTRL|SHIFT', action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
+  { key = '-', mods = 'CTRL|SHIFT', action = act.SplitVertical   { domain = 'CurrentPaneDomain' } },
 
-  -- Pane navigation (vim-style)
-  { key = 'h', mods = 'CTRL|SHIFT',     action = act.ActivatePaneDirection 'Left'  },
-  { key = 'l', mods = 'CTRL|SHIFT',     action = act.ActivatePaneDirection 'Right' },
-  { key = 'k', mods = 'CTRL|SHIFT',     action = act.ActivatePaneDirection 'Up'    },
-  { key = 'j', mods = 'CTRL|SHIFT',     action = act.ActivatePaneDirection 'Down'  },
+  -- Pane navigation
+  { key = 'h', mods = 'CTRL|SHIFT', action = act.ActivatePaneDirection 'Left'  },
+  { key = 'l', mods = 'CTRL|SHIFT', action = act.ActivatePaneDirection 'Right' },
+  { key = 'k', mods = 'CTRL|SHIFT', action = act.ActivatePaneDirection 'Up'    },
+  { key = 'j', mods = 'CTRL|SHIFT', action = act.ActivatePaneDirection 'Down'  },
 
-  -- Pane resize
-  { key = 'H', mods = 'CTRL|ALT',       action = act.AdjustPaneSize { 'Left',  5 } },
-  { key = 'L', mods = 'CTRL|ALT',       action = act.AdjustPaneSize { 'Right', 5 } },
-  { key = 'K', mods = 'CTRL|ALT',       action = act.AdjustPaneSize { 'Up',    5 } },
-  { key = 'J', mods = 'CTRL|ALT',       action = act.AdjustPaneSize { 'Down',  5 } },
+  -- Resize mode: press Ctrl+Shift+R then hjkl freely, Esc to exit
+  { key = 'r', mods = 'CTRL|SHIFT', action = act.ActivateKeyTable {
+      name = 'resize_pane', one_shot = false, timeout_milliseconds = 5000,
+  }},
 
-  -- Zoom current pane (toggle fullscreen for one pane)
-  { key = 'z', mods = 'CTRL|SHIFT',     action = act.TogglePaneZoomState },
+  -- Zoom pane
+  { key = 'z', mods = 'CTRL|SHIFT', action = act.TogglePaneZoomState },
 
   -- Tabs
-  { key = 't', mods = 'CTRL|SHIFT',     action = act.SpawnTab 'CurrentPaneDomain' },
-  { key = 'w', mods = 'CTRL|SHIFT',     action = act.CloseCurrentPane { confirm = false } },
-  { key = '1', mods = 'CTRL',           action = act.ActivateTab(0) },
-  { key = '2', mods = 'CTRL',           action = act.ActivateTab(1) },
-  { key = '3', mods = 'CTRL',           action = act.ActivateTab(2) },
-  { key = '4', mods = 'CTRL',           action = act.ActivateTab(3) },
-  { key = '5', mods = 'CTRL',           action = act.ActivateTab(4) },
+  { key = 't', mods = 'CTRL|SHIFT', action = act.SpawnTab 'CurrentPaneDomain' },
+  { key = 'w', mods = 'CTRL|SHIFT', action = act.CloseCurrentPane { confirm = false } },
+  { key = '1', mods = 'CTRL',       action = act.ActivateTab(0) },
+  { key = '2', mods = 'CTRL',       action = act.ActivateTab(1) },
+  { key = '3', mods = 'CTRL',       action = act.ActivateTab(2) },
+  { key = '4', mods = 'CTRL',       action = act.ActivateTab(3) },
+  { key = '5', mods = 'CTRL',       action = act.ActivateTab(4) },
 
   -- Copy / paste
-  { key = 'c', mods = 'CTRL|SHIFT',     action = act.CopyTo 'Clipboard' },
-  { key = 'v', mods = 'CTRL|SHIFT',     action = act.PasteFrom 'Clipboard' },
+  { key = 'c', mods = 'CTRL|SHIFT', action = act.CopyTo 'Clipboard' },
+  { key = 'v', mods = 'CTRL|SHIFT', action = act.PasteFrom 'Clipboard' },
 
   -- Search
-  { key = 'f', mods = 'CTRL|SHIFT',     action = act.Search 'CurrentSelectionOrEmptyString' },
+  { key = 'f', mods = 'CTRL|SHIFT', action = act.Search 'CurrentSelectionOrEmptyString' },
 
-  -- Workspaces: cycle or pick from list
-  { key = 'n', mods = 'CTRL|SHIFT',     action = act.SwitchWorkspaceRelative(1)  },
-  { key = 'p', mods = 'CTRL|SHIFT',     action = act.SwitchWorkspaceRelative(-1) },
-  { key = '$', mods = 'CTRL|SHIFT',     action = act.ShowLauncherArgs { flags = 'WORKSPACES' } },
-
-  -- Quick Select: highlight URLs / paths / git hashes / IPs for keyboard copy
+  -- Quick Select
   { key = 'Space', mods = 'CTRL|SHIFT', action = act.QuickSelect },
 
-  -- Shell integration: jump between command prompts in scrollback
+  -- Shell integration: jump between prompts
   { key = 'UpArrow',   mods = 'CTRL|SHIFT', action = act.ScrollToPrompt(-1) },
   { key = 'DownArrow', mods = 'CTRL|SHIFT', action = act.ScrollToPrompt(1)  },
+
+  -- Workspaces
+  { key = 'n', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(1)  },
+  { key = 'p', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(-1) },
+  { key = '$', mods = 'CTRL|SHIFT', action = act.ShowLauncherArgs { flags = 'WORKSPACES' } },
 }
 
 -- ── Mouse: select → copy, right-click → paste ────────────────────────────────

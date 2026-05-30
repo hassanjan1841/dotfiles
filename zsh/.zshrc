@@ -172,7 +172,11 @@ if [[ -n "$WEZTERM_PANE" ]]; then
   __wezterm_prompt_start() { printf "\033]133;A\033\\" }
   __wezterm_prompt_end()   { printf "\033]133;B\033\\" }
   __wezterm_cmd_start()    { printf "\033]133;C\033\\" }
-  __wezterm_cmd_end()      { printf "\033]133;D;%s\033\\" "$?" }
+  __wezterm_cmd_end()      {
+    local e=$?
+    printf "\033]133;D;%s\033\\" "$e"
+    printf "\033]1337;SetUserVar=%s=%s\033\\" "LAST_EXIT" "$(printf '%s' "$e" | base64 -w0)"
+  }
 
   precmd_functions+=(__wezterm_cmd_end __wezterm_cwd __wezterm_prompt_start)
   preexec_functions+=(__wezterm_cmd_start)
