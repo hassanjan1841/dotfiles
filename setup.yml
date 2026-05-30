@@ -302,6 +302,44 @@
       shell: "stow -v --target={{ user_home }}/.config/zed --dir={{ dotfiles_dir }} zed"
       ignore_errors: true
 
+    # ── WezTerm (Ubuntu) ─────────────────────────────────────────────────────
+    - name: Add WezTerm GPG key (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      shell: |
+        curl -fsSL https://apt.fury.io/wez/gpg.key | \
+        gpg --yes --dearmor -o /usr/share/keyrings/wezterm-fury.gpg
+      args:
+        creates: /usr/share/keyrings/wezterm-fury.gpg
+
+    - name: Add WezTerm apt repo (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      copy:
+        dest: /etc/apt/sources.list.d/wezterm.list
+        content: |
+          deb [signed-by=/usr/share/keyrings/wezterm-fury.gpg] https://apt.fury.io/wez/ * *
+
+    - name: Install WezTerm (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      apt:
+        name: wezterm
+        state: present
+        update_cache: true
+
+    - name: Install WezTerm via Homebrew cask (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      community.general.homebrew_cask:
+        name: wezterm
+        state: present
+
+    - name: Stow WezTerm config
+      become: false
+      shell: "cd {{ dotfiles_dir }} && stow -v wezterm"
+      ignore_errors: true
+
     # ── startup.sh + GNOME autostart (Ubuntu only) ────────────────────────────
     - name: Copy startup.sh (Ubuntu)
       when: ansible_os_family == "Debian"

@@ -43,6 +43,7 @@ link:
     stow -v --restow --target="{{env_var('HOME')}}/.config/tmuxinator" --dir={{dotfiles}} tmuxinator
     stow -v --restow --target="{{env_var('HOME')}}/.config/zed"        --dir={{dotfiles}} zed
     stow -v --restow --target="{{env_var('HOME')}}/.config/autostart"  --dir={{dotfiles}} autostart
+    cd {{dotfiles}} && stow -v --restow wezterm
 
 # Preview what Ansible would change without applying anything
 dry-run:
