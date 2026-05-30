@@ -22,7 +22,7 @@
       when: ansible_os_family == "Darwin"
       become: false
       community.general.homebrew:
-        name: [git, curl, tmux, stow, restic, node, gh, just, fzf, bat, eza, zoxide]
+        name: [git, curl, tmux, stow, restic, node, gh, just, fzf, bat, eza, zoxide, duf]
         state: present
 
     # ── Ubuntu/Debian: apt packages ───────────────────────────────────────────
@@ -190,20 +190,24 @@
       args:
         creates: "{{ user_home }}/.nvm/nvm.sh"
 
+    # ── Install Node LTS via NVM and set as default ──────────────────────────
+    - name: Install Node LTS via NVM and set as default
+      become: false
+      shell: |
+        . {{ user_home }}/.nvm/nvm.sh
+        nvm install --lts
+        nvm alias default 'lts/*'
+      args:
+        creates: "{{ user_home }}/.nvm/alias/default"
+
     # ── Global npm packages ───────────────────────────────────────────────────
     - name: Install global npm packages
       become: false
-      loop:
-        - "@anthropic-ai/claude-code"
-        - vercel
-        - typescript
-        - pnpm
-        - "@biomejs/biome"
-        - lighthouse
-        - opencode
-        - "@bitwarden/cli"
-        - tldr
-      command: "npm install -g {{ item }}"
+      shell: |
+        . {{ user_home }}/.nvm/nvm.sh
+        for pkg in "@anthropic-ai/claude-code" vercel typescript pnpm "@biomejs/biome" lighthouse opencode "@bitwarden/cli" tldr; do
+          npm list -g --depth=0 "$pkg" &>/dev/null || npm install -g "$pkg"
+        done
       ignore_errors: true
 
     # ── Bun ───────────────────────────────────────────────────────────────────
@@ -289,12 +293,17 @@
 
     - name: Stow home dotfile packages
       become: false
-      shell: "cd {{ dotfiles_dir }} && stow -v bash git zsh dev tmux p10k aliases taskwarrior"
+      shell: "cd {{ dotfiles_dir }} && stow -v --restow bash git zsh dev tmux p10k aliases"
+      ignore_errors: true
+
+    - name: Stow taskwarrior config (no-folding to keep task data out of git)
+      become: false
+      shell: "cd {{ dotfiles_dir }} && stow -v --no-folding --restow taskwarrior"
       ignore_errors: true
 
     - name: Stow claude config (no-folding to preserve nested structure)
       become: false
-      shell: "cd {{ dotfiles_dir }} && stow -v --no-folding claude"
+      shell: "cd {{ dotfiles_dir }} && stow -v --no-folding --restow claude"
       ignore_errors: true
 
     - name: Ensure Zed config dir exists
@@ -305,8 +314,16 @@
 
     - name: Stow Zed config
       become: false
-      shell: "stow -v --target={{ user_home }}/.config/zed --dir={{ dotfiles_dir }} zed"
+      shell: "stow -v --restow --target={{ user_home }}/.config/zed --dir={{ dotfiles_dir }} zed"
       ignore_errors: true
+
+    # ── Zed editor (Ubuntu) ──────────────────────────────────────────────────
+    - name: Install Zed (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: false
+      shell: curl -fsSL https://zed.dev/install.sh | sh
+      args:
+        creates: "{{ user_home }}/.local/bin/zed"
 
     # ── WezTerm (Ubuntu) ─────────────────────────────────────────────────────
     - name: Add WezTerm GPG key (Ubuntu)
@@ -343,14 +360,14 @@
 
     - name: Stow WezTerm config
       become: false
-      shell: "cd {{ dotfiles_dir }} && stow -v wezterm"
+      shell: "cd {{ dotfiles_dir }} && stow -v --restow wezterm"
       ignore_errors: true
 
     # ── startup.sh + GNOME autostart (Ubuntu only) ────────────────────────────
     - name: Stow startup script (Ubuntu)
       when: ansible_os_family == "Debian"
       become: false
-      shell: "cd {{ dotfiles_dir }} && stow -v startup"
+      shell: "cd {{ dotfiles_dir }} && stow -v --restow startup"
       ignore_errors: true
 
     - name: Ensure startup.sh is executable (Ubuntu)

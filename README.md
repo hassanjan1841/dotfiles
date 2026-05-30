@@ -1,6 +1,6 @@
 # dotfiles
 
-Personal dotfiles for Ubuntu and macOS, managed with [GNU Stow](https://www.gnu.org/software/stow/) and [chezmoi](https://www.chezmoi.io/).
+Personal dotfiles for Ubuntu and macOS, managed with [GNU Stow](https://www.gnu.org/software/stow/) and [Ansible](https://www.ansible.com/).
 
 ![CI](https://github.com/hassanjan1841/dotfiles/actions/workflows/test.yml/badge.svg)
 
@@ -14,10 +14,13 @@ Personal dotfiles for Ubuntu and macOS, managed with [GNU Stow](https://www.gnu.
 | `dev` | `.devrc` (project path config) |
 | `tmux` | `.tmux.conf` (Tokyo Night theme, vi bindings, TPM) |
 | `p10k` | `.p10k.zsh` (Powerlevel10k prompt config) |
-| `tmuxinator` | `~/.config/tmuxinator/workspace.yml` |
+| `aliases` | `~/.aliases` (git, nav, dev, dotfiles shortcuts) |
+| `taskwarrior` | `~/.task/` + `~/.timewarrior/` config |
+| `wezterm` | `~/.wezterm.lua` |
 | `zed` | `~/.config/zed/settings.json` + `themes/` |
 | `claude` | `~/.claude/settings.json` + `CLAUDE.md` |
-| `aliases` | `~/.aliases` (git, nav, dev, dotfiles shortcuts) |
+| `autostart` | `~/.config/autostart/startup.desktop` |
+| `startup` | `~/startup.sh` (GNOME login launcher) |
 
 ## Bootstrap a new machine
 
@@ -75,7 +78,7 @@ Any custom theme JSON files saved to `~/.config/zed/themes/` are auto-synced via
 
 ## Changing the project path
 
-Edit one line in `~/.devrc` — startup.sh, tmuxinator, and just backup all pick it up:
+Edit one line in `~/.devrc` — startup.sh, wezterm.lua, and just backup all pick it up:
 
 ```bash
 PROJECT_PATH="$HOME/your-project"
@@ -90,14 +93,6 @@ PROJECT_PATH="$HOME/your-project"
 
 Logs at `~/.local/share/startup.log`. On macOS use `startup-mac.sh` (System Settings → Login Items).
 
-## tmuxinator
-
-```bash
-tmuxinator start workspace
-```
-
-Window 1: `npm run dev-server` | Window 2: `claude`
-
 ## CI
 
 GitHub Actions runs the Ansible playbook in `--check` (dry run) mode on every push to `main`, on both `ubuntu-latest` and `macos-latest`.
@@ -105,7 +100,7 @@ GitHub Actions runs the Ansible playbook in `--check` (dry run) mode on every pu
 ## Installed tools (via Ansible)
 
 - **Shell:** zsh, Oh My Zsh, Powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting
-- **Terminal:** tmux + TPM, tmuxinator, just
+- **Terminal:** WezTerm, tmux + TPM, just
 - **Node:** NVM, Node LTS, npm global tools (claude, vercel, typescript, pnpm, biome, opencode)
 - **JS runtime:** Bun
 - **Python:** uv, aider-chat

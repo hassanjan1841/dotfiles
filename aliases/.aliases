@@ -7,8 +7,8 @@ alias ~='cd ~'
 alias ls='eza --icons --group-directories-first'
 alias ll='eza -la --icons --group-directories-first'
 alias lt='eza --tree --icons --level=2'
-# bat is called batcat on Ubuntu
-alias bat=batcat
+# bat is called batcat on Ubuntu, bat on macOS
+command -v batcat &>/dev/null && alias bat=batcat
 alias cat='bat --paging=never'
 alias grep='grep --color=auto'
 
@@ -45,4 +45,4 @@ bw_unlock() { export BW_SESSION="$(bw unlock --raw)"; }
 bw_get()    { bw get password "$@" --session "${BW_SESSION:-}"; }
 
 # ── Claude ────────────────────────────────────────────────────────────────────
-alias claude-mem='bun "/home/hassan-jan/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'
+alias claude-mem='bun "$HOME/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'

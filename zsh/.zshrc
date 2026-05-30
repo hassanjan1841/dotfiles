@@ -139,20 +139,20 @@ npm()  { unfunction npm;  __nvm_lazy_load; npm  "$@"; }
 npx()  { unfunction npx;  __nvm_lazy_load; npx  "$@"; }
 
 # opencode
-export PATH=/home/hassan-jan/.opencode/bin:$PATH
+[ -d "$HOME/.opencode/bin" ] && export PATH="$HOME/.opencode/bin:$PATH"
 
 # OpenClaw Completion
 [ -f "$HOME/.openclaw/completions/openclaw.zsh" ] && source "$HOME/.openclaw/completions/openclaw.zsh"
 # Load secrets (API keys) — this file is never committed
 [ -f "$HOME/.secrets" ] && source "$HOME/.secrets"
-export PATH="/home/hassan-jan/.fly/bin:$PATH"
+[ -d "$HOME/.fly/bin" ] && export PATH="$HOME/.fly/bin:$PATH"
 autoload bashcompinit
 bashcompinit
 [ -f "$HOME/.local/share/bash-completion/completions/appman" ] && source "$HOME/.local/share/bash-completion/completions/appman"
-export AMP_TOOLBOX="/home/hassan-jan/amp-superpowers/toolbox"
+[ -d "$HOME/amp-superpowers/toolbox" ] && export AMP_TOOLBOX="$HOME/amp-superpowers/toolbox"
 
 # bun completions
-[ -s "/home/hassan-jan/.bun/_bun" ] && source "/home/hassan-jan/.bun/_bun"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 # bun
 export BUN_INSTALL="$HOME/.bun"
@@ -190,23 +190,22 @@ if [[ -n "$WEZTERM_PANE" ]]; then
 fi
 
 # zoxide (smarter cd)
-eval "$(zoxide init zsh)"
+command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 
 [ -x "$HOME/.linuxbrew/bin/brew" ] && eval "$($HOME/.linuxbrew/bin/brew shellenv)"
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/home/hassan-jan/anaconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
-if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
-else
-    if [ -f "/home/hassan-jan/anaconda3/etc/profile.d/conda.sh" ]; then
-        . "/home/hassan-jan/anaconda3/etc/profile.d/conda.sh"
+if [ -d "$HOME/anaconda3" ]; then
+    __conda_setup="$("$HOME/anaconda3/bin/conda" 'shell.zsh' 'hook' 2>/dev/null)"
+    if [ $? -eq 0 ]; then
+        eval "$__conda_setup"
     else
-        export PATH="/home/hassan-jan/anaconda3/bin:$PATH"
+        [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ] && . "$HOME/anaconda3/etc/profile.d/conda.sh" \
+            || export PATH="$HOME/anaconda3/bin:$PATH"
     fi
+    unset __conda_setup
 fi
-unset __conda_setup
 # <<< conda initialize <<<
 
 [[ -n "$ZPROF" ]] && zprof
