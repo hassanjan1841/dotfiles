@@ -1,0 +1,136 @@
+---
+- name: Bootstrap dev machine (Ubuntu + macOS)
+  hosts: localhost
+  connection: local
+
+  vars:
+    user_home: "{{ ansible_env.HOME }}"
+    dotfiles_dir: "{{ ansible_env.HOME }}/dotfiles"
+    dotfiles_repo: "https://github.com/hassanjan1841/dotfiles.git"
+    project_path: "{{ ansible_env.HOME }}/speaklogic-testing"
+
+  tasks:
+
+    # ── macOS: Homebrew ────────────────────────────────────────────────────────
+    - name: Install Homebrew (macOS)
+      when: ansible_os_family == "Darwin"
+      shell: |
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+      args:
+        creates: /opt/homebrew/bin/brew
+      become: false
+
+    - name: Install packages via Homebrew (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      community.general.homebrew:
+        name:
+          - git
+          - curl
+          - tmux
+          - stow
+          - restic
+          - node
+        state: present
+
+    # ── Ubuntu/Debian: apt ────────────────────────────────────────────────────
+    - name: Install packages via apt (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      apt:
+        name:
+          - git
+          - curl
+          - tmux
+          - stow
+          - zenity
+          - restic
+        state: present
+        update_cache: true
+
+    - name: Install Node.js via NodeSource (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      block:
+        - name: Download NodeSource setup script
+          get_url:
+            url: https://deb.nodesource.com/setup_lts.x
+            dest: /tmp/nodesource_setup.sh
+            mode: "0755"
+        - name: Run NodeSource setup
+          command: bash /tmp/nodesource_setup.sh
+        - name: Install nodejs
+          apt:
+            name: nodejs
+            state: present
+            update_cache: true
+
+    # ── Claude Code CLI (both platforms) ──────────────────────────────────────
+    - name: Install Claude Code CLI
+      become: false
+      command: npm install -g @anthropic-ai/claude-code
+      args:
+        creates: "{{ user_home }}/.local/bin/claude"
+
+    # ── Dotfiles via stow ─────────────────────────────────────────────────────
+    - name: Clone dotfiles repo
+      become: false
+      git:
+        repo: "{{ dotfiles_repo }}"
+        dest: "{{ dotfiles_dir }}"
+        version: main
+      ignore_errors: true
+
+    - name: Stow all dotfile packages
+      become: false
+      shell: "cd {{ dotfiles_dir }} && stow -v bash git zsh dev"
+      ignore_errors: true
+
+    # ── startup.sh + autostart (Ubuntu only) ─────────────────────────────────
+    - name: Copy startup.sh (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: false
+      copy:
+        src: "{{ dotfiles_dir }}/startup.sh"
+        dest: "{{ user_home }}/startup.sh"
+        mode: "0755"
+
+    - name: Ensure autostart directory exists (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: false
+      file:
+        path: "{{ user_home }}/.config/autostart"
+        state: directory
+
+    - name: Install GNOME autostart entry (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: false
+      copy:
+        dest: "{{ user_home }}/.config/autostart/startup.desktop"
+        mode: "0644"
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Name=Dev Workflow Launcher
+          Exec={{ user_home }}/startup.sh
+          Hidden=false
+          NoDisplay=false
+          X-GNOME-Autostart-enabled=true
+
+    - name: Copy startup-mac.sh (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      copy:
+        src: "{{ dotfiles_dir }}/startup-mac.sh"
+        dest: "{{ user_home }}/startup-mac.sh"
+        mode: "0755"
+
+    - name: Add startup-mac.sh to macOS Login Items notice
+      when: ansible_os_family == "Darwin"
+      debug:
+        msg: >
+          On macOS, open System Settings → General → Login Items
+          and add {{ user_home }}/startup-mac.sh manually,
+          or run: osascript -e 'tell application "System Events"
+          to make login item at end with properties
+          {path:"{{ user_home }}/startup-mac.sh", hidden:false}'
