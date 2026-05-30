@@ -94,4 +94,7 @@ Window 1: `npm run dev-server` | Window 2: `claude`
 - **Editor:** Zed
 - **CLI:** gh, chezmoi, stow, restic
 - **Clipboard:** CopyQ
+- **Media:** VLC
+- **Browser:** Google Chrome
+- **Remote desktop:** AnyDesk
 - **VPN/DNS:** Cloudflare WARP

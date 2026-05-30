@@ -30,7 +30,7 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, tmux, stow, zenity, restic, gh, ruby, ruby-dev, copyq]
+        name: [git, curl, tmux, stow, zenity, restic, gh, ruby, ruby-dev, copyq, vlc]
         state: present
         update_cache: true
 
@@ -66,6 +66,72 @@
       become: false
       community.general.homebrew_cask:
         name: cloudflare-warp
+        state: present
+
+    # ── Google Chrome (Ubuntu) ────────────────────────────────────────────────
+    - name: Add Chrome GPG key (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      shell: |
+        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | \
+        gpg --yes --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/google-chrome-keyring.gpg
+
+    - name: Add Chrome apt repo (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      copy:
+        dest: /etc/apt/sources.list.d/google-chrome.list
+        content: |
+          deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] https://dl.google.com/linux/chrome/deb/ stable main
+
+    - name: Install Google Chrome (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      apt:
+        name: google-chrome-stable
+        state: present
+        update_cache: true
+
+    - name: Install Google Chrome via Homebrew cask (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      community.general.homebrew_cask:
+        name: google-chrome
+        state: present
+
+    # ── AnyDesk (Ubuntu) ─────────────────────────────────────────────────────
+    - name: Add AnyDesk GPG key (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      shell: |
+        curl -fsSL https://keys.anydesk.com/repos/DEB-GPG-KEY | \
+        gpg --yes --dearmor -o /usr/share/keyrings/anydesk-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/anydesk-keyring.gpg
+
+    - name: Add AnyDesk apt repo (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      copy:
+        dest: /etc/apt/sources.list.d/anydesk.list
+        content: |
+          deb [signed-by=/usr/share/keyrings/anydesk-keyring.gpg] http://deb.anydesk.com/ all main
+
+    - name: Install AnyDesk (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      apt:
+        name: anydesk
+        state: present
+        update_cache: true
+
+    - name: Install AnyDesk via Homebrew cask (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      community.general.homebrew_cask:
+        name: anydesk
         state: present
 
     - name: Install Node.js via NodeSource (Ubuntu)
