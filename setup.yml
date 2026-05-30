@@ -78,7 +78,7 @@
       copy:
         dest: /etc/apt/sources.list.d/cloudflare-client.list
         content: |
-          deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ any main
+          deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ {{ ansible_distribution_release }} main
 
     - name: Install Cloudflare WARP (Ubuntu)
       when: ansible_os_family == "Debian" and not ansible_check_mode
