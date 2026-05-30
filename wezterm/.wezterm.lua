@@ -141,7 +141,8 @@ config.key_tables = {
 
 -- ── Key bindings ──────────────────────────────────────────────────────────────
 config.keys = {
-  -- Splits
+  -- Splits (override CTRL+- default to prevent font-size decrease stealing CTRL+SHIFT+-)
+  { key = '-', mods = 'CTRL',       action = act.Nop },
   { key = '|', mods = 'CTRL|SHIFT', action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
   { key = '-', mods = 'CTRL|SHIFT', action = act.SplitVertical   { domain = 'CurrentPaneDomain' } },
 

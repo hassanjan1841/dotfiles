@@ -8,7 +8,7 @@ alias ls='eza --icons --group-directories-first'
 alias ll='eza -la --icons --group-directories-first'
 alias lt='eza --tree --icons --level=2'
 # bat is called batcat on Ubuntu
-alias bat='batcat 2>/dev/null || bat'
+alias bat=batcat
 alias cat='bat --paging=never'
 alias grep='grep --color=auto'
 
@@ -26,7 +26,7 @@ alias sync='just --justfile ~/dotfiles/Justfile sync'
 alias link='just --justfile ~/dotfiles/Justfile link'
 
 # ── Dev ────────────────────────────────────────────────────────────────────────
-alias dev='cd $PROJECT_PATH && npm run dev-server'
+alias dev='npm run dev-server'
 alias ws='tmuxinator start workspace'
 
 # ── System ────────────────────────────────────────────────────────────────────
