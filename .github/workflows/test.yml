@@ -25,7 +25,8 @@ jobs:
             --inventory localhost, \
             --connection local \
             --check \
-            --diff
+            --diff \
+            -e "dotfiles_dir=$GITHUB_WORKSPACE"
         env:
           ANSIBLE_FORCE_COLOR: "1"
 
@@ -46,6 +47,7 @@ jobs:
             --inventory localhost, \
             --connection local \
             --check \
-            --diff
+            --diff \
+            -e "dotfiles_dir=$GITHUB_WORKSPACE"
         env:
           ANSIBLE_FORCE_COLOR: "1"

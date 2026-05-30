@@ -53,13 +53,12 @@
           deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ any main
 
     - name: Install Cloudflare WARP (Ubuntu)
-      when: ansible_os_family == "Debian"
+      when: ansible_os_family == "Debian" and not ansible_check_mode
       become: true
       apt:
         name: cloudflare-warp
         state: present
         update_cache: true
-      ignore_errors: "{{ ansible_check_mode }}"
 
     # ── duf (Ubuntu) ─────────────────────────────────────────────────────────
     - name: Install duf (Ubuntu)
@@ -123,13 +122,12 @@
           deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] https://dl.google.com/linux/chrome/deb/ stable main
 
     - name: Install Google Chrome (Ubuntu)
-      when: ansible_os_family == "Debian"
+      when: ansible_os_family == "Debian" and not ansible_check_mode
       become: true
       apt:
         name: google-chrome-stable
         state: present
         update_cache: true
-      ignore_errors: "{{ ansible_check_mode }}"
 
     - name: Install Google Chrome via Homebrew cask (macOS)
       when: ansible_os_family == "Darwin"
@@ -157,13 +155,12 @@
           deb [signed-by=/usr/share/keyrings/anydesk-keyring.gpg] http://deb.anydesk.com/ all main
 
     - name: Install AnyDesk (Ubuntu)
-      when: ansible_os_family == "Debian"
+      when: ansible_os_family == "Debian" and not ansible_check_mode
       become: true
       apt:
         name: anydesk
         state: present
         update_cache: true
-      ignore_errors: "{{ ansible_check_mode }}"
 
     - name: Install AnyDesk via Homebrew cask (macOS)
       when: ansible_os_family == "Darwin"
@@ -173,9 +170,8 @@
         state: present
 
     - name: Install Node.js via NodeSource (Ubuntu)
-      when: ansible_os_family == "Debian"
+      when: ansible_os_family == "Debian" and not ansible_check_mode
       become: true
-      ignore_errors: "{{ ansible_check_mode }}"
       block:
         - get_url:
             url: https://deb.nodesource.com/setup_lts.x
@@ -318,13 +314,12 @@
           deb [signed-by=/usr/share/keyrings/wezterm-fury.gpg] https://apt.fury.io/wez/ * *
 
     - name: Install WezTerm (Ubuntu)
-      when: ansible_os_family == "Debian"
+      when: ansible_os_family == "Debian" and not ansible_check_mode
       become: true
       apt:
         name: wezterm
         state: present
         update_cache: true
-      ignore_errors: "{{ ansible_check_mode }}"
 
     - name: Install WezTerm via Homebrew cask (macOS)
       when: ansible_os_family == "Darwin"
@@ -346,7 +341,6 @@
         src: "{{ dotfiles_dir }}/startup.sh"
         dest: "{{ user_home }}/startup.sh"
         mode: "0755"
-      ignore_errors: "{{ ansible_check_mode }}"
 
     - name: Ensure autostart dir exists (Ubuntu)
       when: ansible_os_family == "Debian"
@@ -377,4 +371,3 @@
         src: "{{ dotfiles_dir }}/startup-mac.sh"
         dest: "{{ user_home }}/startup-mac.sh"
         mode: "0755"
-      ignore_errors: "{{ ansible_check_mode }}"
