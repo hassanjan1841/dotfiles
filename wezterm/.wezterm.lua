@@ -141,10 +141,12 @@ config.key_tables = {
 
 -- ── Key bindings ──────────────────────────────────────────────────────────────
 config.keys = {
-  -- Splits (override CTRL+- default to prevent font-size decrease stealing CTRL+SHIFT+-)
+  -- Splits
+  -- Two bindings for vertical: Wayland may send Ctrl+Shift+- as either key='-'+CTRL|SHIFT or key='_'+CTRL
   { key = '-', mods = 'CTRL',       action = act.Nop },
   { key = '|', mods = 'CTRL|SHIFT', action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
   { key = '-', mods = 'CTRL|SHIFT', action = act.SplitVertical   { domain = 'CurrentPaneDomain' } },
+  { key = '_', mods = 'CTRL',       action = act.SplitVertical   { domain = 'CurrentPaneDomain' } },
 
   -- Pane navigation
   { key = 'h', mods = 'CTRL|SHIFT', action = act.ActivatePaneDirection 'Left'  },
