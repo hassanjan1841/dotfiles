@@ -15,6 +15,7 @@
 - `Ctrl+Shift+R` → resize mode (arrow keys) → Esc
 - `Ctrl+Shift+Space` → quick select
 - `Ctrl+Shift+↑/↓` → jump between prompts
+- `Ctrl+Alt+-` → vertical split (top/bottom)
 - `F2` rename tab, `Shift+F2` rename workspace
 - `Ctrl+Shift+N/P` cycle workspaces, `Ctrl+Shift+$` workspace picker
 

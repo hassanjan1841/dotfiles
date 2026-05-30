@@ -86,7 +86,7 @@ backup:
 keys:
     @printf "── WezTerm Key Bindings ────────────────────────────\n"
     @printf "  Ctrl+Shift+|       Horizontal split (left/right)\n"
-    @printf "  Ctrl+Shift+-       Vertical split (top/bottom)\n"
+    @printf "  Ctrl+Alt+-         Vertical split (top/bottom)\n"
     @printf "  Ctrl+Shift+h/l/k/j Navigate panes (left/right/up/down)\n"
     @printf "  Ctrl+Shift+z       Zoom pane toggle\n"
     @printf "  Ctrl+Shift+r       Resize mode (arrow keys, Esc to exit)\n"

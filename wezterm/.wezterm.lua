@@ -142,11 +142,8 @@ config.key_tables = {
 -- ── Key bindings ──────────────────────────────────────────────────────────────
 config.keys = {
   -- Splits
-  -- Two bindings for vertical: Wayland may send Ctrl+Shift+- as either key='-'+CTRL|SHIFT or key='_'+CTRL
-  { key = '-', mods = 'CTRL',       action = act.Nop },
   { key = '|', mods = 'CTRL|SHIFT', action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
-  { key = '-', mods = 'CTRL|SHIFT', action = act.SplitVertical   { domain = 'CurrentPaneDomain' } },
-  { key = '_', mods = 'CTRL',       action = act.SplitVertical   { domain = 'CurrentPaneDomain' } },
+  { key = '-', mods = 'CTRL|ALT',   action = act.SplitVertical   { domain = 'CurrentPaneDomain' } },
 
   -- Pane navigation
   { key = 'h', mods = 'CTRL|SHIFT', action = act.ActivatePaneDirection 'Left'  },
@@ -214,7 +211,7 @@ config.keys = {
       command = { args = { 'zsh', '-c', [[
 printf "── WezTerm Shortcuts ────────────────\n"
 printf "  Ctrl+Shift+|    split left/right\n"
-printf "  Ctrl+Shift+-    split top/bottom\n"
+printf "  Ctrl+Alt+-      split top/bottom\n"
 printf "  Ctrl+Shift+h/l/k/j  navigate panes\n"
 printf "  Ctrl+Shift+z    zoom pane\n"
 printf "  Ctrl+Shift+r    resize mode\n"
