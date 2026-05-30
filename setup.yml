@@ -22,7 +22,7 @@
       when: ansible_os_family == "Darwin"
       become: false
       community.general.homebrew:
-        name: [git, curl, tmux, stow, restic, node, gh, zed, copyq, just, fzf, bat, eza, zoxide]
+        name: [git, curl, tmux, stow, restic, node, gh, just, fzf, bat, eza, zoxide]
         state: present
 
     # ── Ubuntu/Debian: apt packages ───────────────────────────────────────────
@@ -79,12 +79,6 @@
       args:
         creates: "{{ user_home }}/.local/bin/zoxide"
 
-    # ── tldr (both platforms via npm) ─────────────────────────────────────────
-    - name: Install tldr via npm
-      become: false
-      command: npm install -g tldr
-      ignore_errors: true
-
     # ── just (Ubuntu) — not in apt, install from GitHub releases ────────────
     - name: Install just (Ubuntu)
       when: ansible_os_family == "Debian"
@@ -100,6 +94,13 @@
       become: false
       community.general.homebrew_cask:
         name: cloudflare-warp
+        state: present
+
+    - name: Install GUI apps via Homebrew cask (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      community.general.homebrew_cask:
+        name: [zed, copyq]
         state: present
 
     # ── Google Chrome (Ubuntu) ────────────────────────────────────────────────
@@ -201,6 +202,7 @@
         - lighthouse
         - opencode
         - "@bitwarden/cli"
+        - tldr
       command: "npm install -g {{ item }}"
       ignore_errors: true
 

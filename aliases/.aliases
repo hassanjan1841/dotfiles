@@ -30,7 +30,6 @@ alias keys='just --justfile ~/dotfiles/Justfile keys'
 
 # ── Dev ────────────────────────────────────────────────────────────────────────
 alias dev='npm run dev-server'
-alias ws='tmuxinator start workspace'
 
 # ── System ────────────────────────────────────────────────────────────────────
 alias ports='ss -tulnp'

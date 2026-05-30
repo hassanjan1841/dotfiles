@@ -22,8 +22,8 @@ install:
 
 # Pull latest dotfiles from GitHub then re-run the playbook
 update:
-    cd {{dotfiles}} && git pull
     #!/usr/bin/env bash
+    cd {{dotfiles}} && git pull
     if sudo -n true 2>/dev/null; then
         ansible-playbook {{dotfiles}}/setup.yml --become
     else

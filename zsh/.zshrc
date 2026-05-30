@@ -142,13 +142,13 @@ npx()  { unfunction npx;  __nvm_lazy_load; npx  "$@"; }
 export PATH=/home/hassan-jan/.opencode/bin:$PATH
 
 # OpenClaw Completion
-source "/home/hassan-jan/.openclaw/completions/openclaw.zsh"
+[ -f "$HOME/.openclaw/completions/openclaw.zsh" ] && source "$HOME/.openclaw/completions/openclaw.zsh"
 # Load secrets (API keys) — this file is never committed
 [ -f "$HOME/.secrets" ] && source "$HOME/.secrets"
 export PATH="/home/hassan-jan/.fly/bin:$PATH"
 autoload bashcompinit
 bashcompinit
-source "/home/hassan-jan/.local/share/bash-completion/completions/appman"
+[ -f "$HOME/.local/share/bash-completion/completions/appman" ] && source "$HOME/.local/share/bash-completion/completions/appman"
 export AMP_TOOLBOX="/home/hassan-jan/amp-superpowers/toolbox"
 
 # bun completions
@@ -192,7 +192,7 @@ fi
 # zoxide (smarter cd)
 eval "$(zoxide init zsh)"
 
-eval "$($HOME/.linuxbrew/bin/brew shellenv)"
+[ -x "$HOME/.linuxbrew/bin/brew" ] && eval "$($HOME/.linuxbrew/bin/brew shellenv)"
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!

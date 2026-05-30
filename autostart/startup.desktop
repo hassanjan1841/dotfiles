@@ -2,7 +2,7 @@
 Type=Application
 Name=Dev Workflow Launcher
 Comment=Ask which workflow to open at login
-Exec=/home/hassan-jan/startup.sh
+Exec=bash -c "$HOME/startup.sh"
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
