@@ -4,6 +4,7 @@
 
 dotfiles := env_var("HOME") + "/dotfiles"
 project  := env_var("HOME") + "/speaklogic-testing"
+notes    := env_var("HOME") + "/notes"
 backups  := env_var("HOME") + "/backups"
 
 # Show available commands
@@ -23,24 +24,42 @@ install:
 # Pull latest dotfiles from GitHub then re-run the playbook
 update:
     #!/usr/bin/env bash
+    source "$HOME/.secrets" 2>/dev/null || true
     cd {{dotfiles}} && git pull
+    STATUS=0
     if sudo -n true 2>/dev/null; then
-        ansible-playbook {{dotfiles}}/setup.yml --become
+        ansible-playbook {{dotfiles}}/setup.yml --become || STATUS=$?
     else
-        ansible-playbook {{dotfiles}}/setup.yml --ask-become-pass
+        ansible-playbook {{dotfiles}}/setup.yml --ask-become-pass || STATUS=$?
     fi
+    if [ -n "${NTFY_TOPIC:-}" ]; then
+        if [ "$STATUS" -eq 0 ]; then
+            curl -s -d "dotfiles update: success" "https://ntfy.sh/$NTFY_TOPIC" &>/dev/null || true
+        else
+            curl -s -d "dotfiles update: FAILED" "https://ntfy.sh/$NTFY_TOPIC" &>/dev/null || true
+        fi
+    fi
+    exit "$STATUS"
 
 # Commit all changes and push to GitHub (uses current date+time as message)
 sync:
+    #!/usr/bin/env bash
+    source "$HOME/.secrets" 2>/dev/null || true
     cd {{dotfiles}} && git add -A
     cd {{dotfiles}} && git diff --cached --quiet || git commit -m "sync: $(date '+%Y-%m-%d %H:%M:%S')"
-    cd {{dotfiles}} && git push
+    if cd {{dotfiles}} && git push; then
+        [ -n "${NTFY_TOPIC:-}" ] && curl -s -d "dotfiles sync: success" "https://ntfy.sh/$NTFY_TOPIC" &>/dev/null || true
+    else
+        [ -n "${NTFY_TOPIC:-}" ] && curl -s -d "dotfiles sync: FAILED" "https://ntfy.sh/$NTFY_TOPIC" &>/dev/null || true
+        exit 1
+    fi
 
 # Re-apply all stow symlinks
 link:
     cd {{dotfiles}} && stow -v --restow bash git zsh dev p10k aliases
     cd {{dotfiles}} && stow -v --no-folding --restow taskwarrior
     cd {{dotfiles}} && stow -v --no-folding --restow claude
+    cd {{dotfiles}} && stow -v --no-folding --restow notes
     stow -v --restow --target="{{env_var('HOME')}}/.config/zed"        --dir={{dotfiles}} zed
     stow -v --restow --target="{{env_var('HOME')}}/.config/autostart"  --dir={{dotfiles}} autostart
     cd {{dotfiles}} && stow -v --restow wezterm
@@ -67,7 +86,7 @@ status:
         echo "Restic not configured yet"
     fi
 
-# Backup ~/dotfiles and ~/project to ~/backups using restic
+# Backup ~/dotfiles, ~/project, and ~/notes to ~/backups using restic
 # Requires: RESTIC_PASSWORD set in ~/.secrets and restic installed
 backup:
     #!/usr/bin/env bash
@@ -81,8 +100,20 @@ backup:
         echo "Initialising restic repo at {{backups}}..."
         restic -r {{backups}} init
     fi
-    restic -r {{backups}} backup {{dotfiles}} {{project}} --verbose
-    restic -r {{backups}} forget --keep-last 10 --prune
+    BACKUP_PATHS=({{dotfiles}})
+    [ -d "{{project}}" ] && BACKUP_PATHS+=("{{project}}")
+    [ -d "{{notes}}" ]   && BACKUP_PATHS+=("{{notes}}")
+    if restic -r {{backups}} backup "${BACKUP_PATHS[@]}" --verbose; then
+        restic -r {{backups}} forget --keep-last 10 --prune
+        [ -n "${NTFY_TOPIC:-}" ] && curl -s -d "restic backup: success" "https://ntfy.sh/$NTFY_TOPIC" &>/dev/null || true
+    else
+        [ -n "${NTFY_TOPIC:-}" ] && curl -s -d "restic backup: FAILED" "https://ntfy.sh/$NTFY_TOPIC" &>/dev/null || true
+        exit 1
+    fi
+
+# Show personal dashboard
+dashboard:
+    @bash {{dotfiles}}/scripts/dashboard.sh
 
 # Print all WezTerm key bindings
 keys:

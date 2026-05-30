@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# hass — personal dev assistant CLI
+
+DOTFILES="$HOME/dotfiles"
+NOTES_DIR="${NOTES_DIR:-$HOME/notes}"
+PROJECTS_DIR="$HOME/projects"
+
+usage() {
+  cat <<'EOF'
+Usage: hass <command> [args]
+
+Commands:
+  setup          Run Ansible playbook (full machine setup)
+  sync           Sync dotfiles to GitHub
+  backup         Run restic backup
+  status         Show personal dashboard
+  switch         Open fuzzy project switcher
+  update         Pull & apply dotfiles updates
+  tasks          Open taskwarrior
+  new  [name]    Create new project with git init + wezterm workspace
+  note [text]    Add quick note to inbox with timestamp
+  find [term]    Search notes and projects with ripgrep
+EOF
+}
+
+case "${1:-}" in
+  setup)
+    just --justfile "$DOTFILES/Justfile" install
+    ;;
+  sync)
+    just --justfile "$DOTFILES/Justfile" sync
+    ;;
+  backup)
+    just --justfile "$DOTFILES/Justfile" backup
+    ;;
+  status)
+    bash "$DOTFILES/scripts/dashboard.sh"
+    ;;
+  switch)
+    DIR=$(find "$PROJECTS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | fzf --prompt="project> " --height=40%)
+    [ -n "$DIR" ] && cd "$DIR" && exec "${SHELL:-zsh}"
+    ;;
+  update)
+    just --justfile "$DOTFILES/Justfile" update
+    ;;
+  tasks)
+    task list
+    ;;
+  new)
+    NAME="${2:-}"
+    if [ -z "$NAME" ]; then echo "Usage: hass new <project-name>"; exit 1; fi
+    DIR="$PROJECTS_DIR/$NAME"
+    mkdir -p "$DIR" && cd "$DIR" && git init
+    cat > "$DIR/.wezterm-workspace.lua" <<WEZLUA
+return { workspace = "$NAME", cwd = "$DIR" }
+WEZLUA
+    echo "Created project: $DIR"
+    ;;
+  note)
+    shift
+    NOTE="${*:-}"
+    if [ -z "$NOTE" ]; then echo "Usage: hass note <text>"; exit 1; fi
+    INBOX="$NOTES_DIR/inbox/inbox.md"
+    mkdir -p "$NOTES_DIR/inbox"
+    echo "- $(date '+%Y-%m-%d %H:%M') — $NOTE" >> "$INBOX"
+    echo "Added to $INBOX"
+    ;;
+  find)
+    TERM="${2:-}"
+    if [ -z "$TERM" ]; then echo "Usage: hass find <search-term>"; exit 1; fi
+    rg "$TERM" "$NOTES_DIR" "$PROJECTS_DIR" 2>/dev/null
+    ;;
+  *)
+    usage
+    ;;
+esac

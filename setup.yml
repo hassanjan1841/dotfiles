@@ -22,7 +22,7 @@
       when: ansible_os_family == "Darwin"
       become: false
       community.general.homebrew:
-        name: [git, curl, stow, restic, node, gh, just, fzf, bat, eza, zoxide, duf]
+        name: [git, curl, stow, restic, node, gh, just, fzf, bat, eza, zoxide, duf, fd, ripgrep, atuin]
         state: present
 
     # ── Ubuntu/Debian: apt packages ───────────────────────────────────────────
@@ -30,7 +30,7 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, gpg, unzip, zsh, stow, zenity, restic, gh, copyq, vlc, fzf, bat, taskwarrior, timewarrior, ncdu, btop]
+        name: [git, curl, gpg, unzip, zsh, stow, zenity, restic, gh, copyq, vlc, fzf, bat, taskwarrior, timewarrior, ncdu, btop, fd-find, ripgrep, flatpak, python3-pip]
         state: present
         update_cache: true
 
@@ -439,3 +439,141 @@
         fc-cache -f "$FONT_DIR"
       args:
         creates: "{{ user_home }}/.local/share/fonts/JetBrainsMono"
+
+    # ── atuin (shell history sync) ────────────────────────────────────────────
+    - name: Install atuin
+      become: false
+      shell: curl -fsSL https://setup.atuin.sh | bash
+      args:
+        creates: "{{ user_home }}/.atuin/bin/atuin"
+
+    # ── Mission Center / System monitor ──────────────────────────────────────
+    - name: Add Flathub remote (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: false
+      shell: flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+      ignore_errors: true
+
+    - name: Install Mission Center via Flatpak (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: false
+      shell: flatpak install --user -y flathub net.nokyan.Resources
+      args:
+        creates: "{{ user_home }}/.local/share/flatpak/app/net.nokyan.Resources"
+      ignore_errors: true
+
+    - name: Install Stats system monitor via Homebrew cask (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      community.general.homebrew_cask:
+        name: stats
+        state: present
+      ignore_errors: true
+
+    # ── pre-commit ────────────────────────────────────────────────────────────
+    - name: Install pre-commit via uv
+      become: false
+      shell: "{{ user_home }}/.local/bin/uv tool install pre-commit"
+      args:
+        creates: "{{ user_home }}/.local/bin/pre-commit"
+
+    - name: Install pre-commit hooks in dotfiles repo
+      become: false
+      shell: "{{ user_home }}/.local/bin/pre-commit install"
+      args:
+        chdir: "{{ dotfiles_dir }}"
+      ignore_errors: true
+
+    # ── Notes directory structure ─────────────────────────────────────────────
+    - name: Create ~/notes directory structure
+      become: false
+      file:
+        path: "{{ user_home }}/notes/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - inbox
+        - notes
+        - projects
+        - daily
+        - templates
+
+    - name: Stow notes templates
+      become: false
+      shell: "cd {{ dotfiles_dir }} && stow -v --no-folding --restow notes"
+      ignore_errors: true
+
+    # ── bin/ scripts (hass CLI) ────────────────────────────────────────────────
+    - name: Ensure ~/dotfiles/bin scripts are executable
+      become: false
+      file:
+        path: "{{ dotfiles_dir }}/bin/hass"
+        mode: "0755"
+
+    # ── dashboard + daily scripts: ensure executable ──────────────────────────
+    - name: Ensure scripts are executable
+      become: false
+      file:
+        path: "{{ dotfiles_dir }}/scripts/{{ item }}"
+        mode: "0755"
+      loop:
+        - dashboard.sh
+        - daily.sh
+
+    # ── systemd user timer for daily.sh (Ubuntu) ─────────────────────────────
+    - name: Stow systemd user units (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: false
+      shell: >
+        stow -v --no-folding --restow
+        --target={{ user_home }}/.config
+        --dir={{ dotfiles_dir }}
+        systemd
+      ignore_errors: true
+
+    - name: Enable and start daily systemd timer (Ubuntu)
+      when: ansible_os_family == "Debian" and not ansible_check_mode
+      become: false
+      shell: |
+        systemctl --user daemon-reload
+        systemctl --user enable --now daily.timer
+      ignore_errors: true
+
+    # ── launchd daily timer (macOS) ───────────────────────────────────────────
+    - name: Install launchd daily plist (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      copy:
+        dest: "{{ user_home }}/Library/LaunchAgents/com.hassan.daily.plist"
+        mode: "0644"
+        content: |
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>Label</key>
+            <string>com.hassan.daily</string>
+            <key>ProgramArguments</key>
+            <array>
+              <string>/bin/bash</string>
+              <string>{{ dotfiles_dir }}/scripts/daily.sh</string>
+            </array>
+            <key>StartCalendarInterval</key>
+            <dict>
+              <key>Hour</key>
+              <integer>9</integer>
+              <key>Minute</key>
+              <integer>0</integer>
+            </dict>
+            <key>StandardOutPath</key>
+            <string>{{ user_home }}/.local/share/daily.log</string>
+            <key>StandardErrorPath</key>
+            <string>{{ user_home }}/.local/share/daily.log</string>
+          </dict>
+          </plist>
+
+    - name: Load launchd daily agent (macOS)
+      when: ansible_os_family == "Darwin" and not ansible_check_mode
+      become: false
+      shell: launchctl load -w "{{ user_home }}/Library/LaunchAgents/com.hassan.daily.plist"
+      ignore_errors: true

@@ -1,0 +1,26 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-json
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+
+  - repo: local
+    hooks:
+      - id: no-secrets-file
+        name: Block .secrets file from being committed
+        language: fail
+        files: '(^|/)\.secrets$'
+        entry: ".secrets file must not be committed — remove it from staging"
+
+      - id: no-hardcoded-secrets
+        name: Detect hardcoded api_key / secret / password / token values
+        language: pygrep
+        entry: '(?i)(api_key|password|secret|token)\s*[=:]\s*["\x27][A-Za-z0-9/_\-]{8,}'
+        exclude: '(\.pre-commit-config\.yaml|\.md|test|example)'
+        types: [text]

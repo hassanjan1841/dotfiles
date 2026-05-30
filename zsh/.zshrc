@@ -12,7 +12,7 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
 fi
 
 # If you come from bash you might have to change your $PATH.
-export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
+export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$HOME/dotfiles/bin:$PATH
 
 # Path to your Oh My Zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
@@ -161,6 +161,21 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 
 # Aliases
 [ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
+
+# atuin (shell history sync) — init after aliases so it can override Ctrl+R
+command -v atuin &>/dev/null && eval "$(atuin init zsh --disable-up-arrow)"
+
+# Show personal dashboard once per day on first interactive terminal open
+_dashboard_once() {
+  local stamp="$HOME/.cache/dashboard-last-shown"
+  local today
+  today=$(date +%Y-%m-%d)
+  if [ ! -f "$stamp" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$today" ]; then
+    echo "$today" > "$stamp"
+    [ -f "$HOME/dotfiles/scripts/dashboard.sh" ] && bash "$HOME/dotfiles/scripts/dashboard.sh"
+  fi
+}
+[[ $- == *i* ]] && _dashboard_once
 
 # fzf
 [ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh

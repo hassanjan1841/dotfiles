@@ -10,7 +10,15 @@ alias lt='eza --tree --icons --level=2'
 # bat is called batcat on Ubuntu, bat on macOS
 command -v batcat &>/dev/null && alias bat=batcat
 alias cat='bat --paging=never'
-alias grep='grep --color=auto'
+
+# fd: Ubuntu installs as fdfind, macOS/brew as fd
+if command -v fdfind &>/dev/null; then
+  alias fd=fdfind
+fi
+command -v fd &>/dev/null && alias find=fd
+
+# ripgrep replaces grep
+command -v rg &>/dev/null && alias grep=rg || alias grep='grep --color=auto'
 
 # ── Git shortcuts ──────────────────────────────────────────────────────────────
 alias gs='git status'
@@ -19,6 +27,13 @@ alias gc='git commit -m'
 alias gp='git push'
 alias gl='git log --oneline --graph --decorate -10'
 alias gd='git diff'
+
+# Fuzzy git branch switch
+gco() {
+  local branch
+  branch=$(git branch --all | sed 's/^\* //' | sed 's|remotes/origin/||' | sort -u | fzf --prompt="branch> " --height=40%)
+  [ -n "$branch" ] && git checkout "$(echo "$branch" | tr -d ' ')"
+}
 
 # ── Dotfiles ───────────────────────────────────────────────────────────────────
 alias dots='cd ~/dotfiles'
@@ -46,3 +61,36 @@ bw_get()    { bw get password "$@" --session "${BW_SESSION:-}"; }
 
 # ── Claude ────────────────────────────────────────────────────────────────────
 alias claude-mem='bun "$HOME/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'
+
+# ── Notifications (OS-aware: ntfy.sh + local desktop) ─────────────────────────
+notify() {
+  local msg="${*:-Done}"
+  # Web push via ntfy.sh
+  if [ -n "${NTFY_TOPIC:-}" ]; then
+    curl -s -d "$msg" "https://ntfy.sh/$NTFY_TOPIC" &>/dev/null &
+  fi
+  # Local desktop notification
+  if [[ "$(uname)" == "Darwin" ]]; then
+    osascript -e "display notification \"$msg\" with title \"Terminal\"" &>/dev/null || true
+  elif command -v notify-send &>/dev/null; then
+    notify-send "Terminal" "$msg" &>/dev/null || true
+  fi
+}
+
+# ── Project switcher (fzf) ──────────────────────────────────────────────────
+proj() {
+  local dir
+  dir=$(find ~/projects -maxdepth 1 -mindepth 1 -type d 2>/dev/null | \
+        fzf --prompt="project> " --height=40% --preview='ls {}')
+  [ -z "$dir" ] && return
+  cd "$dir"
+  # If inside WezTerm and project has a workspace config, spawn workspace
+  if [ -n "${WEZTERM_PANE:-}" ] && [ -f "$dir/.wezterm-workspace.lua" ]; then
+    wezterm cli spawn --workspace "$(basename "$dir")" -- zsh 2>/dev/null || true
+  fi
+}
+
+# Fuzzy command history search — prints selected command to readline buffer
+fh() {
+  print -z "$(fc -ln 0 | awk '!seen[$0]++' | fzf --tac --no-sort --height=40% --prompt='history> ')"
+}

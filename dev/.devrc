@@ -1,2 +1,5 @@
 # Change this to switch which project startup.sh opens
 PROJECT_PATH="$HOME/speaklogic-testing"
+
+# Notes folder
+export NOTES_DIR="$HOME/notes"
