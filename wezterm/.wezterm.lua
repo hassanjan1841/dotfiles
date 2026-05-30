@@ -179,6 +179,24 @@ config.keys = {
   { key = 'UpArrow',   mods = 'CTRL|SHIFT', action = act.ScrollToPrompt(-1) },
   { key = 'DownArrow', mods = 'CTRL|SHIFT', action = act.ScrollToPrompt(1)  },
 
+  -- Rename tab (F2)
+  { key = 'F2', mods = 'NONE', action = act.PromptInputLine {
+      description = 'Rename tab:',
+      action = wezterm.action_callback(function(window, pane, line)
+        if line and line ~= '' then window:active_tab():set_title(line) end
+      end),
+  }},
+
+  -- Rename workspace (Shift+F2)
+  { key = 'F2', mods = 'SHIFT', action = act.PromptInputLine {
+      description = 'Rename workspace:',
+      action = wezterm.action_callback(function(window, pane, line)
+        if line and line ~= '' then
+          wezterm.mux.rename_workspace(window:active_workspace(), line)
+        end
+      end),
+  }},
+
   -- Workspaces
   { key = 'n', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(1)  },
   { key = 'p', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(-1) },
