@@ -264,7 +264,7 @@ config.keys = {
             relative           = true,
             restore_text       = false,
             spawn_in_workspace = true,
-            on_pane_restore    = resurrect.tabs.default_on_pane_restore,
+            on_pane_restore    = resurrect.tab_state.default_on_pane_restore,
           })
           win:perform_action(act.SwitchToWorkspace { name = workspace_name }, pane)
         elseif type == 'window' then
@@ -348,7 +348,7 @@ wezterm.on('gui-startup', function(cmd)
             relative           = true,
             restore_text       = false,
             spawn_in_workspace = true,
-            on_pane_restore    = resurrect.tabs.default_on_pane_restore,
+            on_pane_restore    = resurrect.tab_state.default_on_pane_restore,
           })
         end
       end
