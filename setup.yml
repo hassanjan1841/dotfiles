@@ -72,18 +72,18 @@
       args:
         creates: /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
       ignore_errors: true
+      register: warp_gpg
 
     - name: Add Cloudflare WARP apt repo (Ubuntu)
-      when: ansible_os_family == "Debian"
+      when: ansible_os_family == "Debian" and warp_gpg is succeeded
       become: true
       copy:
         dest: /etc/apt/sources.list.d/cloudflare-client.list
         content: |
           deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ {{ ansible_distribution_release }} main
-      ignore_errors: true
 
     - name: Install Cloudflare WARP (Ubuntu)
-      when: ansible_os_family == "Debian" and not ansible_check_mode
+      when: ansible_os_family == "Debian" and not ansible_check_mode and warp_gpg is succeeded
       become: true
       apt:
         name: cloudflare-warp
