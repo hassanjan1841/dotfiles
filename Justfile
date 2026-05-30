@@ -43,6 +43,7 @@ link:
     stow -v --restow --target="{{env_var('HOME')}}/.config/zed"        --dir={{dotfiles}} zed
     stow -v --restow --target="{{env_var('HOME')}}/.config/autostart"  --dir={{dotfiles}} autostart
     cd {{dotfiles}} && stow -v --restow wezterm
+    cd {{dotfiles}} && stow -v --restow startup
 
 # Preview what Ansible would change without applying anything
 dry-run:

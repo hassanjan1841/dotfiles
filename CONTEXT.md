@@ -8,7 +8,7 @@
 ## Terminal: WezTerm only
 - Config: `~/dotfiles/wezterm/.wezterm.lua` (symlinked to `~/.wezterm.lua`)
 - On startup: opens `dev` workspace, left pane = `npm run dev-server`, right pane = `claude`, Chrome (Profile 9) opens separately
-- Startup script: `~/startup.sh` → `~/dotfiles/startup.sh` (GNOME autostart via `~/.config/autostart/`)
+- Startup script: `~/startup.sh` → symlink to `~/dotfiles/startup/startup.sh` (GNOME autostart via `~/.config/autostart/`)
 - No tmux/tmuxinator/ptyxis — WezTerm handles splits/tabs/workspaces natively
 
 ## Key WezTerm bindings
@@ -23,8 +23,7 @@
 - **Workspace names must not contain spaces** — resurrect's awk parser breaks on spaces; use hyphens (e.g. `my-project` not `my project`)
 
 ## Rules — always do this after any change
-1. If changing `startup.sh`: edit `~/startup.sh`, copy to `~/dotfiles/startup.sh`
-2. All dotfile changes go in `~/dotfiles/` (stowed packages)
+1. All dotfile changes go in `~/dotfiles/` (stowed packages) — `startup.sh` is at `~/dotfiles/startup/startup.sh`
 3. After every change: `cd ~/dotfiles && git add -A && git commit -m "..." && git push`
 4. No Co-Author line in commits
 
