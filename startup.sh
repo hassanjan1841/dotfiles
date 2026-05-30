@@ -62,25 +62,23 @@ snap_window() {
 case "$CHOICE" in
   "Dev Mode")
     fix_chrome_exit
-    google-chrome --profile-directory="Profile 9" &
+
+    # wmctrl cannot see Wayland-native windows (ptyxis is GTK4/Wayland).
+    # Instead: launch each window, wait for it to focus, then trigger GNOME's
+    # tiling shortcut via xdotool. Chrome launches last so it won't steal focus.
 
     # Window 1 — left half: dev server
     ptyxis -- zsh -ic "cd '$PROJECT_PATH' && npm run dev-server; exec zsh" &
+    sleep 2
+    DISPLAY=:0 xdotool key super+Left
 
     # Window 2 — right half: claude
-    sleep 1
     ptyxis -- zsh -ic "cd '$PROJECT_PATH' && claude; exec zsh" &
+    sleep 2
+    DISPLAY=:0 xdotool key super+Right
 
-    # Wait for windows then snap left and right
-    (
-      sleep 3
-      # Snap by window class since ptyxis titles may vary
-      WINS=$(wmctrl -l | grep -i ptyxis | awk '{print $1}')
-      WIN1=$(echo "$WINS" | head -1)
-      WIN2=$(echo "$WINS" | tail -1)
-      [ -n "$WIN1" ] && wmctrl -i -r "$WIN1" -e "0,0,0,$HALF_W,$SCREEN_H"
-      [ -n "$WIN2" ] && wmctrl -i -r "$WIN2" -e "0,$HALF_W,0,$HALF_W,$SCREEN_H"
-    ) &
+    # Launch Chrome last so it doesn't steal focus during tiling
+    google-chrome --profile-directory="Profile 9" &
 
     echo "Dev Mode launched"
     ;;
