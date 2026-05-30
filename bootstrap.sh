@@ -51,19 +51,35 @@ just --justfile "$DOTFILES/Justfile" install
 echo "==> Applying stow symlinks..."
 just --justfile "$DOTFILES/Justfile" link
 
-# ── Secrets reminder ───────────────────────────────────────────────────────────
+# ── Final checklist ────────────────────────────────────────────────────────────
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  Bootstrap complete! Do these 3 things manually:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
 if [ ! -f "$HOME/.secrets" ]; then
-    echo ""
-    echo "  ┌─────────────────────────────────────────────┐"
-    echo "  │  One manual step remaining: create ~/.secrets │"
-    echo "  │                                               │"
-    echo "  │  nano ~/.secrets                              │"
-    echo "  │  export TAVILY_API_KEY=\"your-key\"             │"
-    echo "  │  export RESTIC_PASSWORD=\"your-backup-pass\"    │"
-    echo "  └─────────────────────────────────────────────┘"
+    echo "  1. Add your API keys:"
+    echo "     nano ~/.secrets"
+    echo "     export TAVILY_API_KEY=\"your-key\""
+    echo "     export RESTIC_PASSWORD=\"your-backup-pass\""
+else
+    echo "  1. ~/.secrets already exists ✓"
 fi
 
 echo ""
-echo "==> Bootstrap complete!"
-echo "    - Open tmux and press Ctrl+A then I to install plugins"
-echo "    - Reboot to trigger the startup dialog"
+echo "  2. Install tmux plugins:"
+echo "     Open tmux -> press Ctrl+A then I"
+echo "     (wait for plugins to finish installing)"
+echo ""
+echo "  3. Reboot:"
+echo "     sudo reboot"
+echo "     (startup dialog will appear after login)"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  Useful commands after reboot:"
+echo "  just status               -> dotfiles + sync state"
+echo "  just sync                 -> commit and push changes"
+echo "  just dry-run              -> preview Ansible changes"
+echo "  tmuxinator start workspace -> open dev workspace"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
