@@ -219,6 +219,18 @@ config.keys = {
   { key = 'p', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(-1) },
   { key = '$', mods = 'CTRL|SHIFT', action = act.ShowLauncherArgs { flags = 'WORKSPACES' } },
 
+  -- Close current workspace (closes all its tabs then switches to next workspace)
+  { key = 'q', mods = 'CTRL|SHIFT', action = wezterm.action_callback(function(win, pane)
+      local tabs = win:mux_window():tabs()
+      for _, tab in ipairs(tabs) do
+        tab:activate()
+        win:perform_action(act.CloseCurrentTab { confirm = false }, pane)
+      end
+  end) },
+
+  -- Quit WezTerm entirely
+  { key = 'q', mods = 'CTRL|SHIFT|ALT', action = act.QuitApplication },
+
   -- Session save/restore (resurrect.wezterm)
   { key = 's', mods = 'CTRL|SHIFT', action = wezterm.action_callback(function(win, pane)
       do_save()
@@ -266,6 +278,8 @@ printf "  Ctrl+Shift+n/p  next/prev workspace\n"
 printf "  Ctrl+Shift+\$    workspace picker\n"
 printf "  Ctrl+Shift+s    save session\n"
 printf "  Ctrl+Shift+o    restore session\n"
+printf "  Ctrl+Shift+q    close workspace\n"
+printf "  Ctrl+Shift+Alt+q  quit WezTerm\n"
 printf "  F2              rename tab\n"
 printf "  Shift+F2        rename workspace\n"
 printf "  Ctrl+Shift+Space  quick select\n"

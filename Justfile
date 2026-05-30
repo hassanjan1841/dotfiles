@@ -95,6 +95,8 @@ keys:
     @printf "  Ctrl+1..5          Switch tab\n"
     @printf "  Ctrl+Shift+n/p     Next/prev workspace\n"
     @printf "  Ctrl+Shift+\$       Workspace picker\n"
+    @printf "  Ctrl+Shift+q       Close workspace\n"
+    @printf "  Ctrl+Shift+Alt+q   Quit WezTerm\n"
     @printf "  Shift+F2           Rename workspace\n"
     @printf "  F2                 Rename tab\n"
     @printf "  Ctrl+Shift+Space   Quick select\n"
