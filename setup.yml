@@ -358,6 +358,7 @@
       file:
         path: "{{ user_home }}/startup.sh"
         mode: "0755"
+      ignore_errors: true
 
     - name: Ensure autostart dir exists (Ubuntu)
       when: ansible_os_family == "Debian"
