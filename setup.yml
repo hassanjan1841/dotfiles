@@ -22,7 +22,7 @@
       when: ansible_os_family == "Darwin"
       become: false
       community.general.homebrew:
-        name: [git, curl, tmux, stow, restic, node, gh, zed, copyq, just]
+        name: [git, curl, tmux, stow, restic, node, gh, zed, copyq, just, fzf, bat, eza, zoxide]
         state: present
 
     # ── Ubuntu/Debian: apt packages ───────────────────────────────────────────
@@ -30,7 +30,7 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, tmux, stow, zenity, restic, gh, ruby, ruby-dev, copyq, vlc]
+        name: [git, curl, tmux, stow, zenity, restic, gh, ruby, ruby-dev, copyq, vlc, fzf, bat, eza]
         state: present
         update_cache: true
 
@@ -59,6 +59,21 @@
         name: cloudflare-warp
         state: present
         update_cache: true
+
+    # ── zoxide (Ubuntu) ───────────────────────────────────────────────────────
+    - name: Install zoxide (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: false
+      shell: curl -fsSL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
+      args:
+        creates: "{{ user_home }}/.local/bin/zoxide"
+
+    # ── tldr (both platforms via npm) ─────────────────────────────────────────
+    - name: Install tldr via npm
+      become: false
+      command: npm install -g tldr
+      args:
+        creates: "{{ user_home }}/.nvm/versions/node/v25.8.1/bin/tldr"
 
     # ── just (Ubuntu) — not in apt, install from GitHub releases ────────────
     - name: Install just (Ubuntu)

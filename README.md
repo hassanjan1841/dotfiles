@@ -17,6 +17,7 @@ Personal dotfiles for Ubuntu and macOS, managed with [GNU Stow](https://www.gnu.
 | `tmuxinator` | `~/.config/tmuxinator/workspace.yml` |
 | `zed` | `~/.config/zed/settings.json` + `themes/` |
 | `claude` | `~/.claude/settings.json` + `CLAUDE.md` |
+| `aliases` | `~/.aliases` (git, nav, dev, dotfiles shortcuts) |
 
 ## Bootstrap a new machine
 
@@ -68,6 +69,8 @@ Any custom theme JSON files saved to `~/.config/zed/themes/` are auto-synced via
 | `just update` | Pull latest from GitHub + re-run Ansible |
 | `just sync` | Commit all changes with timestamp + push to GitHub |
 | `just link` | Re-apply all stow symlinks |
+| `just dry-run` | Preview what Ansible would change (no changes made) |
+| `just status` | Git status + last sync + last backup at a glance |
 | `just backup` | Backup dotfiles + project to `~/backups` via restic |
 
 ## Changing the project path
@@ -107,7 +110,7 @@ GitHub Actions runs the Ansible playbook in `--check` (dry run) mode on every pu
 - **JS runtime:** Bun
 - **Python:** uv, aider-chat
 - **Editor:** Zed
-- **CLI:** gh, chezmoi, stow, restic
+- **CLI:** gh, chezmoi, stow, restic, fzf, zoxide, bat, eza, tldr
 - **Clipboard:** CopyQ
 - **Media:** VLC
 - **Browser:** Google Chrome

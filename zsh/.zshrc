@@ -156,7 +156,16 @@ export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
 
-alias claude-mem='bun "/home/hassan-jan/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'
+# Aliases
+[ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
+
+# fzf
+[ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh
+[ -f /usr/share/doc/fzf/examples/completion.zsh ]    && source /usr/share/doc/fzf/examples/completion.zsh
+
+# zoxide (smarter cd)
+eval "$(zoxide init zsh)"
+
 eval "$($HOME/.linuxbrew/bin/brew shellenv)"
 
 # >>> conda initialize >>>

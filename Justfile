@@ -38,11 +38,32 @@ sync:
 
 # Re-apply all stow symlinks
 link:
-    cd {{dotfiles}} && stow -v --restow bash git zsh dev tmux p10k
+    cd {{dotfiles}} && stow -v --restow bash git zsh dev tmux p10k aliases
     cd {{dotfiles}} && stow -v --no-folding --restow claude
     stow -v --restow --target="{{env_var('HOME')}}/.config/tmuxinator" --dir={{dotfiles}} tmuxinator
     stow -v --restow --target="{{env_var('HOME')}}/.config/zed"        --dir={{dotfiles}} zed
     stow -v --restow --target="{{env_var('HOME')}}/.config/autostart"  --dir={{dotfiles}} autostart
+
+# Preview what Ansible would change without applying anything
+dry-run:
+    ansible-playbook {{dotfiles}}/setup.yml --check --diff -i localhost, --connection local
+
+# Show dotfiles git status, last sync, and last backup at a glance
+status:
+    #!/usr/bin/env bash
+    echo "── Dotfiles git status ──────────────────────────"
+    cd {{dotfiles}} && git status -s && echo "Branch: $(git branch --show-current) | $(git log -1 --format='Last commit: %ar — %s')"
+    echo ""
+    echo "── Last sync ────────────────────────────────────"
+    cd {{dotfiles}} && git log -1 --format="%ci  %s"
+    echo ""
+    echo "── Last backup ──────────────────────────────────"
+    if command -v restic &>/dev/null && [ -d {{backups}} ]; then
+        source "$HOME/.secrets" 2>/dev/null || true
+        restic -r {{backups}} snapshots --last 2>/dev/null | tail -3 || echo "No backups found"
+    else
+        echo "Restic not configured yet"
+    fi
 
 # Backup ~/dotfiles and ~/project to ~/backups using restic
 # Requires: RESTIC_PASSWORD set in ~/.secrets and restic installed
