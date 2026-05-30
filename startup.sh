@@ -64,19 +64,22 @@ case "$CHOICE" in
     fix_chrome_exit
     google-chrome --profile-directory="Profile 9" &
 
-    # Window 1 — left half: tab 1: dev server, tab 2: claude
-    ptyxis -x "zsh -ic \"cd '$PROJECT_PATH' && npm run dev-server; exec zsh\"" &
-    sleep 1
-    ptyxis --tab -- zsh -ic "cd '$PROJECT_PATH' && claude; exec zsh" &
+    # Window 1 — left half: dev server
+    ptyxis -- zsh -ic "cd '$PROJECT_PATH' && npm run dev-server; exec zsh" &
 
     # Window 2 — right half: claude
-    ptyxis --new-window -- zsh -ic "cd '$PROJECT_PATH' && claude; exec zsh" &
+    sleep 1
+    ptyxis -- zsh -ic "cd '$PROJECT_PATH' && claude; exec zsh" &
 
-    # Wait for windows to open then snap left and right
+    # Wait for windows then snap left and right
     (
       sleep 3
-      snap_window "Dev Server" 0 0 $HALF_W $SCREEN_H
-      snap_window "Claude 2"   $HALF_W 0 $HALF_W $SCREEN_H
+      # Snap by window class since ptyxis titles may vary
+      WINS=$(wmctrl -l | grep -i ptyxis | awk '{print $1}')
+      WIN1=$(echo "$WINS" | head -1)
+      WIN2=$(echo "$WINS" | tail -1)
+      [ -n "$WIN1" ] && wmctrl -i -r "$WIN1" -e "0,0,0,$HALF_W,$SCREEN_H"
+      [ -n "$WIN2" ] && wmctrl -i -r "$WIN2" -e "0,$HALF_W,0,$HALF_W,$SCREEN_H"
     ) &
 
     echo "Dev Mode launched"
