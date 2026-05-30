@@ -121,3 +121,8 @@ alias claude-mem='bun "/home/hassan-jan/.claude/plugins/marketplaces/thedotmack/
 
 # Homebrew
 [ -x "$HOME/.local/bin/brew" ] && eval "$($HOME/.local/bin/brew shellenv)"
+
+. "$HOME/.atuin/bin/env"
+
+[[ -f ~/.bash-preexec.sh ]] && source ~/.bash-preexec.sh
+eval "$(atuin init bash)"

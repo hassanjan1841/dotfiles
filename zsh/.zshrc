@@ -227,3 +227,5 @@ fi
 # <<< conda initialize <<<
 
 [[ -n "$ZPROF" ]] && zprof
+
+. "$HOME/.atuin/bin/env"

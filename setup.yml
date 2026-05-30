@@ -524,11 +524,7 @@
     - name: Stow systemd user units (Ubuntu)
       when: ansible_os_family == "Debian"
       become: false
-      shell: >
-        stow -v --no-folding --restow
-        --target={{ user_home }}/.config
-        --dir={{ dotfiles_dir }}
-        systemd
+      shell: "cd {{ dotfiles_dir }} && stow -v --no-folding --restow systemd"
       ignore_errors: true
 
     - name: Enable and start daily systemd timer (Ubuntu)
