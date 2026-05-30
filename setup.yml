@@ -30,7 +30,7 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, tmux, stow, zenity, restic, gh, copyq, vlc, fzf, bat, eza, taskwarrior, timewarrior, ncdu, btop]
+        name: [git, curl, zsh, tmux, stow, zenity, restic, gh, copyq, vlc, fzf, bat, eza, taskwarrior, timewarrior, ncdu, btop]
         state: present
         update_cache: true
 
@@ -279,9 +279,21 @@
         version: main
       ignore_errors: true
 
+    - name: Set zsh as default shell (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      user:
+        name: "{{ ansible_env.USER }}"
+        shell: /usr/bin/zsh
+
     - name: Stow home dotfile packages
       become: false
       shell: "cd {{ dotfiles_dir }} && stow -v bash git zsh dev tmux p10k aliases taskwarrior"
+      ignore_errors: true
+
+    - name: Stow claude config (no-folding to preserve nested structure)
+      become: false
+      shell: "cd {{ dotfiles_dir }} && stow -v --no-folding claude"
       ignore_errors: true
 
     - name: Ensure Zed config dir exists
@@ -334,12 +346,17 @@
       ignore_errors: true
 
     # ── startup.sh + GNOME autostart (Ubuntu only) ────────────────────────────
-    - name: Copy startup.sh (Ubuntu)
+    - name: Stow startup script (Ubuntu)
       when: ansible_os_family == "Debian"
       become: false
-      copy:
-        src: "{{ dotfiles_dir }}/startup.sh"
-        dest: "{{ user_home }}/startup.sh"
+      shell: "cd {{ dotfiles_dir }} && stow -v startup"
+      ignore_errors: true
+
+    - name: Ensure startup.sh is executable (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: false
+      file:
+        path: "{{ user_home }}/startup.sh"
         mode: "0755"
 
     - name: Ensure autostart dir exists (Ubuntu)
@@ -349,20 +366,11 @@
         path: "{{ user_home }}/.config/autostart"
         state: directory
 
-    - name: Install GNOME autostart entry (Ubuntu)
+    - name: Stow GNOME autostart entry (Ubuntu)
       when: ansible_os_family == "Debian"
       become: false
-      copy:
-        dest: "{{ user_home }}/.config/autostart/startup.desktop"
-        mode: "0644"
-        content: |
-          [Desktop Entry]
-          Type=Application
-          Name=Dev Workflow Launcher
-          Exec={{ user_home }}/startup.sh
-          Hidden=false
-          NoDisplay=false
-          X-GNOME-Autostart-enabled=true
+      shell: "stow -v --restow --target={{ user_home }}/.config/autostart --dir={{ dotfiles_dir }} autostart"
+      ignore_errors: true
 
     - name: Copy startup-mac.sh (macOS)
       when: ansible_os_family == "Darwin"
@@ -371,3 +379,17 @@
         src: "{{ dotfiles_dir }}/startup-mac.sh"
         dest: "{{ user_home }}/startup-mac.sh"
         mode: "0755"
+
+    # ── JetBrainsMono Nerd Font (required by WezTerm config) ─────────────────
+    - name: Install JetBrainsMono Nerd Font (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: false
+      shell: |
+        FONT_DIR="{{ user_home }}/.local/share/fonts/JetBrainsMono"
+        mkdir -p "$FONT_DIR"
+        LATEST=$(curl -s https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+        curl -fsSL "https://github.com/ryanoasis/nerd-fonts/releases/download/${LATEST}/JetBrainsMono.tar.xz" \
+          | tar -xJ -C "$FONT_DIR"
+        fc-cache -f "$FONT_DIR"
+      args:
+        creates: "{{ user_home }}/.local/share/fonts/JetBrainsMono"
