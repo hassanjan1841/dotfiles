@@ -24,6 +24,8 @@ alias gd='git diff'
 alias dots='cd ~/dotfiles'
 alias sync='just --justfile ~/dotfiles/Justfile sync'
 alias link='just --justfile ~/dotfiles/Justfile link'
+alias tasks='just --justfile ~/dotfiles/Justfile tasks'
+alias zsh-profile='just --justfile ~/dotfiles/Justfile zsh-profile'
 
 # ── Dev ────────────────────────────────────────────────────────────────────────
 alias dev='npm run dev-server'
