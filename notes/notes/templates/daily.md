@@ -1,4 +1,4 @@
-# Daily Note — {{date}}
+# Daily Note — <% tp.date.now("YYYY-MM-DD") %>
 
 ## Focus today
 -
@@ -13,4 +13,3 @@
 -
 
 ## Journal
-

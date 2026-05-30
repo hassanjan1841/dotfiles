@@ -1,6 +1,6 @@
-# {{title}}
+# <% tp.file.title %>
 
-**Created:** {{date}}
+**Created:** <% tp.date.now("YYYY-MM-DD") %>
 **Tags:** #
 
 ---

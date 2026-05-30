@@ -1,0 +1,10 @@
+{
+  "promptDelete": false,
+  "legacyEditor": false,
+  "livePreview": true,
+  "defaultViewMode": "source",
+  "vimMode": false,
+  "newFileLocation": "folder",
+  "newFileFolderPath": "inbox",
+  "attachmentFolderPath": "assets"
+}

@@ -1,0 +1,5 @@
+{
+  "templater-obsidian:insert-templater": [{"modifiers": ["Alt"], "key": "T"}],
+  "obsidian-periodic-notes:open-daily-note": [{"modifiers": ["Alt"], "key": "D"}],
+  "obsidian-git:open-source-control-view": [{"modifiers": ["Alt"], "key": "G"}]
+}

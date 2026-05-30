@@ -1,0 +1,14 @@
+{
+  "templates_folder": "templates",
+  "auto_jump_to_cursor": true,
+  "trigger_on_file_creation": true,
+  "enable_system_commands": false,
+  "ribbon_icon": true,
+  "folder_templates": [
+    {"folder": "daily",    "template": "templates/daily.md"},
+    {"folder": "notes",    "template": "templates/note.md"},
+    {"folder": "projects", "template": "templates/note.md"}
+  ],
+  "enabled_templates_hotkeys": [],
+  "startup_templates": []
+}

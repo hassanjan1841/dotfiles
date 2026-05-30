@@ -1,0 +1,7 @@
+# Only track templates and obsidian config — not actual note content
+*
+!.gitignore
+!.obsidian/
+!.obsidian/**
+!templates/
+!templates/**
