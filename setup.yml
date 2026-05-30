@@ -371,12 +371,11 @@
       ignore_errors: true
 
     - name: Ensure startup.sh is executable (Ubuntu)
-      when: ansible_os_family == "Debian"
+      when: ansible_os_family == "Debian" and not ansible_check_mode
       become: false
       file:
         path: "{{ user_home }}/startup.sh"
         mode: "0755"
-      ignore_errors: true
 
     - name: Ensure autostart dir exists (Ubuntu)
       when: ansible_os_family == "Debian"
