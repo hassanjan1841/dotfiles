@@ -30,7 +30,7 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, tmux, stow, zenity, restic, gh, copyq, vlc, fzf, bat, eza]
+        name: [git, curl, tmux, stow, zenity, restic, gh, copyq, vlc, fzf, bat, eza, taskwarrior, timewarrior, ncdu]
         state: present
         update_cache: true
 
@@ -59,6 +59,17 @@
         name: cloudflare-warp
         state: present
         update_cache: true
+
+    # ── duf (Ubuntu) ─────────────────────────────────────────────────────────
+    - name: Install duf (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      shell: |
+        LATEST=$(curl -s https://api.github.com/repos/muesli/duf/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | sed 's/v//')
+        curl -fsSL "https://github.com/muesli/duf/releases/download/v${LATEST}/duf_${LATEST}_linux_amd64.deb" -o /tmp/duf.deb
+        dpkg -i /tmp/duf.deb && rm /tmp/duf.deb
+      args:
+        creates: /usr/bin/duf
 
     # ── zoxide (Ubuntu) ───────────────────────────────────────────────────────
     - name: Install zoxide (Ubuntu)
@@ -190,6 +201,7 @@
         - "@biomejs/biome"
         - lighthouse
         - opencode
+        - "@bitwarden/cli"
       command: "npm install -g {{ item }}"
       ignore_errors: true
 
@@ -269,7 +281,7 @@
 
     - name: Stow home dotfile packages
       become: false
-      shell: "cd {{ dotfiles_dir }} && stow -v bash git zsh dev tmux p10k"
+      shell: "cd {{ dotfiles_dir }} && stow -v bash git zsh dev tmux p10k aliases taskwarrior"
       ignore_errors: true
 
     - name: Ensure Zed config dir exists

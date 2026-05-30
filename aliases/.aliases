@@ -33,6 +33,13 @@ alias ws='tmuxinator start workspace'
 alias ports='ss -tulnp'
 alias ip='curl -s ifconfig.me'
 alias reload='source ~/.zshrc'
+alias df=duf
+alias du='ncdu --color dark'
+
+# ── Bitwarden CLI ─────────────────────────────────────────────────────────
+# Unlock vault first: bw_unlock  → then: bw_get "Gmail"
+bw_unlock() { export BW_SESSION="$(bw unlock --raw)"; }
+bw_get()    { bw get password "$@" --session "${BW_SESSION:-}"; }
 
 # ── Claude ────────────────────────────────────────────────────────────────────
 alias claude-mem='bun "/home/hassan-jan/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'

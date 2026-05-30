@@ -2,3 +2,9 @@
 *.secrets
 .env
 .env.*
+
+# Taskwarrior / Timewarrior data (backed up by restic, not git)
+taskwarrior/.task/*.data
+taskwarrior/.task/*.log
+taskwarrior/.timewarrior/data/*
+!taskwarrior/.timewarrior/data/.gitkeep

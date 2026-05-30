@@ -38,7 +38,7 @@ sync:
 
 # Re-apply all stow symlinks
 link:
-    cd {{dotfiles}} && stow -v --restow bash git zsh dev tmux p10k aliases
+    cd {{dotfiles}} && stow -v --restow bash git zsh dev tmux p10k aliases taskwarrior
     cd {{dotfiles}} && stow -v --no-folding --restow claude
     stow -v --restow --target="{{env_var('HOME')}}/.config/zed"        --dir={{dotfiles}} zed
     stow -v --restow --target="{{env_var('HOME')}}/.config/autostart"  --dir={{dotfiles}} autostart
@@ -81,3 +81,15 @@ backup:
     fi
     restic -r {{backups}} backup {{dotfiles}} {{project}} --verbose
     restic -r {{backups}} forget --keep-last 10 --prune
+
+# Show task list (taskwarrior)
+tasks:
+    task list
+
+# Profile zsh startup time and show zprof breakdown
+zsh-profile:
+    #!/usr/bin/env bash
+    printf "── Startup time (3 runs) ──────────────────────────\n"
+    for i in 1 2 3; do { time zsh -i -c exit; } 2>&1 | grep real; done
+    printf "\n── zprof breakdown ────────────────────────────────\n"
+    ZPROF=1 zsh -i -c exit

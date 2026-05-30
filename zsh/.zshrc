@@ -1,3 +1,6 @@
+# zsh profiling — enable with: ZPROF=1 zsh -i -c exit  (or: just zsh-profile)
+[[ -n "$ZPROF" ]] && zmodload zsh/zprof
+
 # Suppress p10k console-output warning (conda/brew run after instant prompt)
 typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
 
@@ -205,3 +208,5 @@ else
 fi
 unset __conda_setup
 # <<< conda initialize <<<
+
+[[ -n "$ZPROF" ]] && zprof
