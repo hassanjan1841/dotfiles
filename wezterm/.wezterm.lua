@@ -23,6 +23,9 @@ config.status_update_interval = 2000
 config.scrollback_lines = 10000
 config.enable_wayland   = true
 
+-- ── Dim inactive panes ────────────────────────────────────────────────────────
+config.inactive_pane_hsb = { saturation = 0.7, brightness = 0.6 }
+
 -- ── Bell → desktop toast ──────────────────────────────────────────────────────
 config.audible_bell = 'Disabled'
 
