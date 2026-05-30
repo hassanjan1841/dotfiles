@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"$TOOL_NAME\" = \"AskUserQuestion\" ]; then notify-send 'Claude Code' '⚠️ Input needed!' --icon=dialog-question --urgency=critical && paplay /usr/share/sounds/freedesktop/stereo/dialog-question.oga; fi"
+            "command": "if [ \"$TOOL_NAME\" = \"AskUserQuestion\" ]; then notify-send 'Claude Code' '⚠️ Input needed!' --icon=dialog-question --urgency=critical && paplay /usr/share/sounds/freedesktop/stereo/complete.oga; fi"
           }
         ]
       },
@@ -114,5 +114,6 @@
   },
   "skipDangerousModePermissionPrompt": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true
+  "voiceEnabled": true,
+  "model": "opus"
 }

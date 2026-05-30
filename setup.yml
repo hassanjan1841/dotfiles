@@ -22,7 +22,7 @@
       when: ansible_os_family == "Darwin"
       become: false
       community.general.homebrew:
-        name: [git, curl, tmux, stow, restic, node, gh, just, fzf, bat, eza, zoxide, duf]
+        name: [git, curl, stow, restic, node, gh, just, fzf, bat, eza, zoxide, duf]
         state: present
 
     # ── Ubuntu/Debian: apt packages ───────────────────────────────────────────
@@ -30,7 +30,7 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, zsh, tmux, stow, zenity, restic, gh, copyq, vlc, fzf, bat, eza, taskwarrior, timewarrior, ncdu, btop]
+        name: [git, curl, zsh, stow, zenity, restic, gh, copyq, vlc, fzf, bat, eza, taskwarrior, timewarrior, ncdu, btop]
         state: present
         update_cache: true
 
@@ -231,13 +231,6 @@
       args:
         creates: "{{ user_home }}/.local/bin/aider"
 
-    # ── chezmoi ───────────────────────────────────────────────────────────────
-    - name: Install chezmoi
-      become: false
-      shell: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "{{ user_home }}/.local/bin"
-      args:
-        creates: "{{ user_home }}/.local/bin/chezmoi"
-
     # ── Oh My Zsh ─────────────────────────────────────────────────────────────
     - name: Install Oh My Zsh
       become: false
@@ -267,14 +260,6 @@
         depth: 1
       ignore_errors: true
 
-    # ── TPM (Tmux Plugin Manager) ─────────────────────────────────────────────
-    - name: Install TPM
-      become: false
-      git:
-        repo: https://github.com/tmux-plugins/tpm
-        dest: "{{ user_home }}/.tmux/plugins/tpm"
-      ignore_errors: true
-
     # ── Dotfiles via stow ─────────────────────────────────────────────────────
     - name: Clone dotfiles repo
       become: false
@@ -293,7 +278,7 @@
 
     - name: Stow home dotfile packages
       become: false
-      shell: "cd {{ dotfiles_dir }} && stow -v --restow bash git zsh dev tmux p10k aliases"
+      shell: "cd {{ dotfiles_dir }} && stow -v --restow bash git zsh dev p10k aliases"
       ignore_errors: true
 
     - name: Stow taskwarrior config (no-folding to keep task data out of git)

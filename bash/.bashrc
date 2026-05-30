@@ -115,9 +115,9 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
-export PATH="$HOME/google-cloud-sdk/bin:$PATH"
+[ -d "$HOME/google-cloud-sdk/bin" ] && export PATH="$HOME/google-cloud-sdk/bin:$PATH"
 
 alias claude-mem='bun "/home/hassan-jan/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'
 
 # Homebrew
-eval "$($HOME/.local/bin/brew shellenv)"
+[ -x "$HOME/.local/bin/brew" ] && eval "$($HOME/.local/bin/brew shellenv)"

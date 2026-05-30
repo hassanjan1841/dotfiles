@@ -12,7 +12,6 @@ Personal dotfiles for Ubuntu and macOS, managed with [GNU Stow](https://www.gnu.
 | `zsh` | `.zshrc` (Oh My Zsh + Powerlevel10k) |
 | `git` | `.gitconfig` |
 | `dev` | `.devrc` (project path config) |
-| `tmux` | `.tmux.conf` (Tokyo Night theme, vi bindings, TPM) |
 | `p10k` | `.p10k.zsh` (Powerlevel10k prompt config) |
 | `aliases` | `~/.aliases` (git, nav, dev, dotfiles shortcuts) |
 | `taskwarrior` | `~/.task/` + `~/.timewarrior/` config |
@@ -55,11 +54,7 @@ nano ~/.secrets
 #      export RESTIC_PASSWORD="your-backup-password"
 ```
 
-### Step 3 — Install Tmux plugins
-
-Open tmux and press `Ctrl+A` then `I` to install all TPM plugins.
-
-### Step 4 — Install Zed themes
+### Step 3 — Install Zed themes
 
 Open Zed → `Ctrl+Shift+P` → `zed: install extension` → search for your theme.
 Any custom theme JSON files saved to `~/.config/zed/themes/` are auto-synced via dotfiles.
@@ -100,12 +95,12 @@ GitHub Actions runs the Ansible playbook in `--check` (dry run) mode on every pu
 ## Installed tools (via Ansible)
 
 - **Shell:** zsh, Oh My Zsh, Powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting
-- **Terminal:** WezTerm, tmux + TPM, just
+- **Terminal:** WezTerm, just
 - **Node:** NVM, Node LTS, npm global tools (claude, vercel, typescript, pnpm, biome, opencode)
 - **JS runtime:** Bun
 - **Python:** uv, aider-chat
 - **Editor:** Zed
-- **CLI:** gh, chezmoi, stow, restic, fzf, zoxide, bat, eza, tldr
+- **CLI:** gh, stow, restic, fzf, zoxide, bat, eza, tldr
 - **Clipboard:** CopyQ
 - **Media:** VLC
 - **Browser:** Google Chrome

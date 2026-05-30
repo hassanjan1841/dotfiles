@@ -68,11 +68,7 @@ else
 fi
 
 echo ""
-echo "  2. Install tmux plugins:"
-echo "     Open tmux -> press Ctrl+A then I"
-echo "     (wait for plugins to finish installing)"
-echo ""
-echo "  3. Reboot:"
+echo "  2. Reboot:"
 echo "     sudo reboot"
 echo "     (startup dialog will appear after login)"
 echo ""
