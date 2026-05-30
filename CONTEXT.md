@@ -18,6 +18,9 @@
 - `Ctrl+Alt+-` → vertical split (top/bottom)
 - `F2` rename tab, `Shift+F2` rename workspace
 - `Ctrl+Shift+N/P` cycle workspaces, `Ctrl+Shift+$` workspace picker
+- `Ctrl+Shift+S` save session, `Ctrl+Shift+O` restore session (fuzzy picker)
+- On startup: `dev` workspace auto-opens + all other saved workspaces are auto-restored
+- **Workspace names must not contain spaces** — resurrect's awk parser breaks on spaces; use hyphens (e.g. `my-project` not `my project`)
 
 ## Rules — always do this after any change
 1. If changing `startup.sh`: edit `~/startup.sh`, copy to `~/dotfiles/startup.sh`

@@ -259,12 +259,12 @@ config.keys = {
         id = string.match(id, '(.+)%..+$') or id
         if type == 'workspace' then
           local state = resurrect.state_manager.load_state(id, 'workspace')
-          -- use the name stored inside the state (not the filename)
           local workspace_name = (state and state.workspace) or id
           resurrect.workspace_state.restore_workspace(state, {
-            relative        = true,
-            restore_text    = false,
-            on_pane_restore = resurrect.tabs.default_on_pane_restore,
+            relative           = true,
+            restore_text       = false,
+            spawn_in_workspace = true,
+            on_pane_restore    = resurrect.tabs.default_on_pane_restore,
           })
           win:perform_action(act.SwitchToWorkspace { name = workspace_name }, pane)
         elseif type == 'window' then
@@ -334,6 +334,26 @@ wezterm.on('gui-startup', function(cmd)
 
   left_pane:activate()
   window:gui_window():maximize()
+
+  -- Auto-restore saved workspaces (skips 'dev' since it's created above)
+  local workspace_dir = resurrect.state_manager.save_state_dir .. 'workspace/'
+  local ok, entries = pcall(wezterm.read_dir, workspace_dir)
+  if ok then
+    for _, entry in ipairs(entries) do
+      local name = entry:match('([^/]+)%.json$')
+      if name and name ~= 'dev' then
+        local state = resurrect.state_manager.load_state(name, 'workspace')
+        if state and state.workspace then
+          resurrect.workspace_state.restore_workspace(state, {
+            relative           = true,
+            restore_text       = false,
+            spawn_in_workspace = true,
+            on_pane_restore    = resurrect.tabs.default_on_pane_restore,
+          })
+        end
+      end
+    end
+  end
 end)
 
 return config
