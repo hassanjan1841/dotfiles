@@ -35,6 +35,7 @@ alias ip='curl -s ifconfig.me'
 alias reload='source ~/.zshrc'
 alias df=duf
 alias du='ncdu --color dark'
+alias top=btop
 
 # ── Bitwarden CLI ─────────────────────────────────────────────────────────
 # Unlock vault first: bw_unlock  → then: bw_get "Gmail"
