@@ -5,10 +5,24 @@ local config  = wezterm.config_builder()
 -- ── Session persistence (resurrect.wezterm) ───────────────────────────────────
 local resurrect = wezterm.plugin.require('https://github.com/MLFlexer/resurrect.wezterm')
 
+local state_dir = resurrect.state_manager.get_state_dir() .. '/workspace/'
+
 local function do_save()
   local state = resurrect.workspace_state.get_workspace_state()
   resurrect.state_manager.save_state(state)
   wezterm.GLOBAL.last_save = wezterm.strftime '%H:%M:%S'
+
+  -- remove stale saves that no longer match any live workspace name
+  local live = {}
+  for _, name in ipairs(wezterm.mux.get_workspace_names()) do
+    live[name .. '.json'] = true
+  end
+  for _, entry in ipairs(wezterm.read_dir(state_dir)) do
+    local file = entry:match('([^/]+)$')
+    if file and file:match('%.json$') and not live[file] then
+      os.remove(state_dir .. file)
+    end
+  end
 end
 
 resurrect.state_manager.periodic_save({ interval_seconds = 60 })
