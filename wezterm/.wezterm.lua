@@ -220,12 +220,12 @@ config.keys = {
       end),
   }},
 
-  -- Rename workspace (Shift+F2)
+  -- Rename workspace (Shift+F2) — spaces auto-converted to hyphens
   { key = 'F2', mods = 'SHIFT', action = act.PromptInputLine {
-      description = 'Rename workspace:',
+      description = 'Rename workspace (spaces → hyphens):',
       action = wezterm.action_callback(function(window, pane, line)
         if line and line ~= '' then
-          wezterm.mux.rename_workspace(window:active_workspace(), line)
+          wezterm.mux.rename_workspace(window:active_workspace(), line:gsub('%s+', '-'))
         end
       end),
   }},
