@@ -30,7 +30,7 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, tmux, stow, zenity, restic, gh, ruby, ruby-dev, copyq, vlc, fzf, bat, eza, wmctrl]
+        name: [git, curl, tmux, stow, zenity, restic, gh, copyq, vlc, fzf, bat, eza]
         state: present
         update_cache: true
 
@@ -221,14 +221,6 @@
       args:
         creates: "{{ user_home }}/.local/bin/chezmoi"
 
-    # ── tmuxinator ────────────────────────────────────────────────────────────
-    - name: Install tmuxinator gem
-      become: false
-      command: gem install tmuxinator
-      args:
-        creates: "{{ user_home }}/.local/share/gem/ruby/3.x/bin/tmuxinator"
-      ignore_errors: true
-
     # ── Oh My Zsh ─────────────────────────────────────────────────────────────
     - name: Install Oh My Zsh
       become: false
@@ -278,17 +270,6 @@
     - name: Stow home dotfile packages
       become: false
       shell: "cd {{ dotfiles_dir }} && stow -v bash git zsh dev tmux p10k"
-      ignore_errors: true
-
-    - name: Ensure tmuxinator config dir exists
-      become: false
-      file:
-        path: "{{ user_home }}/.config/tmuxinator"
-        state: directory
-
-    - name: Stow tmuxinator config
-      become: false
-      shell: "stow -v --target={{ user_home }}/.config/tmuxinator --dir={{ dotfiles_dir }} tmuxinator"
       ignore_errors: true
 
     - name: Ensure Zed config dir exists

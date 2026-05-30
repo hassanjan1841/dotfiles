@@ -1,9 +1,0 @@
-name: dev
-root: <%= ENV['PROJECT_PATH'] || ENV['HOME'] + '/speaklogic-testing' %>
-
-windows:
-  - main:
-      layout: even-horizontal
-      panes:
-        - npm run dev-server
-        - claude
