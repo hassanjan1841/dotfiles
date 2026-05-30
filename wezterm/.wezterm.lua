@@ -6,7 +6,8 @@ local config  = wezterm.config_builder()
 local resurrect = wezterm.plugin.require('https://github.com/MLFlexer/resurrect.wezterm')
 
 local function do_save()
-  resurrect.state_manager.save_state(resurrect.workspace_state.get_workspace_state())
+  local state = resurrect.workspace_state.get_workspace_state()
+  resurrect.state_manager.save_state(state)
   wezterm.GLOBAL.last_save = wezterm.strftime '%H:%M:%S'
 end
 
@@ -243,19 +244,19 @@ config.keys = {
         id = string.match(id, '(.+)%..+$') or id
         if type == 'workspace' then
           local state = resurrect.state_manager.load_state(id, 'workspace')
+          -- use the name stored inside the state (not the filename)
+          local workspace_name = (state and state.workspace) or id
           resurrect.workspace_state.restore_workspace(state, {
-            relative       = true,
-            restore_text   = true,
+            relative        = true,
+            restore_text    = false,
             on_pane_restore = resurrect.tabs.default_on_pane_restore,
           })
-          -- auto-switch to the restored workspace so it's immediately visible
-          win:perform_action(act.SwitchToWorkspace { name = id }, pane)
+          win:perform_action(act.SwitchToWorkspace { name = workspace_name }, pane)
         elseif type == 'window' then
           local state = resurrect.state_manager.load_state(id, 'window')
           resurrect.window_state.restore_window(pane:window(), state, {
-            relative       = true,
-            restore_text   = true,
-            on_pane_restore = resurrect.tabs.default_on_pane_restore,
+            relative     = true,
+            restore_text = false,
           })
         end
       end)
