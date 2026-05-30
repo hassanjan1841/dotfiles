@@ -307,6 +307,15 @@
         name: "{{ ansible_user_id }}"
         shell: /usr/bin/zsh
 
+    - name: Back up default shell configs that conflict with stow
+      become: false
+      shell: |
+        for f in ~/.bashrc ~/.zshrc; do
+          if [ -f "$f" ] && [ ! -L "$f" ]; then
+            mv "$f" "${f}.bak"
+          fi
+        done
+
     - name: Stow home dotfile packages
       become: false
       shell: "cd {{ dotfiles_dir }} && stow -v --restow bash git zsh dev p10k aliases"
@@ -340,6 +349,9 @@
       shell: curl -fsSL https://zed.dev/install.sh | sh
       args:
         creates: "{{ user_home }}/.local/bin/zed"
+      environment:
+        SHELL: /bin/bash
+      ignore_errors: true
 
     # ── WezTerm (Ubuntu) ─────────────────────────────────────────────────────
     - name: Add WezTerm GPG key (Ubuntu)
