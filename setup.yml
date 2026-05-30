@@ -30,7 +30,35 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, zsh, stow, zenity, restic, gh, copyq, vlc, fzf, bat, eza, taskwarrior, timewarrior, ncdu, btop]
+        name: [git, curl, zsh, stow, zenity, restic, gh, copyq, vlc, fzf, bat, taskwarrior, timewarrior, ncdu, btop]
+        state: present
+        update_cache: true
+
+    # ── eza (Ubuntu) ──────────────────────────────────────────────────────────
+    - name: Add eza GPG key (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      shell: |
+        mkdir -p /etc/apt/keyrings
+        wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc | \
+        gpg --yes --dearmor -o /etc/apt/keyrings/gierens.gpg
+        chmod 644 /etc/apt/keyrings/gierens.gpg
+      args:
+        creates: /etc/apt/keyrings/gierens.gpg
+
+    - name: Add eza apt repo (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      copy:
+        dest: /etc/apt/sources.list.d/gierens.list
+        content: |
+          deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main
+
+    - name: Install eza (Ubuntu)
+      when: ansible_os_family == "Debian"
+      become: true
+      apt:
+        name: eza
         state: present
         update_cache: true
 
