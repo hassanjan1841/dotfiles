@@ -7,7 +7,7 @@ LOG="$HOME/.local/share/daily.log"
 DOTFILES="$HOME/dotfiles"
 BACKUPS="$HOME/backups"
 NOTES="$HOME/notes"
-PROJECT="$HOME/speaklogic-testing"
+PROJECT="$HOME/projects/speaklogic-testing"
 
 mkdir -p "$(dirname "$LOG")"
 

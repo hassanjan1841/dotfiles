@@ -3,7 +3,7 @@
 # Install just: https://github.com/casey/just
 
 dotfiles := env_var("HOME") + "/dotfiles"
-project  := env_var("HOME") + "/speaklogic-testing"
+project  := env_var("HOME") + "/projects/speaklogic-testing"
 notes    := env_var("HOME") + "/notes"
 backups  := env_var("HOME") + "/backups"
 
