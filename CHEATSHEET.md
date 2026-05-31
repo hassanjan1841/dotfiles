@@ -17,13 +17,13 @@ hass help         # show this cheatsheet
 
 ## Dotfiles
 ```bash
-sync              # commit + push dotfiles  (alias, works from anywhere)
-backup            # restic backup
-status            # git status + last backup
-dashboard         # show dashboard
-update            # pull + re-run ansible
-link              # re-apply all stow symlinks
-just install      # run full ansible playbook  (no alias — run from ~/dotfiles)
+just sync         # commit + push dotfiles
+just backup       # restic backup
+just status       # git status + last backup
+just dashboard    # show dashboard
+just update       # pull + re-run ansible
+just link         # re-apply all stow symlinks
+just install      # run full ansible playbook
 ```
 
 ## Navigation

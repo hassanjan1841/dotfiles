@@ -38,15 +38,18 @@ gco() {
 
 # ── Dotfiles ───────────────────────────────────────────────────────────────────
 alias dots='cd ~/dotfiles'
-alias sync='just --justfile ~/dotfiles/Justfile sync'
-alias backup='just --justfile ~/dotfiles/Justfile backup'
-alias update='just --justfile ~/dotfiles/Justfile update'
-alias status='just --justfile ~/dotfiles/Justfile status'
-alias dashboard='just --justfile ~/dotfiles/Justfile dashboard'
-alias link='just --justfile ~/dotfiles/Justfile link'
-alias tasks='just --justfile ~/dotfiles/Justfile tasks'
-alias zsh-profile='just --justfile ~/dotfiles/Justfile zsh-profile'
-alias keys='just --justfile ~/dotfiles/Justfile keys'
+just() {
+  if [ -f ./Justfile ] || [ -f ./justfile ]; then
+    command just "$@"
+  else
+    command just --justfile ~/dotfiles/Justfile "$@"
+  fi
+}
+alias sync='just sync'
+alias link='just link'
+alias tasks='just tasks'
+alias zsh-profile='just zsh-profile'
+alias keys='just keys'
 
 # ── Dev ────────────────────────────────────────────────────────────────────────
 alias dev='npm run dev-server'
