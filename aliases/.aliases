@@ -97,8 +97,3 @@ proj() {
     wezterm cli spawn --workspace "$(basename "$dir")" -- zsh 2>/dev/null || true
   fi
 }
-
-# Fuzzy command history search — prints selected command to readline buffer
-fh() {
-  print -z "$(fc -ln 0 | awk '!seen[$0]++' | fzf --tac --no-sort --height=40% --prompt='history> ')"
-}

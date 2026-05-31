@@ -255,13 +255,6 @@
       args:
         creates: "{{ user_home }}/.local/bin/uv"
 
-    # ── aider via uv ─────────────────────────────────────────────────────────
-    - name: Install aider-chat via uv
-      become: false
-      command: "{{ user_home }}/.local/bin/uv tool install aider-chat"
-      args:
-        creates: "{{ user_home }}/.local/bin/aider"
-
     # ── Oh My Zsh ─────────────────────────────────────────────────────────────
     - name: Install Oh My Zsh
       become: false

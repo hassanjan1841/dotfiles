@@ -30,8 +30,21 @@ just install      # run full ansible playbook
 ```bash
 proj              # fuzzy project switcher (~/projects)
 gco               # fuzzy git branch switch
-fh                # fuzzy command history search
+↑ / Ctrl+R        # atuin fuzzy history search
+z <name>          # zoxide: jump to any recent dir
 dots              # cd ~/dotfiles
+```
+
+## Tasks
+```bash
+task add "thing" project:myapp due:today +tag priority:H
+task project:myapp        # view tasks for a project
+task due:today            # today's tasks
+task 1 start              # start task (auto-starts time tracking)
+task 1 done               # complete task
+task summary              # breakdown by project
+timew summary             # time tracked today
+timew summary :week       # time tracked this week
 ```
 
 ## Obsidian (inside Obsidian window)
