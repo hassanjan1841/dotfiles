@@ -81,7 +81,7 @@ notify() {
 # ── Project switcher (fzf) ──────────────────────────────────────────────────
 proj() {
   local dir
-  dir=$(find ~/projects -maxdepth 1 -mindepth 1 -type d 2>/dev/null | \
+  dir=$(/usr/bin/find ~/projects -maxdepth 1 -mindepth 1 -type d 2>/dev/null | \
         fzf --prompt="project> " --height=40% --preview='ls {}')
   [ -z "$dir" ] && return
   cd "$dir"
