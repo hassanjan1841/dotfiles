@@ -436,7 +436,7 @@
     # ── atuin (shell history sync) ────────────────────────────────────────────
     - name: Install atuin
       become: false
-      shell: curl -fsSL https://setup.atuin.sh | bash
+      shell: curl -fsSL https://setup.atuin.sh | bash -s -- --no-login
       args:
         creates: "{{ user_home }}/.atuin/bin/atuin"
 
