@@ -10,7 +10,9 @@ hass find "term"  # search notes + projects
 hass new myapp    # create new project in ~/projects
 hass setup        # full ansible install (fresh machine)
 hass update       # pull + apply dotfiles updates
+hass switch       # fuzzy project switcher (opens new shell in project dir)
 hass tasks        # open taskwarrior
+hass help         # show this cheatsheet
 ```
 
 ## Dotfiles

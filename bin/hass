@@ -66,9 +66,9 @@ WEZLUA
     echo "Added to $INBOX"
     ;;
   find)
-    TERM="${2:-}"
-    if [ -z "$TERM" ]; then echo "Usage: hass find <search-term>"; exit 1; fi
-    rg "$TERM" "$NOTES_DIR" "$PROJECTS_DIR" 2>/dev/null
+    QUERY="${2:-}"
+    if [ -z "$QUERY" ]; then echo "Usage: hass find <search-term>"; exit 1; fi
+    rg "$QUERY" "$NOTES_DIR" "$PROJECTS_DIR" 2>/dev/null
     ;;
   help|cheat|sheet)
     _bat=$(command -v batcat || command -v bat)
