@@ -2,4 +2,4 @@
 PROJECT_PATH="$HOME/projects/speaklogic-testing"
 
 # Notes folder
-export NOTES_DIR="$HOME/notes"
+export NOTES_DIR="$HOME/notes/hassanjan"
