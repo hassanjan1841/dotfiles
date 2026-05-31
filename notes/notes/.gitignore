@@ -1,7 +1,8 @@
-# Only track templates and obsidian config — not actual note content
+# Only track hassanjan/ vault config and templates — not note content
 *
 !.gitignore
-!.obsidian/
-!.obsidian/**
-!templates/
-!templates/**
+!hassanjan/
+!hassanjan/.obsidian/
+!hassanjan/.obsidian/**
+!hassanjan/templates/
+!hassanjan/templates/**

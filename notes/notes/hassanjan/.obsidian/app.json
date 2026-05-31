@@ -1,0 +1,9 @@
+{
+  "promptDelete": false,
+  "legacyEditor": false,
+  "livePreview": true,
+  "defaultViewMode": "source",
+  "newFileLocation": "folder",
+  "newFileFolderPath": "inbox",
+  "attachmentFolderPath": "assets"
+}
