@@ -134,7 +134,7 @@ wezterm.on('update-status', function(window, pane)
   })
 end)
 
--- ── Tab titles: red on error, shows current directory ────────────────────────
+-- ── Tab titles: active tab highlighted in blue, inactive dimmed ──────────────
 wezterm.on('format-tab-title', function(tab, tabs, panes, cfg, hover, max_width)
   local pane    = tab.active_pane
   local cwd_uri = pane.current_working_dir
@@ -147,14 +147,24 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, cfg, hover, max_width)
     label = pane.title
   end
 
-  -- Turn red when last command exited with an error (set by shell integration)
   local exit_ok = (pane.user_vars.LAST_EXIT or '0') == '0'
-  local color   = exit_ok and '#c0caf5' or '#f7768e'
 
-  return {
-    { Foreground = { Color = color } },
-    { Text = string.format(' %d: %s ', tab.tab_index + 1, label) },
-  }
+  if tab.is_active then
+    local fg = exit_ok and '#c0caf5' or '#f7768e'
+    return {
+      { Background = { Color = '#1e2952' } },
+      { Foreground = { Color = fg } },
+      { Attribute  = { Intensity = 'Bold' } },
+      { Text = string.format(' %d: %s ', tab.tab_index + 1, label) },
+      { Attribute  = { Intensity = 'Normal' } },
+    }
+  else
+    local fg = exit_ok and '#565f89' or '#f7768e'
+    return {
+      { Foreground = { Color = fg } },
+      { Text = string.format(' %d: %s ', tab.tab_index + 1, label) },
+    }
+  end
 end)
 
 -- ── Key tables: resize mode (Ctrl+Shift+R → hjkl to resize → Esc to exit) ────
