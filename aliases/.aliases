@@ -39,6 +39,10 @@ gco() {
 # ── Dotfiles ───────────────────────────────────────────────────────────────────
 alias dots='cd ~/dotfiles'
 alias sync='just --justfile ~/dotfiles/Justfile sync'
+alias backup='just --justfile ~/dotfiles/Justfile backup'
+alias update='just --justfile ~/dotfiles/Justfile update'
+alias status='just --justfile ~/dotfiles/Justfile status'
+alias dashboard='just --justfile ~/dotfiles/Justfile dashboard'
 alias link='just --justfile ~/dotfiles/Justfile link'
 alias tasks='just --justfile ~/dotfiles/Justfile tasks'
 alias zsh-profile='just --justfile ~/dotfiles/Justfile zsh-profile'
