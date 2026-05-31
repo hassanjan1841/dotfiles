@@ -30,7 +30,7 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, gpg, unzip, zsh, stow, zenity, restic, gh, copyq, vlc, fzf, bat, taskwarrior, timewarrior, ncdu, btop, fd-find, ripgrep, flatpak, python3-pip]
+        name: [git, curl, gpg, unzip, zsh, stow, zenity, restic, gh, copyq, vlc, fzf, bat, taskwarrior, timewarrior, ncdu, btop, fd-find, ripgrep, python3-pip]
         state: present
         update_cache: true
 
@@ -445,28 +445,6 @@
       args:
         creates: "{{ user_home }}/.atuin/bin/atuin"
 
-    # ── Mission Center / System monitor ──────────────────────────────────────
-    - name: Add Flathub remote (Ubuntu)
-      when: ansible_os_family == "Debian"
-      become: false
-      shell: flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-      ignore_errors: true
-
-    - name: Install Mission Center via Flatpak (Ubuntu)
-      when: ansible_os_family == "Debian"
-      become: false
-      shell: flatpak install --user -y flathub net.nokyan.Resources
-      args:
-        creates: "{{ user_home }}/.local/share/flatpak/app/net.nokyan.Resources"
-      ignore_errors: true
-
-    - name: Install Stats system monitor via Homebrew cask (macOS)
-      when: ansible_os_family == "Darwin"
-      become: false
-      community.general.homebrew_cask:
-        name: stats
-        state: present
-      ignore_errors: true
 
     # ── pre-commit ────────────────────────────────────────────────────────────
     - name: Install pre-commit via uv
