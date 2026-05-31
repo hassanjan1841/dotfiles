@@ -3,8 +3,10 @@
 	email = hijan29714@gmail.com
 	useConfigOnly = true
 [credential "https://github.com"]
-	helper = 
+	helper =
 	helper = !/usr/bin/gh auth git-credential
 [credential "https://gist.github.com"]
-	helper = 
+	helper =
 	helper = !/usr/bin/gh auth git-credential
+[credential]
+	helper = store
