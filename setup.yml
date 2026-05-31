@@ -436,7 +436,12 @@
     # ── atuin (shell history sync) ────────────────────────────────────────────
     - name: Install atuin
       become: false
-      shell: curl -fsSL https://setup.atuin.sh | bash -s -- --no-login
+      shell: |
+        LATEST=$(curl -s https://api.github.com/repos/atuinsh/atuin/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+        curl -fsSL "https://github.com/atuinsh/atuin/releases/download/${LATEST}/atuin-x86_64-unknown-linux-musl.tar.gz" \
+          | tar -xz --strip-components=1 -C /tmp atuin-x86_64-unknown-linux-musl/atuin
+        mkdir -p {{ user_home }}/.atuin/bin
+        mv /tmp/atuin {{ user_home }}/.atuin/bin/atuin
       args:
         creates: "{{ user_home }}/.atuin/bin/atuin"
 
