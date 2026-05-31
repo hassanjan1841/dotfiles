@@ -30,7 +30,7 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, gpg, unzip, zsh, stow, zenity, restic, gh, copyq, vlc, fzf, bat, taskwarrior, timewarrior, ncdu, btop, fd-find, ripgrep, python3-pip]
+        name: [git, curl, gpg, unzip, zsh, stow, zenity, restic, gh, copyq, vlc, fzf, bat, taskwarrior, timewarrior, ncdu, btop, fd-find, ripgrep, flatpak, python3-pip]
         state: present
         update_cache: true
 
