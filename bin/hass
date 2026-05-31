@@ -70,6 +70,9 @@ WEZLUA
     if [ -z "$TERM" ]; then echo "Usage: hass find <search-term>"; exit 1; fi
     rg "$TERM" "$NOTES_DIR" "$PROJECTS_DIR" 2>/dev/null
     ;;
+  help|cheat|sheet)
+    bat "$DOTFILES/CHEATSHEET.md" 2>/dev/null || cat "$DOTFILES/CHEATSHEET.md"
+    ;;
   *)
     usage
     ;;
