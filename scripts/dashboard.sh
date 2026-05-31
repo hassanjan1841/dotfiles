@@ -81,7 +81,7 @@ echo "── Tools ────────────────────�
 _ver node node --version
 _ver just just --version
 if command -v fdfind &>/dev/null; then
-  echo "  fd: $(fdfind --version 2>/dev/null | head -1)"
+  echo "  fd: $(fdfind --version 2>/dev/null | head -1 | sed 's/fdfind/fd/')"
 elif command -v fd &>/dev/null; then
   echo "  fd: $(fd --version 2>/dev/null | head -1)"
 else
