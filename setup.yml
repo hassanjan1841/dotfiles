@@ -446,6 +446,13 @@
         creates: "{{ user_home }}/.atuin/bin/atuin"
 
 
+    # ── aider via uv ─────────────────────────────────────────────────────────
+    - name: Install aider-chat via uv
+      become: false
+      command: "{{ user_home }}/.local/bin/uv tool install aider-chat"
+      args:
+        creates: "{{ user_home }}/.local/bin/aider"
+
     # ── pre-commit ────────────────────────────────────────────────────────────
     - name: Install pre-commit via uv
       become: false
