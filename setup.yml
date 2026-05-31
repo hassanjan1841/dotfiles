@@ -30,7 +30,7 @@
       when: ansible_os_family == "Debian"
       become: true
       apt:
-        name: [git, curl, gpg, unzip, zsh, stow, zenity, restic, gh, copyq, vlc, fzf, bat, taskwarrior, timewarrior, ncdu, btop, fd-find, ripgrep, flatpak, python3-pip]
+        name: [git, curl, gpg, unzip, zsh, stow, zenity, restic, gh, copyq, vlc, fzf, bat, taskwarrior, timewarrior, ncdu, btop, fd-find, ripgrep, flatpak, python3-pip, tmux, wl-clipboard]
         state: present
         update_cache: true
 
@@ -382,6 +382,25 @@
     - name: Stow WezTerm config
       become: false
       shell: "cd {{ dotfiles_dir }} && stow -v --restow wezterm"
+      ignore_errors: true
+
+    # ── tmux ─────────────────────────────────────────────────────────────────
+    - name: Stow tmux config
+      become: false
+      shell: "cd {{ dotfiles_dir }} && stow -v --restow tmux"
+      ignore_errors: true
+
+    - name: Install TPM (tmux plugin manager)
+      become: false
+      git:
+        repo: https://github.com/tmux-plugins/tpm
+        dest: "{{ user_home }}/.tmux/plugins/tpm"
+        depth: 1
+      ignore_errors: true
+
+    - name: Install tmux plugins via TPM
+      become: false
+      shell: "{{ user_home }}/.tmux/plugins/tpm/bin/install_plugins"
       ignore_errors: true
 
     # ── startup.sh + GNOME autostart (Ubuntu only) ────────────────────────────
