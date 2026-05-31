@@ -166,7 +166,7 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 [ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
 
 # atuin (shell history sync) — init after aliases so it can override Ctrl+R
-command -v atuin &>/dev/null && eval "$(atuin init zsh --disable-up-arrow)"
+command -v atuin &>/dev/null && eval "$(atuin init zsh)"
 
 # Show personal dashboard once per day — deferred to precmd so it runs after
 # p10k instant prompt is fully initialized (avoids console-output warning)
