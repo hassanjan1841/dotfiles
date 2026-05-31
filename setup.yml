@@ -236,7 +236,7 @@
       become: false
       shell: |
         . {{ user_home }}/.nvm/nvm.sh
-        for pkg in "@anthropic-ai/claude-code" vercel typescript pnpm "@biomejs/biome" lighthouse opencode "@bitwarden/cli" tldr; do
+        for pkg in "@anthropic-ai/claude-code" vercel typescript pnpm "@biomejs/biome" lighthouse opencode-ai "@bitwarden/cli" tldr; do
           npm list -g --depth=0 "$pkg" &>/dev/null || npm install -g "$pkg"
         done
       ignore_errors: true
