@@ -1,13 +1,13 @@
 {
-  "templates_folder": "templates",
+  "templates_folder": "hassanjan/templates",
   "auto_jump_to_cursor": true,
   "trigger_on_file_creation": true,
   "enable_system_commands": false,
   "ribbon_icon": true,
   "folder_templates": [
-    {"folder": "daily",    "template": "templates/daily.md"},
-    {"folder": "notes",    "template": "templates/note.md"},
-    {"folder": "projects", "template": "templates/note.md"}
+    {"folder": "hassanjan/daily",    "template": "hassanjan/templates/daily.md"},
+    {"folder": "hassanjan/notes",    "template": "hassanjan/templates/note.md"},
+    {"folder": "hassanjan/projects", "template": "hassanjan/templates/note.md"}
   ],
   "enabled_templates_hotkeys": [],
   "startup_templates": []

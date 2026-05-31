@@ -2,8 +2,8 @@
   "daily": {
     "enabled": true,
     "format": "YYYY-MM-DD",
-    "folder": "daily",
-    "template": "templates/daily.md"
+    "folder": "hassanjan/daily",
+    "template": "hassanjan/templates/daily.md"
   },
   "weekly":    {"enabled": false},
   "monthly":   {"enabled": false},

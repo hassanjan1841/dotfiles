@@ -6,7 +6,7 @@
       "type": "Capture",
       "command": true,
       "captureToActiveFile": false,
-      "captureTo": "inbox/inbox.md",
+      "captureTo": "hassanjan/inbox/inbox.md",
       "format": "- {{DATE:YYYY-MM-DD HH:mm}} {{VALUE}}",
       "prepend": false,
       "task": false
@@ -16,8 +16,8 @@
       "name": "New permanent note",
       "type": "Template",
       "command": true,
-      "templatePath": "templates/note.md",
-      "folder": "notes",
+      "templatePath": "hassanjan/templates/note.md",
+      "folder": "hassanjan/notes",
       "fileNameFormat": {
         "enabled": true,
         "format": "{{VALUE}}"
