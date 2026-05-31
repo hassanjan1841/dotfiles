@@ -2,7 +2,7 @@
 # hass — personal dev assistant CLI
 
 DOTFILES="$HOME/dotfiles"
-NOTES_DIR="${NOTES_DIR:-$HOME/notes}"
+NOTES_DIR="${NOTES_DIR:-$HOME/notes/hassanjan}"
 PROJECTS_DIR="$HOME/projects"
 
 usage() {

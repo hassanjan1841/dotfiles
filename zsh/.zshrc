@@ -159,6 +159,9 @@ export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
 
+# Dev environment variables
+[ -f "$HOME/.devrc" ] && source "$HOME/.devrc"
+
 # Aliases
 [ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
 
