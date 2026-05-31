@@ -46,7 +46,6 @@ source "$HOME/.secrets" 2>/dev/null || true
 if [ -n "${RESTIC_PASSWORD:-}" ]; then
   export RESTIC_PASSWORD
   BACKUP_PATHS=("$DOTFILES")
-  [ -d "$PROJECT" ] && BACKUP_PATHS+=("$PROJECT")
   [ -d "$NOTES" ]   && BACKUP_PATHS+=("$NOTES")
   if restic -r "$BACKUPS" backup "${BACKUP_PATHS[@]}" 2>>"$LOG"; then
     restic -r "$BACKUPS" forget --keep-last 10 --prune 2>>"$LOG"

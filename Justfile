@@ -101,7 +101,6 @@ backup:
         restic -r {{backups}} init
     fi
     BACKUP_PATHS=({{dotfiles}})
-    [ -d "{{project}}" ] && BACKUP_PATHS+=("{{project}}")
     [ -d "{{notes}}" ]   && BACKUP_PATHS+=("{{notes}}")
     if restic -r {{backups}} backup "${BACKUP_PATHS[@]}" --verbose; then
         restic -r {{backups}} forget --keep-last 10 --prune
