@@ -28,7 +28,7 @@
 3. No Co-Author line in commits
 
 ## Project
-- Active project: `~/speaklogic-testing` (set in `~/dotfiles/dev/.devrc` as `PROJECT_PATH`)
+- Active project: `~/projects/speaklogic-testing` (set in `~/dotfiles/dev/.devrc` as `PROJECT_PATH`)
 - Chrome uses Profile 9
 
 ## If something breaks

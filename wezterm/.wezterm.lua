@@ -330,7 +330,7 @@ config.mouse_bindings = {
 }
 
 -- ── Dev layout on startup ─────────────────────────────────────────────────────
-local PROJECT = os.getenv('PROJECT_PATH') or (HOME .. '/speaklogic-testing')
+local PROJECT = os.getenv('PROJECT_PATH') or (HOME .. '/projects/speaklogic-testing')
 
 wezterm.on('gui-startup', function(cmd)
   local args = cmd or {}

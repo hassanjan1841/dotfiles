@@ -8,7 +8,7 @@ exec > >(tee -a "$LOG") 2>&1
 echo "--- $(date '+%Y-%m-%d %H:%M:%S') ---"
 
 [ -f "$HOME/.devrc" ] && source "$HOME/.devrc"
-PROJECT_PATH="${PROJECT_PATH:-$HOME/speaklogic-testing}"
+PROJECT_PATH="${PROJECT_PATH:-$HOME/projects/speaklogic-testing}"
 
 CHOICE=$(zenity --list \
   --title="Choose Workflow" \

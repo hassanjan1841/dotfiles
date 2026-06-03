@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code statusLine command — Horizon theme palette (pastel/airy variant)
 # Static colors for structural elements:
-#   user@host = pastel mint   #8EECD4
-#   dir       = powder blue   #8ADAEC
 #   git branch= pale peach    #FDD4BB
 #   model     = soft pink     #F4A8D0
 # Dynamic gradient (ctx%, 5h%, 7d%): each field independently interpolates
@@ -11,14 +9,6 @@
 #   100% → coral-red   rgb(240,90,90)
 
 input=$(cat)
-
-# --- Shell-side info ---
-user=$(whoami)
-host=$(hostname -s)
-dir=$(echo "$input" | jq -r '.cwd // empty')
-[ -z "$dir" ] && dir=$(pwd)
-# Abbreviate home directory as ~
-dir="${dir/#$HOME/\~}"
 
 # Git branch (skip optional locks to avoid contention)
 branch=$(git -C "$(echo "$input" | jq -r '.cwd // empty')" --no-optional-locks \
@@ -33,8 +23,6 @@ five_hour_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage //
 seven_day_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
 
 # --- ANSI color helpers (truecolor) — static pastel Horizon palette ---
-mint=$'\033[38;2;142;236;212m'     # #8EECD4 — user@host (pastel mint)
-sky=$'\033[38;2;138;218;236m'      # #8ADAEC — dir (powder blue)
 peach=$'\033[38;2;253;212;187m'    # #FDD4BB — git branch (pale peach)
 pink=$'\033[38;2;244;168;208m'     # #F4A8D0 — model (soft pink)
 reset=$'\033[0m'
@@ -69,12 +57,6 @@ gradient_color() {
 }
 
 # --- Build output ---
-# user@host (mint green)
-printf "${mint}%s@%s${reset}" "$user" "$host"
-
-# space + dir (sky blue)
-printf " ${sky}%s${reset}" "$dir"
-
 # git branch (peach/salmon), with * if dirty
 if [ -n "$branch" ]; then
   if [ -n "$dirty" ]; then

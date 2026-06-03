@@ -2,7 +2,7 @@
 # Startup workflow launcher — macOS version (Login Items)
 
 [ -f "$HOME/.devrc" ] && source "$HOME/.devrc"
-PROJECT_PATH="${PROJECT_PATH:-$HOME/speaklogic-testing}"
+PROJECT_PATH="${PROJECT_PATH:-$HOME/projects/speaklogic-testing}"
 
 sleep 8
 
