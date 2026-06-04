@@ -87,10 +87,12 @@ notify() {
 
 # ── Project switcher (fzf) ──────────────────────────────────────────────────
 proj() {
-  local dir
-  dir=$(/usr/bin/find ~/projects -maxdepth 1 -mindepth 1 -type d 2>/dev/null | \
-        fzf --prompt="project> " --height=40% --preview='ls {}')
-  [ -z "$dir" ] && return
+  local name dir
+  name=$(/usr/bin/find ~/projects -maxdepth 1 -mindepth 1 -type d 2>/dev/null | \
+         sed 's|.*/||' | \
+         fzf --prompt="project> " --height=40% --preview='ls ~/projects/{}')
+  [ -z "$name" ] && return
+  dir=~/projects/"$name"
   cd "$dir"
   # If inside WezTerm and project has a workspace config, spawn workspace
   if [ -n "${WEZTERM_PANE:-}" ] && [ -f "$dir/.wezterm-workspace.lua" ]; then
