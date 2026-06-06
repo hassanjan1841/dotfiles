@@ -41,11 +41,6 @@ case "$CHOICE" in
   "Dev Mode")
     fix_chrome_exit
     google-chrome --profile-directory="Profile 9" &
-
-    # WezTerm reads ~/.wezterm.lua which defines the split layout on gui-startup:
-    # left pane = npm run dev-server, right pane = claude
-    wezterm start &
-
     echo "Dev Mode launched"
     ;;
 

@@ -327,42 +327,65 @@ config.mouse_bindings = {
     action = act.CompleteSelectionOrOpenLinkAtMouseCursor 'ClipboardAndPrimarySelection' },
   { event = { Down = { streak = 1, button = 'Right' } }, mods = 'NONE',
     action = act.PasteFrom 'Clipboard' },
+  -- Ctrl+Click opens hyperlinks in browser (lost when custom mouse_bindings
+  -- replaced WezTerm's defaults — custom tables don't merge with defaults)
+  { event = { Up   = { streak = 1, button = 'Left'  } }, mods = 'CTRL',
+    action = act.OpenLinkAtMouseCursor },
 }
 
--- ── Dev layout on startup ─────────────────────────────────────────────────────
+-- ── Startup: restore saved workspaces if they exist, otherwise create fresh dev layout ──
 local PROJECT = os.getenv('PROJECT_PATH') or (HOME .. '/projects/speaklogic-testing')
 
 wezterm.on('gui-startup', function(cmd)
-  local args = cmd or {}
-  args.workspace = 'dev'
-  local tab, left_pane, window = wezterm.mux.spawn_window(args)
-
-  left_pane:send_text('cd ' .. PROJECT .. ' && npm run dev-server\n')
-
-  local right_pane = left_pane:split { direction = 'Right', size = 0.5 }
-  right_pane:send_text('cd ' .. PROJECT .. ' && claude\n')
-
-  left_pane:activate()
-  window:gui_window():maximize()
-
-  -- Auto-restore saved workspaces (skips 'dev' since it's created above)
   local workspace_dir = resurrect.state_manager.save_state_dir .. 'workspace/'
   local ok, entries = pcall(wezterm.read_dir, workspace_dir)
+
+  local saved_names = {}
   if ok then
     for _, entry in ipairs(entries) do
       local name = entry:match('([^/]+)%.json$')
-      if name and name ~= 'dev' then
-        local state = resurrect.state_manager.load_state(name, 'workspace')
-        if state and state.workspace then
-          resurrect.workspace_state.restore_workspace(state, {
-            relative           = true,
-            restore_text       = false,
-            spawn_in_workspace = true,
-            on_pane_restore    = resurrect.tab_state.default_on_pane_restore,
-          })
+      if name then saved_names[#saved_names + 1] = name end
+    end
+  end
+
+  if #saved_names > 0 then
+    -- Restore all saved workspaces exactly as they were
+    local first_window = nil
+    for _, name in ipairs(saved_names) do
+      local state = resurrect.state_manager.load_state(name, 'workspace')
+      if state and state.workspace then
+        resurrect.workspace_state.restore_workspace(state, {
+          relative           = true,
+          restore_text       = false,
+          spawn_in_workspace = true,
+          on_pane_restore    = resurrect.tab_state.default_on_pane_restore,
+        })
+        if not first_window then
+          -- Switch the initial (blank) window to the first restored workspace
+          for _, w in ipairs(wezterm.mux.all_windows()) do
+            first_window = w:gui_window()
+            break
+          end
         end
       end
     end
+    if first_window then
+      first_window:perform_action(
+        act.SwitchToWorkspace { name = saved_names[1]:match('(.+)%.json$') or saved_names[1] },
+        first_window:active_pane()
+      )
+      first_window:maximize()
+    end
+  else
+    -- No saves exist — create the default dev layout
+    local args = cmd or {}
+    args.workspace = 'dev'
+    local tab, left_pane, window = wezterm.mux.spawn_window(args)
+    left_pane:send_text('cd ' .. PROJECT .. ' && npm run dev-server\n')
+    local right_pane = left_pane:split { direction = 'Right', size = 0.5 }
+    right_pane:send_text('cd ' .. PROJECT .. ' && claude\n')
+    left_pane:activate()
+    window:gui_window():maximize()
   end
 end)
 
