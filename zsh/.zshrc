@@ -219,6 +219,9 @@ if [[ -n "$WEZTERM_PANE" ]]; then
   alias alert='printf "\a"'
 fi
 
+# kill process on a given port
+killport() { lsof -ti :"$1" | xargs kill -9; }
+
 # zoxide (smarter cd)
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 
