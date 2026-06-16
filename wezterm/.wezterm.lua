@@ -351,9 +351,7 @@ config.mouse_bindings = {
     action = act.OpenLinkAtMouseCursor },
 }
 
--- ── Startup: restore saved workspaces if they exist, otherwise create fresh dev layout ──
-local PROJECT = os.getenv('PROJECT_PATH') or (HOME .. '/projects/speaklogic-testing')
-
+-- ── Startup: restore saved workspaces if they exist, otherwise a plain window ──
 wezterm.on('gui-startup', function(cmd)
   local workspace_dir = resurrect.state_manager.save_state_dir .. 'workspace/'
   local ok, entries = pcall(wezterm.read_dir, workspace_dir)
@@ -395,15 +393,11 @@ wezterm.on('gui-startup', function(cmd)
       first_window:maximize()
     end
   else
-    -- No saves exist — create the default two-pane layout in the project dir.
-    -- Layout only: no commands are auto-run (no npm dev-server, no claude).
-    local args = cmd or {}
-    args.workspace = 'dev'
-    local tab, left_pane, window = wezterm.mux.spawn_window(args)
-    left_pane:send_text('cd ' .. PROJECT .. '\n')
-    local right_pane = left_pane:split { direction = 'Right', size = 0.5 }
-    right_pane:send_text('cd ' .. PROJECT .. '\n')
-    left_pane:activate()
+    -- No saves yet — just open a plain, normal WezTerm window.
+    -- (A gui-startup handler must spawn the window itself.) No splits, no
+    -- forced project dir, no commands. From here on, your real layouts are
+    -- saved automatically and restored on the next launch.
+    local _, _, window = wezterm.mux.spawn_window(cmd or {})
     window:gui_window():maximize()
   end
 end)
