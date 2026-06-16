@@ -32,6 +32,7 @@
       "Bash(jq *)"
     ]
   },
+  "model": "opus",
   "hooks": {
     "PostToolUse": [
       {
@@ -98,11 +99,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "notify-send 'Claude Code' 'Work completed! ✅' --icon=dialog-information --urgency=normal"
+            "command": "osascript -e 'display notification \"Work completed! ✅\" with title \"Claude Code\"'"
           },
           {
             "type": "command",
-            "command": "paplay /usr/share/sounds/freedesktop/stereo/complete.oga"
+            "command": "afplay /System/Library/Sounds/Glass.aiff"
           }
         ]
       }
@@ -154,6 +155,9 @@
     "mode": "hold"
   },
   "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark",
+  "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
   "voiceEnabled": true
 }

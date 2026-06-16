@@ -1,5 +1,5 @@
 [user]
-	name = hassanjan1841
+	name = Hassan Jan
 	email = hijan29714@gmail.com
 	useConfigOnly = true
 [credential "https://github.com"]
@@ -10,3 +10,10 @@
 	helper = !/usr/bin/gh auth git-credential
 [credential]
 	helper = store
+[filter "lfs"]
+	required = true
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+[includeIf "gitdir:/Users/hassanjan/ehtisham-all-projects/"]
+	path = /Users/hassanjan/.gitconfig-ehtisham

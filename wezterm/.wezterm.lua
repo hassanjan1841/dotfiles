@@ -6,8 +6,17 @@ local config  = wezterm.config_builder()
 local resurrect = wezterm.plugin.require('https://github.com/MLFlexer/resurrect.wezterm')
 
 local function do_save()
-  local state = resurrect.workspace_state.get_workspace_state()
-  resurrect.state_manager.save_state(state)
+  -- Snapshot EVERY workspace, not just the active one: group all live windows
+  -- by their workspace and save each as its own state file.
+  local by_ws = {}
+  for _, win in ipairs(wezterm.mux.all_windows()) do
+    local ws = win:get_workspace()
+    if not by_ws[ws] then by_ws[ws] = { workspace = ws, window_states = {} } end
+    table.insert(by_ws[ws].window_states, resurrect.window_state.get_window_state(win))
+  end
+  for _, state in pairs(by_ws) do
+    resurrect.state_manager.save_state(state)
+  end
   wezterm.GLOBAL.last_save = wezterm.strftime '%H:%M:%S'
 
   -- remove stale saves that no longer match any live workspace name
@@ -18,7 +27,9 @@ local function do_save()
   for _, name in ipairs(wezterm.mux.get_workspace_names()) do
     live[name .. '.json'] = true
   end
-  for _, entry in ipairs(wezterm.read_dir(workspace_dir)) do
+  local ok, entries = pcall(wezterm.read_dir, workspace_dir)
+  if not ok then return end
+  for _, entry in ipairs(entries) do
     local file = entry:match('([^/]+)$')
     if file and file:match('%.json$') and not live[file] then
       os.remove(workspace_dir .. file)
@@ -26,7 +37,14 @@ local function do_save()
   end
 end
 
-resurrect.state_manager.periodic_save({ interval_seconds = 60 })
+-- Auto-save all workspaces every 10 seconds. Self-rescheduling timer; pcall keeps
+-- the loop alive even if one save hiccups (an error here would otherwise stop it).
+local SAVE_INTERVAL = 10
+local function periodic_save_all()
+  pcall(do_save)
+  wezterm.time.call_after(SAVE_INTERVAL, periodic_save_all)
+end
+wezterm.time.call_after(SAVE_INTERVAL, periodic_save_all)
 
 -- ── Appearance ────────────────────────────────────────────────────────────────
 config.color_scheme               = 'Tokyo Night'
