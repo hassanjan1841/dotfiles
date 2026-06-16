@@ -395,13 +395,14 @@ wezterm.on('gui-startup', function(cmd)
       first_window:maximize()
     end
   else
-    -- No saves exist — create the default dev layout
+    -- No saves exist — create the default two-pane layout in the project dir.
+    -- Layout only: no commands are auto-run (no npm dev-server, no claude).
     local args = cmd or {}
     args.workspace = 'dev'
     local tab, left_pane, window = wezterm.mux.spawn_window(args)
-    left_pane:send_text('cd ' .. PROJECT .. ' && npm run dev-server\n')
+    left_pane:send_text('cd ' .. PROJECT .. '\n')
     local right_pane = left_pane:split { direction = 'Right', size = 0.5 }
-    right_pane:send_text('cd ' .. PROJECT .. ' && claude\n')
+    right_pane:send_text('cd ' .. PROJECT .. '\n')
     left_pane:activate()
     window:gui_window():maximize()
   end

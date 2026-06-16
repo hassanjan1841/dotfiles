@@ -8,3 +8,7 @@ taskwarrior/.task/*.data
 taskwarrior/.task/*.log
 taskwarrior/.timewarrior/data/*
 !taskwarrior/.timewarrior/data/.gitkeep
+
+# macOS junk
+.DS_Store
+**/.DS_Store
