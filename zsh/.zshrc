@@ -244,3 +244,6 @@ fi
 [[ -n "$ZPROF" ]] && zprof
 
 . "$HOME/.atuin/bin/env"
+
+# opencode
+export PATH=/Users/hassanjan/.opencode/bin:$PATH

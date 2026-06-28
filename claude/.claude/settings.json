@@ -32,7 +32,6 @@
       "Bash(jq *)"
     ]
   },
-  "model": "opus",
   "hooks": {
     "PostToolUse": [
       {
