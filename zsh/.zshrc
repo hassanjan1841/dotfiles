@@ -247,3 +247,42 @@ fi
 
 # opencode
 export PATH=/Users/hassanjan/.opencode/bin:$PATH
+
+# killdev — kill ONLY local JS dev servers (next/vite/bun/pnpm/npm/yarn dev).
+# Two sources of candidates, both filtered so we never kill a non-dev process:
+#   1. processes on common dev ports — kept only if their command is a JS/dev runtime
+#   2. processes matched by dev command name — regardless of port
+# A Java/Python/php/Grafana service on 8080/8000/9000 is left untouched.
+killdev() {
+  local ports=(3000 3001 3002 3003 4000 4173 5173 5174 8000 8080 8081 9000)
+  # what counts as a "dev runtime" — used to vet port-based hits
+  local dev_re='(^|/)(node|bun|deno)( |$)|next(-server)?|vite|webpack|nodemon|react-scripts|astro|nuxt|remix|gatsby|(npm|pnpm|yarn|turbo)( |$)'
+  local kept=""
+
+  # 1) port-based, vetted by command line
+  local p pid cmd
+  for p in $ports; do
+    for pid in $(lsof -ti tcp:$p 2>/dev/null); do
+      cmd=$(ps -p $pid -o command= 2>/dev/null)
+      if [[ "$cmd" =~ $dev_re ]]; then
+        kept="$kept $pid"
+      fi
+    done
+  done
+
+  # 2) name-based, any port (already unambiguous dev processes)
+  kept="$kept $(pgrep -f 'next dev|next-server|vite|nodemon|webpack serve|react-scripts start|astro dev|nuxt dev|(npm|pnpm|yarn|bun) (run )?dev' 2>/dev/null)"
+
+  kept=$(echo "$kept" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -u)
+  if [[ -z "$kept" ]]; then
+    echo "✓ No dev servers running"
+    return 0
+  fi
+  echo "Killing dev servers:"
+  local k
+  for k in ${(f)kept}; do
+    echo "  PID $k  $(ps -p $k -o command= 2>/dev/null | cut -c1-80)"
+  done
+  echo "$kept" | xargs kill -9 2>/dev/null
+  echo "✓ Done"
+}
