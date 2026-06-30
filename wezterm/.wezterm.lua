@@ -53,12 +53,26 @@ wezterm.time.call_after(SAVE_INTERVAL, periodic_save_all)
 config.color_scheme               = 'Tokyo Night'
 config.font                       = wezterm.font('JetBrainsMono Nerd Font', { weight = 'Regular' })
 config.font_size                  = 13.0
-config.window_padding             = { left = 8, right = 8, top = 6, bottom = 6 }
 config.window_decorations         = 'RESIZE'
 config.enable_tab_bar             = true
 config.hide_tab_bar_if_only_one_tab = false
 config.use_fancy_tab_bar          = false
 config.tab_bar_at_bottom          = true
+
+-- ── Glassmorphism: frosted, translucent background ───────────────────────────
+-- Desktop shows through (opacity) but is blurred to a frost so text stays sharp.
+-- Ctrl+Shift+B snaps to fully opaque when you want maximum contrast.
+config.window_background_opacity    = 0.85
+config.macos_window_background_blur = 50
+config.text_background_opacity      = 1.0   -- keep text cells crisp, not see-through
+config.window_padding               = { left = 16, right = 16, top = 12, bottom = 10 }
+
+-- ── Readability: roomier lines + a smooth blinking bar cursor ─────────────────
+config.line_height           = 1.12
+config.default_cursor_style  = 'BlinkingBar'
+config.cursor_blink_rate     = 500
+config.cursor_blink_ease_in  = 'EaseOut'
+config.cursor_blink_ease_out = 'EaseOut'
 
 -- ── Performance ───────────────────────────────────────────────────────────────
 config.front_end              = 'WebGpu'  -- Metal backend on macOS (optimal on Apple Silicon)
@@ -303,9 +317,11 @@ config.keys = {
   { key = 'b', mods = 'CTRL|SHIFT', action = wezterm.action_callback(function(win, pane)
       local o = win:effective_config().window_background_opacity
       if o and o < 1.0 then
+        -- currently glass → snap to fully opaque for max contrast
         win:set_config_overrides { window_background_opacity = 1.0, macos_window_background_blur = 0 }
       else
-        win:set_config_overrides { window_background_opacity = 0.85, macos_window_background_blur = 30 }
+        -- currently opaque → back to frosted glass
+        win:set_config_overrides { window_background_opacity = 0.85, macos_window_background_blur = 50 }
       end
   end) },
 
