@@ -59,12 +59,13 @@ config.hide_tab_bar_if_only_one_tab = false
 config.use_fancy_tab_bar          = false
 config.tab_bar_at_bottom          = true
 
--- ── Glassmorphism: frosted, translucent background ───────────────────────────
--- Desktop shows through (opacity) but is blurred to a frost so text stays sharp.
--- Ctrl+Shift+B snaps to fully opaque when you want maximum contrast.
-config.window_background_opacity    = 0.85
-config.macos_window_background_blur = 50
-config.text_background_opacity      = 1.0   -- keep text cells crisp, not see-through
+-- ── Background: SOLID by default for readability + low eye strain ────────────
+-- Translucent "glass" only looks good over a DARK wallpaper; over a bright one
+-- it bleeds light through and washes out the text. So default is solid; press
+-- Ctrl+Shift+B to flip on glass on demand (e.g. with a dark wallpaper).
+config.window_background_opacity    = 1.0
+config.macos_window_background_blur = 0
+config.text_background_opacity      = 1.0
 config.window_padding               = { left = 16, right = 16, top = 12, bottom = 10 }
 
 -- ── Readability: roomier lines + a smooth blinking bar cursor ─────────────────
@@ -320,8 +321,8 @@ config.keys = {
         -- currently glass → snap to fully opaque for max contrast
         win:set_config_overrides { window_background_opacity = 1.0, macos_window_background_blur = 0 }
       else
-        -- currently opaque → back to frosted glass
-        win:set_config_overrides { window_background_opacity = 0.85, macos_window_background_blur = 50 }
+        -- currently solid → gentle frosted glass (best over a dark wallpaper)
+        win:set_config_overrides { window_background_opacity = 0.92, macos_window_background_blur = 40 }
       end
   end) },
 
