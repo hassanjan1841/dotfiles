@@ -261,7 +261,21 @@ config.keys = {
   -- Workspaces
   { key = 'n', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(1)  },
   { key = 'p', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(-1) },
-  { key = '$', mods = 'CTRL|SHIFT', action = act.ShowLauncherArgs { flags = 'WORKSPACES' } },
+  -- Fuzzy workspace picker — one hand: Alt+w, type a name, Enter
+  { key = 'w', mods = 'ALT', action = act.ShowLauncherArgs { flags = 'FUZZY|WORKSPACES' } },
+  { key = '$', mods = 'CTRL|SHIFT', action = act.ShowLauncherArgs { flags = 'FUZZY|WORKSPACES' } },
+
+  -- Direct numbered jumps: Alt + 1-9 (one modifier, no leader). Ctrl+num = tabs,
+  -- Alt+num = workspaces. Creates the workspace if missing. Edit names to remap.
+  { key = '1', mods = 'ALT', action = act.SwitchToWorkspace { name = 'dev' } },
+  { key = '2', mods = 'ALT', action = act.SwitchToWorkspace { name = 'crm-whatsapp' } },
+  { key = '3', mods = 'ALT', action = act.SwitchToWorkspace { name = 'propfix' } },
+  { key = '4', mods = 'ALT', action = act.SwitchToWorkspace { name = 'gcs-work-' } },
+  { key = '5', mods = 'ALT', action = act.SwitchToWorkspace { name = 'feature-tracker-' } },
+  { key = '6', mods = 'ALT', action = act.SwitchToWorkspace { name = 'all-rounder' } },
+  { key = '7', mods = 'ALT', action = act.SwitchToWorkspace { name = 'afri-in-vset-hub-' } },
+  { key = '8', mods = 'ALT', action = act.SwitchToWorkspace { name = 'drawio-work' } },
+  { key = '9', mods = 'ALT', action = act.SwitchToWorkspace { name = 'auto-market-autraloa-' } },
 
   -- Close current workspace (closes all its tabs then switches to next workspace)
   { key = 'q', mods = 'CTRL|SHIFT', action = wezterm.action_callback(function(win, pane)
