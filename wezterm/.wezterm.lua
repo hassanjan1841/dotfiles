@@ -275,14 +275,13 @@ config.keys = {
       end),
   }},
 
-  -- Workspaces
-  { key = 'n', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(1)  },
-  { key = 'p', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(-1) },
+  -- Workspaces (all on Alt for one consistent mental model)
+  { key = '[', mods = 'ALT', action = act.SwitchWorkspaceRelative(-1) },  -- prev workspace
+  { key = ']', mods = 'ALT', action = act.SwitchWorkspaceRelative(1)  },  -- next workspace
   -- Fuzzy workspace picker — one hand: Alt+w, type a name, Enter
   { key = 'w', mods = 'ALT', action = act.ShowLauncherArgs { flags = 'FUZZY|WORKSPACES' } },
   -- Zoxide fuzzy switcher: Alt+j — jump to a workspace at any frecent directory
   { key = 'j', mods = 'ALT', action = workspace_switcher.switch_workspace() },
-  { key = '$', mods = 'CTRL|SHIFT', action = act.ShowLauncherArgs { flags = 'FUZZY|WORKSPACES' } },
 
   -- Direct numbered jumps: Alt + 1-9 (one modifier, no leader). Ctrl+num = tabs,
   -- Alt+num = workspaces. Creates the workspace if missing. Edit names to remap.
@@ -295,6 +294,20 @@ config.keys = {
   { key = '7', mods = 'ALT', action = act.SwitchToWorkspace { name = 'afri-in-vset-hub-' } },
   { key = '8', mods = 'ALT', action = act.SwitchToWorkspace { name = 'drawio-work' } },
   { key = '9', mods = 'ALT', action = act.SwitchToWorkspace { name = 'auto-market-autraloa-' } },
+
+  -- Command palette: search every WezTerm action (restored — the old
+  -- Ctrl+Shift+P workspace-prev binding used to clobber this default).
+  { key = 'p', mods = 'CTRL|SHIFT', action = act.ActivateCommandPalette },
+
+  -- Focus mode: toggle a translucent + blurred background on/off
+  { key = 'b', mods = 'CTRL|SHIFT', action = wezterm.action_callback(function(win, pane)
+      local o = win:effective_config().window_background_opacity
+      if o and o < 1.0 then
+        win:set_config_overrides { window_background_opacity = 1.0, macos_window_background_blur = 0 }
+      else
+        win:set_config_overrides { window_background_opacity = 0.85, macos_window_background_blur = 30 }
+      end
+  end) },
 
   -- Close current workspace (closes all its tabs then switches to next workspace)
   { key = 'q', mods = 'CTRL|SHIFT', action = wezterm.action_callback(function(win, pane)
@@ -355,8 +368,11 @@ printf "  Alt+1-9         jump to workspace\n"
 printf "  Alt+w           fuzzy workspace picker\n"
 printf "  Alt+j           zoxide workspace switcher\n"
 printf "  Alt+s           pick pane (overlay letters)\n"
-printf "  Ctrl+Shift+n/p  next/prev workspace\n"
-printf "  Ctrl+Shift+\$    workspace picker\n"
+printf "  Alt+[ / Alt+]   prev/next workspace\n"
+printf "  Ctrl+Shift+p    command palette\n"
+printf "  Ctrl+Shift+b    toggle blur/opacity\n"
+printf "  Ctrl+Shift+x    copy mode (vim keys)\n"
+printf "  Ctrl+Shift+u    emoji / char picker\n"
 printf "  Ctrl+Shift+s    save session\n"
 printf "  Ctrl+Shift+o    restore session\n"
 printf "  Ctrl+Shift+q    close workspace\n"
