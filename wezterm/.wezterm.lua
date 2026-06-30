@@ -93,8 +93,8 @@ config.cursor_blink_ease_out = 'EaseOut'
 
 -- ── Performance ───────────────────────────────────────────────────────────────
 config.front_end              = 'WebGpu'  -- Metal backend on macOS (optimal on Apple Silicon)
-config.animation_fps          = 120       -- match the 120Hz ProMotion panel
-config.max_fps                = 120        -- was 60 = half the display's refresh
+config.animation_fps          = 60
+config.max_fps                = 60
 config.status_update_interval = 2000
 
 -- ── Scrollback / Wayland ──────────────────────────────────────────────────────
