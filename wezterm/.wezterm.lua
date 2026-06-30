@@ -199,7 +199,13 @@ local function ws_color(name)
   return WS_COLORS[(h % #WS_COLORS) + 1]
 end
 
--- ── Status bar: workspace badge (left) │ git branch + time (right) ────────────
+-- Which-key hints: when a key table (mode) is active, show its keys in the bar.
+local KEY_TABLE_HINTS = {
+  resize_pane = 'RESIZE  ←↓↑→ resize · Esc done',
+  wk_menu     = 'MENU  p panes · z zoom · r resize · w workspaces · f present · Esc',
+}
+
+-- ── Status bar: workspace badge (left) │ mode·cwd·git·battery·time (right) ────
 wezterm.on('update-status', function(window, pane)
   local ws = window:active_workspace()
   if ws == 'main' then
@@ -228,19 +234,59 @@ wezterm.on('update-status', function(window, pane)
     })
   end
 
+  local kt        = window:active_key_table()
+  local cwd_base  = (pane_cwd(pane):match('([^/]+)/*$')) or ''
   local branch    = git_branch(pane_cwd(pane))
-  local time      = wezterm.strftime '%H:%M'
+  local time      = wezterm.strftime '%a %d %b  %H:%M'
   local last_save = wezterm.GLOBAL.last_save
-  local save_info = last_save and ('  saved ' .. last_save .. '  ') or ''
+  local save_info = last_save and ('saved ' .. last_save) or ''
 
-  window:set_right_status(wezterm.format {
-    { Foreground = { Color = '#41a6b5' } },
-    { Text = save_info },
-    { Foreground = { Color = '#7aa2f7' } },
-    { Text = branch ~= '' and (branch .. '   ') or '' },
-    { Foreground = { Color = '#565f89' } },
-    { Text = time .. '  ' },
-  })
+  local bat = ''
+  local ok_b, info = pcall(wezterm.battery_info)
+  if ok_b and info and #info > 0 then
+    bat = string.format('%.0f%%', info[1].state_of_charge * 100)
+  end
+
+  local segs = {}
+  local function push(color, text)
+    if text ~= '' then
+      segs[#segs + 1] = { Foreground = { Color = color } }
+      segs[#segs + 1] = { Text = text }
+    end
+  end
+
+  -- which-key / mode indicator (amber badge with the active mode's hint)
+  if kt then
+    local hint = KEY_TABLE_HINTS[kt] or kt
+    segs[#segs + 1] = { Background = { Color = '#e0af68' } }
+    segs[#segs + 1] = { Foreground = { Color = '#1a1b26' } }
+    segs[#segs + 1] = { Attribute  = { Intensity = 'Bold' } }
+    segs[#segs + 1] = { Text = ' ' .. hint .. ' ' }
+    segs[#segs + 1] = { Background = { Color = '#1a1b26' } }
+    segs[#segs + 1] = { Text = '  ' }
+  end
+
+  push('#41a6b5', save_info ~= '' and (save_info .. '  ') or '')
+  push('#9ece6a', cwd_base ~= '' and (' ' .. cwd_base .. '  ') or '')
+  push('#7aa2f7', branch ~= '' and (branch .. '  ') or '')
+  push('#bb9af7', bat ~= '' and (' ' .. bat .. '  ') or '')
+  push('#565f89', time .. '  ')
+
+  window:set_right_status(wezterm.format(segs))
+end)
+
+-- Presentation mode: big font + no tab bar for screen-sharing / client demos.
+-- Triggered by F3 or the which-key menu. Merges with other overrides (opacity).
+wezterm.on('toggle-presentation', function(window, pane)
+  local o = window:get_config_overrides() or {}
+  if o.font_size then
+    o.font_size = nil
+    o.enable_tab_bar = nil
+  else
+    o.font_size = 20.0
+    o.enable_tab_bar = false
+  end
+  window:set_config_overrides(o)
 end)
 
 -- ── Tab titles: active tab highlighted in blue, inactive dimmed ──────────────
@@ -286,6 +332,15 @@ config.key_tables = {
     { key = 'Escape',     action = act.PopKeyTable },
     { key = 'Enter',      action = act.PopKeyTable },
   },
+  -- which-key menu: F4 opens it; the status bar shows the available keys.
+  wk_menu = {
+    { key = 'p', action = act.PaneSelect { alphabet = 'asdfghjkl' } },
+    { key = 'z', action = act.TogglePaneZoomState },
+    { key = 'r', action = act.ActivateKeyTable { name = 'resize_pane', one_shot = false, timeout_milliseconds = 5000 } },
+    { key = 'w', action = act.ShowLauncherArgs { flags = 'FUZZY|WORKSPACES' } },
+    { key = 'f', action = act.EmitEvent 'toggle-presentation' },
+    { key = 'Escape', action = act.PopKeyTable },
+  },
 }
 
 -- ── Key bindings ──────────────────────────────────────────────────────────────
@@ -310,6 +365,13 @@ config.keys = {
 
   -- PaneSelect: Alt+s overlays a letter on every pane → press it to jump
   { key = 's', mods = 'ALT', action = act.PaneSelect { alphabet = 'asdfghjkl' } },
+
+  -- Presentation mode (F3): big font + no tab bar for demos / screen-sharing
+  { key = 'F3', mods = 'NONE', action = act.EmitEvent 'toggle-presentation' },
+  -- Which-key menu (F4): pops a menu; the status bar shows the available keys
+  { key = 'F4', mods = 'NONE', action = act.ActivateKeyTable {
+      name = 'wk_menu', one_shot = true, timeout_milliseconds = 3000,
+  }},
 
   -- Tabs
   { key = 't', mods = 'CTRL|SHIFT', action = act.SpawnTab 'CurrentPaneDomain' },
@@ -378,14 +440,18 @@ config.keys = {
 
   -- Focus mode: toggle a translucent + blurred background on/off
   { key = 'b', mods = 'CTRL|SHIFT', action = wezterm.action_callback(function(win, pane)
-      local o = win:effective_config().window_background_opacity
-      if o and o < 1.0 then
+      local o = win:get_config_overrides() or {}
+      local cur = o.window_background_opacity or win:effective_config().window_background_opacity
+      if cur and cur < 1.0 then
         -- currently glass → snap to fully opaque for max contrast
-        win:set_config_overrides { window_background_opacity = 1.0, macos_window_background_blur = 0 }
+        o.window_background_opacity = 1.0
+        o.macos_window_background_blur = 0
       else
         -- currently solid → gentle frosted glass (best over a dark wallpaper)
-        win:set_config_overrides { window_background_opacity = 0.92, macos_window_background_blur = 40 }
+        o.window_background_opacity = 0.92
+        o.macos_window_background_blur = 40
       end
+      win:set_config_overrides(o)
   end) },
 
   -- Close current workspace (closes all its tabs then switches to next workspace)
@@ -458,6 +524,8 @@ printf "  Ctrl+Shift+q    close workspace\n"
 printf "  Ctrl+Shift+Alt+q  quit WezTerm\n"
 printf "  F2              rename tab\n"
 printf "  Shift+F2        rename workspace\n"
+printf "  F3              presentation mode (big font)\n"
+printf "  F4              which-key menu\n"
 printf "  Ctrl+Shift+Space  quick select\n"
 printf "  Ctrl+Shift+f    search\n"
 printf "  Ctrl+Shift+↑/↓  jump prompts\n"
