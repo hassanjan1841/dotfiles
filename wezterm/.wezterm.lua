@@ -5,6 +5,9 @@ local config  = wezterm.config_builder()
 -- ── Session persistence (resurrect.wezterm) ───────────────────────────────────
 local resurrect = wezterm.plugin.require('https://github.com/MLFlexer/resurrect.wezterm')
 
+-- ── Zoxide-powered fuzzy workspace switcher (smart_workspace_switcher) ─────────
+local workspace_switcher = wezterm.plugin.require('https://github.com/MLFlexer/smart_workspace_switcher.wezterm')
+
 local function do_save()
   -- Snapshot EVERY workspace, not just the active one: group all live windows
   -- by their workspace and save each as its own state file.
@@ -39,7 +42,7 @@ end
 
 -- Auto-save all workspaces every 10 seconds. Self-rescheduling timer; pcall keeps
 -- the loop alive even if one save hiccups (an error here would otherwise stop it).
-local SAVE_INTERVAL = 10
+local SAVE_INTERVAL = 30
 local function periodic_save_all()
   pcall(do_save)
   wezterm.time.call_after(SAVE_INTERVAL, periodic_save_all)
@@ -58,9 +61,9 @@ config.use_fancy_tab_bar          = false
 config.tab_bar_at_bottom          = true
 
 -- ── Performance ───────────────────────────────────────────────────────────────
-config.front_end              = 'WebGpu'
-config.animation_fps          = 60
-config.max_fps                = 60
+config.front_end              = 'WebGpu'  -- Metal backend on macOS (optimal on Apple Silicon)
+config.animation_fps          = 120       -- match the 120Hz ProMotion panel
+config.max_fps                = 120        -- was 60 = half the display's refresh
 config.status_update_interval = 2000
 
 -- ── Scrollback / Wayland ──────────────────────────────────────────────────────
@@ -123,14 +126,22 @@ local function pane_cwd(pane)
   return path:gsub('^' .. HOME, '~')
 end
 
+-- Cache the branch per-cwd so we don't spawn `git` on every 2s status tick.
+-- Re-checks at most every BRANCH_TTL seconds (catches checkouts quickly enough).
+local branch_cache = {}
+local BRANCH_TTL = 10
 local function git_branch(cwd)
   if cwd == '' then return '' end
+  local now = os.time()
+  local cached = branch_cache[cwd]
+  if cached and (now - cached.ts) < BRANCH_TTL then return cached.branch end
   local real = cwd:gsub('^~', HOME)
   local ok, out = wezterm.run_child_process {
     'git', '-C', real, 'symbolic-ref', '--short', 'HEAD'
   }
-  if ok and out ~= '' then return ' ' .. out:gsub('%s+$', '') end
-  return ''
+  local branch = (ok and out ~= '') and (' ' .. out:gsub('%s+$', '')) or ''
+  branch_cache[cwd] = { branch = branch, ts = now }
+  return branch
 end
 
 -- ── Status bar: workspace (left) │ git branch + time (right) ─────────────────
@@ -269,6 +280,8 @@ config.keys = {
   { key = 'p', mods = 'CTRL|SHIFT', action = act.SwitchWorkspaceRelative(-1) },
   -- Fuzzy workspace picker — one hand: Alt+w, type a name, Enter
   { key = 'w', mods = 'ALT', action = act.ShowLauncherArgs { flags = 'FUZZY|WORKSPACES' } },
+  -- Zoxide fuzzy switcher: Alt+j — jump to a workspace at any frecent directory
+  { key = 'j', mods = 'ALT', action = workspace_switcher.switch_workspace() },
   { key = '$', mods = 'CTRL|SHIFT', action = act.ShowLauncherArgs { flags = 'FUZZY|WORKSPACES' } },
 
   -- Direct numbered jumps: Alt + 1-9 (one modifier, no leader). Ctrl+num = tabs,
@@ -340,6 +353,7 @@ printf "  Ctrl+Shift+w    close pane\n"
 printf "  Ctrl+1-5        switch tab\n"
 printf "  Alt+1-9         jump to workspace\n"
 printf "  Alt+w           fuzzy workspace picker\n"
+printf "  Alt+j           zoxide workspace switcher\n"
 printf "  Alt+s           pick pane (overlay letters)\n"
 printf "  Ctrl+Shift+n/p  next/prev workspace\n"
 printf "  Ctrl+Shift+\$    workspace picker\n"
