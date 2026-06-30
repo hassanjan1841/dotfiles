@@ -95,12 +95,15 @@ table.insert(config.hyperlink_rules, {
   format  = 'fileref://$0',
 })
 
+-- Full path to Zed's CLI so file:line links work even when `zed` isn't on PATH
+local ZED_CLI = '/Applications/Zed.app/Contents/MacOS/cli'
+
 wezterm.on('open-uri', function(window, pane, uri)
   local path, line = uri:match('^fileref://(.+):(%d+)')
   if path then
     -- Expand ~ to home
     path = path:gsub('^~', os.getenv('HOME') or '')
-    wezterm.run_child_process { 'zed', path .. ':' .. line }
+    wezterm.run_child_process { ZED_CLI, path .. ':' .. line }
     return false  -- prevent default handler
   end
 end)
@@ -217,6 +220,9 @@ config.keys = {
   -- Zoom pane
   { key = 'z', mods = 'CTRL|SHIFT', action = act.TogglePaneZoomState },
 
+  -- PaneSelect: Alt+s overlays a letter on every pane → press it to jump
+  { key = 's', mods = 'ALT', action = act.PaneSelect { alphabet = 'asdfghjkl' } },
+
   -- Tabs
   { key = 't', mods = 'CTRL|SHIFT', action = act.SpawnTab 'CurrentPaneDomain' },
   { key = 'w', mods = 'CTRL|SHIFT', action = act.CloseCurrentPane { confirm = false } },
@@ -332,6 +338,9 @@ printf "  Ctrl+Shift+r    resize mode\n"
 printf "  Ctrl+Shift+t    new tab\n"
 printf "  Ctrl+Shift+w    close pane\n"
 printf "  Ctrl+1-5        switch tab\n"
+printf "  Alt+1-9         jump to workspace\n"
+printf "  Alt+w           fuzzy workspace picker\n"
+printf "  Alt+s           pick pane (overlay letters)\n"
 printf "  Ctrl+Shift+n/p  next/prev workspace\n"
 printf "  Ctrl+Shift+\$    workspace picker\n"
 printf "  Ctrl+Shift+s    save session\n"
