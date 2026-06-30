@@ -159,11 +159,51 @@ local function git_branch(cwd)
   return branch
 end
 
--- ── Status bar: workspace (left) │ git branch + time (right) ─────────────────
+-- Per-workspace accent: deterministic color from the workspace name so each
+-- project shows a distinct badge — a glance tells you which one you're in.
+local WS_COLORS = {
+  '#7aa2f7', -- blue
+  '#9ece6a', -- green
+  '#e0af68', -- amber
+  '#bb9af7', -- purple
+  '#f7768e', -- rose
+  '#2ac3de', -- cyan
+  '#ff9e64', -- orange
+  '#73daca', -- teal
+}
+-- Explicit distinct colors for known workspaces (so the ones you actually use
+-- never collide). Edit freely. New/unknown workspaces fall back to a hash.
+local WS_COLOR_OVERRIDE = {
+  ['dev']                   = '#7aa2f7', -- blue
+  ['crm-whatsapp']          = '#9ece6a', -- green
+  ['propfix']               = '#bb9af7', -- purple
+  ['gcs-work-']             = '#e0af68', -- amber
+  ['feature-tracker-']      = '#2ac3de', -- cyan
+  ['all-rounder']           = '#f7768e', -- rose
+  ['afri-in-vset-hub-']     = '#ff9e64', -- orange
+  ['drawio-work']           = '#73daca', -- teal
+  ['auto-market-autraloa-'] = '#7dcfff', -- light blue
+}
+local function ws_color(name)
+  if WS_COLOR_OVERRIDE[name] then return WS_COLOR_OVERRIDE[name] end
+  local h = 5381  -- djb2 hash → spread new workspaces across the palette
+  for i = 1, #name do h = (h * 33 + name:byte(i)) % 2147483648 end
+  return WS_COLORS[(h % #WS_COLORS) + 1]
+end
+
+-- ── Status bar: workspace badge (left) │ git branch + time (right) ────────────
 wezterm.on('update-status', function(window, pane)
+  local ws     = window:active_workspace()
+  local accent = ws_color(ws)
   window:set_left_status(wezterm.format {
-    { Foreground = { Color = '#7aa2f7' } },
-    { Text = '  ' .. window:active_workspace() .. '  ' },
+    -- filled accent badge with dark text, then a matching accent arrow
+    { Background = { Color = accent } },
+    { Foreground = { Color = '#1a1b26' } },
+    { Attribute  = { Intensity = 'Bold' } },
+    { Text = ' ' .. ws .. ' ' },
+    { Background = { Color = '#1a1b26' } },
+    { Foreground = { Color = accent } },
+    { Text = ' ' },
   })
 
   local branch    = git_branch(pane_cwd(pane))
