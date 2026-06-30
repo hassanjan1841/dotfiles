@@ -55,6 +55,7 @@ wezterm.time.call_after(SAVE_INTERVAL, periodic_save_all)
 
 -- ── Appearance ────────────────────────────────────────────────────────────────
 config.color_scheme               = 'Tokyo Night'
+config.colors                     = { split = '#7aa2f7' }  -- accent line between panes
 config.font                       = wezterm.font('JetBrainsMono Nerd Font', { weight = 'Regular' })
 config.font_size                  = 13.0
 config.window_decorations         = 'RESIZE'
@@ -90,9 +91,10 @@ config.scrollback_lines = 10000
 config.enable_wayland   = true
 
 -- ── Dim inactive panes ────────────────────────────────────────────────────────
--- Indicate the active pane by MUTING inactive panes' colors, NOT darkening them
--- (brightness stays 1.0 → no harsh dim / eye strain when switching panes).
-config.inactive_pane_hsb = { saturation = 0.6, brightness = 1.0 }
+-- Panes look almost identical (full brightness, only a hair less saturated when
+-- inactive — no darkening / eye strain). WezTerm has no active-pane border, so
+-- the active pane is shown by the blinking cursor + the accent split divider.
+config.inactive_pane_hsb = { saturation = 0.9, brightness = 1.0 }
 
 -- ── Bell → desktop toast ──────────────────────────────────────────────────────
 config.audible_bell = 'Disabled'
@@ -199,18 +201,32 @@ end
 
 -- ── Status bar: workspace badge (left) │ git branch + time (right) ────────────
 wezterm.on('update-status', function(window, pane)
-  local ws     = window:active_workspace()
-  local accent = ws_color(ws)
-  window:set_left_status(wezterm.format {
-    -- filled accent badge with dark text, then a matching accent arrow
-    { Background = { Color = accent } },
-    { Foreground = { Color = '#1a1b26' } },
-    { Attribute  = { Intensity = 'Bold' } },
-    { Text = ' ' .. ws .. ' ' },
-    { Background = { Color = '#1a1b26' } },
-    { Foreground = { Color = accent } },
-    { Text = ' ' },
-  })
+  local ws = window:active_workspace()
+  if ws == 'main' then
+    -- default / scratch workspace: neutral grey + (scratch) marker so it's
+    -- unmistakably NOT one of your named project workspaces.
+    window:set_left_status(wezterm.format {
+      { Background = { Color = '#3b4261' } },
+      { Foreground = { Color = '#c0caf5' } },
+      { Attribute  = { Intensity = 'Bold' } },
+      { Text = ' ◦ ' .. ws .. ' (scratch) ' },
+      { Background = { Color = '#1a1b26' } },
+      { Foreground = { Color = '#3b4261' } },
+      { Text = ' ' },
+    })
+  else
+    -- named project workspace: filled accent badge with a dot
+    local accent = ws_color(ws)
+    window:set_left_status(wezterm.format {
+      { Background = { Color = accent } },
+      { Foreground = { Color = '#1a1b26' } },
+      { Attribute  = { Intensity = 'Bold' } },
+      { Text = ' ● ' .. ws .. ' ' },
+      { Background = { Color = '#1a1b26' } },
+      { Foreground = { Color = accent } },
+      { Text = ' ' },
+    })
+  end
 
   local branch    = git_branch(pane_cwd(pane))
   local time      = wezterm.strftime '%H:%M'
