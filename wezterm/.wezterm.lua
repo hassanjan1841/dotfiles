@@ -55,7 +55,18 @@ wezterm.time.call_after(SAVE_INTERVAL, periodic_save_all)
 
 -- ── Appearance ────────────────────────────────────────────────────────────────
 config.color_scheme               = 'Tokyo Night'
-config.colors                     = { split = '#7aa2f7' }  -- accent line between panes
+config.colors = {
+  split = '#7aa2f7',  -- accent line between panes
+  -- Make the bottom bar blend into the terminal (no distinct strip → looks transparent)
+  tab_bar = {
+    background         = '#1a1b26',
+    active_tab         = { bg_color = '#1a1b26', fg_color = '#c0caf5' },
+    inactive_tab       = { bg_color = '#1a1b26', fg_color = '#565f89' },
+    inactive_tab_hover = { bg_color = '#1a1b26', fg_color = '#7aa2f7' },
+    new_tab            = { bg_color = '#1a1b26', fg_color = '#565f89' },
+    new_tab_hover      = { bg_color = '#1a1b26', fg_color = '#7aa2f7' },
+  },
+}
 config.font                       = wezterm.font('JetBrainsMono Nerd Font', { weight = 'Regular' })
 config.font_size                  = 13.0
 config.window_decorations         = 'RESIZE'
@@ -366,10 +377,11 @@ config.keys = {
   -- PaneSelect: Alt+s overlays a letter on every pane → press it to jump
   { key = 's', mods = 'ALT', action = act.PaneSelect { alphabet = 'asdfghjkl' } },
 
-  -- Presentation mode (F3): big font + no tab bar for demos / screen-sharing
-  { key = 'F3', mods = 'NONE', action = act.EmitEvent 'toggle-presentation' },
-  -- Which-key menu (F4): pops a menu; the status bar shows the available keys
-  { key = 'F4', mods = 'NONE', action = act.ActivateKeyTable {
+  -- Presentation mode (Alt+p): big font + no tab bar for demos / screen-sharing
+  -- (NOT F-keys — macOS reserves F3/F4 for Mission Control / Spotlight)
+  { key = 'p', mods = 'ALT', action = act.EmitEvent 'toggle-presentation' },
+  -- Which-key menu (Alt+m): pops a menu; the status bar shows the available keys
+  { key = 'm', mods = 'ALT', action = act.ActivateKeyTable {
       name = 'wk_menu', one_shot = true, timeout_milliseconds = 3000,
   }},
 
@@ -524,8 +536,8 @@ printf "  Ctrl+Shift+q    close workspace\n"
 printf "  Ctrl+Shift+Alt+q  quit WezTerm\n"
 printf "  F2              rename tab\n"
 printf "  Shift+F2        rename workspace\n"
-printf "  F3              presentation mode (big font)\n"
-printf "  F4              which-key menu\n"
+printf "  Alt+p           presentation mode (big font)\n"
+printf "  Alt+m           which-key menu\n"
 printf "  Ctrl+Shift+Space  quick select\n"
 printf "  Ctrl+Shift+f    search\n"
 printf "  Ctrl+Shift+↑/↓  jump prompts\n"
