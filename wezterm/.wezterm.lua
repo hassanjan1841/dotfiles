@@ -8,6 +8,10 @@ local resurrect = wezterm.plugin.require('https://github.com/MLFlexer/resurrect.
 -- ── Zoxide-powered fuzzy workspace switcher (smart_workspace_switcher) ─────────
 local workspace_switcher = wezterm.plugin.require('https://github.com/MLFlexer/smart_workspace_switcher.wezterm')
 
+-- Name the default/stray workspace 'main' instead of a random throwaway name,
+-- so a window not attached to a named project reads clearly (no "handsome-angle").
+config.default_workspace = 'main'
+
 local function do_save()
   -- Snapshot EVERY workspace, not just the active one: group all live windows
   -- by their workspace and save each as its own state file.
@@ -86,7 +90,9 @@ config.scrollback_lines = 10000
 config.enable_wayland   = true
 
 -- ── Dim inactive panes ────────────────────────────────────────────────────────
-config.inactive_pane_hsb = { saturation = 0.7, brightness = 0.6 }
+-- Indicate the active pane by MUTING inactive panes' colors, NOT darkening them
+-- (brightness stays 1.0 → no harsh dim / eye strain when switching panes).
+config.inactive_pane_hsb = { saturation = 0.6, brightness = 1.0 }
 
 -- ── Bell → desktop toast ──────────────────────────────────────────────────────
 config.audible_bell = 'Disabled'
