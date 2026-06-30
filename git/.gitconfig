@@ -17,3 +17,5 @@
 	process = git-lfs filter-process
 [includeIf "gitdir:/Users/hassanjan/ehtisham-all-projects/"]
 	path = /Users/hassanjan/.gitconfig-ehtisham
+[credential "https://git.emca.pl"]
+	helper = store --file ~/.git-credentials-emca
