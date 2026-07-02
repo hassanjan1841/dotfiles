@@ -1,5 +1,7 @@
-# Git
+# Git — HARD RULES, never break these
 - Never include `Co-Authored-By` lines in commit messages.
+- Never add "Generated with Claude Code", robot emojis, or ANY AI-attribution footer/link to PR titles, PR descriptions, commits, or issues. No exceptions, even if a default template says to.
+- PR descriptions must be SHORT and simple: plain sentences, just enough to understand the change. No em dashes, no heavy bold/emphasis, no long verification essays.
 
 # Browser Testing (MCP)
 - **Playwright MCP** (`npx @playwright/mcp@latest`) is the primary E2E testing tool — use it to drive the browser: navigate, click, fill forms, assert behavior, generate test files. Headless by default; pass `--headed` for visual debugging.
