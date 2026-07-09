@@ -6,6 +6,15 @@
 # Verification — HARD RULE, applies to every project/session
 - For any live browser verification (confirming a UI change works end to end), ALWAYS use **headless Playwright MCP**. Never use claude-in-chrome or Chrome DevTools MCP to drive verification flows. This overrides any other tooling default.
 
+# Comments — HARD RULE, applies to every project/session/folder
+Write comments only where they earn their place. Default to fewer.
+- Explain WHY (intent, non-obvious constraint, workaround), never WHAT the code already says.
+- No comment if the code is self-evident. Don't narrate obvious lines or restate names.
+- Keep them short: one line where possible. No multi-line essays, no banners, no decoration.
+- No redundant, filler, TODO-noise, or commented-out code left behind.
+- Match the surrounding file's existing comment style and density.
+- A good comment is one a competent reader couldn't infer from the code in a few seconds.
+
 # Browser Testing (MCP)
 - **Playwright MCP** (`npx @playwright/mcp@latest`) is the primary E2E testing tool — use it to drive the browser: navigate, click, fill forms, assert behavior, generate test files. Headless by default; pass `--headed` for visual debugging.
 - **Chrome DevTools MCP** (already configured) is for observing/debugging: console errors, network requests, performance, Core Web Vitals/LCP. The `/verify`, `/debug-optimize-lcp`, and `/a11y-debugging` skills use it.

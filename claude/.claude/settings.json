@@ -127,7 +127,8 @@
     "superpowers@claude-plugins-official": false,
     "superpowers@superpowers-marketplace": false,
     "typescript-lsp@claude-plugins-official": true,
-    "vercel@claude-plugins-official": true
+    "vercel@claude-plugins-official": true,
+    "stripe@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "everything-claude-code-marketplace": {
