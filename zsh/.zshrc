@@ -248,41 +248,119 @@ fi
 # opencode
 export PATH=/Users/hassanjan/.opencode/bin:$PATH
 
-# killdev — kill ONLY local JS dev servers (next/vite/bun/pnpm/npm/yarn dev).
-# Two sources of candidates, both filtered so we never kill a non-dev process:
-#   1. processes on common dev ports — kept only if their command is a JS/dev runtime
-#   2. processes matched by dev command name — regardless of port
-# A Java/Python/php/Grafana service on 8080/8000/9000 is left untouched.
+# killdev — free the current project's dev ports, and touch nothing else.
+# Candidates: listeners on common dev ports + known dev-runtime command lines.
+# They are then filtered by process cwd, so a dev server in another checkout
+# survives. Kills the process group, otherwise children (concurrently -> vite,
+# tsx) outlive the parent and keep holding the port.
+#   killdev          scope to the current repo (git toplevel of $PWD)
+#   killdev <path>   scope to <path>
+#   killdev --dry    list what would be killed
+#   killdev --all    machine-wide sweep, vetted by command line only
 killdev() {
-  local ports=(3000 3001 3002 3003 4000 4173 5173 5174 8000 8080 8081 9000)
-  # what counts as a "dev runtime" — used to vet port-based hits
-  local dev_re='(^|/)(node|bun|deno)( |$)|next(-server)?|vite|webpack|nodemon|react-scripts|astro|nuxt|remix|gatsby|(npm|pnpm|yarn|turbo)( |$)'
-  local kept=""
+  emulate -L zsh
+  local all=0 dry=0 root="" arg
+  for arg in "$@"; do
+    case $arg in
+      -a|--all)           all=1 ;;
+      -n|--dry|--dry-run) dry=1 ;;
+      -h|--help) print -r -- "usage: killdev [--all] [--dry] [path]"; return 0 ;;
+      -*) print -ru2 -- "killdev: unknown flag: $arg"; return 2 ;;
+      *)  root=$arg ;;
+    esac
+  done
 
-  # 1) port-based, vetted by command line
-  local p pid cmd
+  local -a ports=(3000 3001 3002 3003 4000 4173 5173 5174 8000 8080 8081 9000)
+  local dev_re='(^|[/ ])(next|next-server|vite|webpack|nodemon|astro|nuxt|remix|gatsby|react-scripts|concurrently|tsx|turbo)( |$)|(^|[/ ])(npm|pnpm|yarn|bun) (run )?dev( |$)'
+  local run_re='(^|/)(node|bun|deno)( |$)'
+
+  if (( ! all )); then
+    [[ -z $root ]] && root=$(command git rev-parse --show-toplevel 2>/dev/null)
+    [[ -z $root ]] && root=$PWD
+    root=${root:A}
+    [[ -d $root ]] || { print -ru2 -- "killdev: not a directory: $root"; return 1 }
+    if [[ $root == / || $root == $HOME ]]; then
+      print -ru2 -- "killdev: refusing to sweep $root — cd into a project, or use --all"
+      return 1
+    fi
+  fi
+
+  # our own shell and its ancestors are never candidates
+  local -aU safe; local a=$$
+  while [[ -n $a && $a != 0 && $a != 1 ]]; do
+    safe+=$a; a=$(ps -p $a -o ppid= 2>/dev/null | tr -d ' ')
+  done
+
+  local -aU cand
+  local p pid cmd cwd
   for p in $ports; do
-    for pid in $(lsof -ti tcp:$p 2>/dev/null); do
-      cmd=$(ps -p $pid -o command= 2>/dev/null)
-      if [[ "$cmd" =~ $dev_re ]]; then
-        kept="$kept $pid"
-      fi
+    for pid in ${(f)"$(lsof -ti tcp:$p -sTCP:LISTEN 2>/dev/null)"}; do
+      [[ -n $pid ]] && cand+=$pid
+    done
+  done
+  for pid in ${(f)"$(pgrep -f "$dev_re" 2>/dev/null)"}; do
+    [[ -n $pid ]] && cand+=$pid
+  done
+
+  local -aU keep
+  for pid in $cand; do
+    (( ${safe[(I)$pid]} )) && continue
+    cmd=$(ps -p $pid -o command= 2>/dev/null)
+    [[ -n $cmd ]] || continue
+    if (( all )); then
+      [[ $cmd =~ $dev_re || $cmd =~ $run_re ]] && keep+=$pid
+    else
+      cwd=$(lsof -a -p $pid -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | tail -1)
+      [[ -n $cwd && ( $cwd == $root || $cwd == $root/* ) ]] && keep+=$pid
+    fi
+  done
+
+  if (( ! ${#keep} )); then
+    print -- "✓ no dev servers${root:+ in ${root/#$HOME/~}}"
+    return 0
+  fi
+
+  print -- "killdev → ${root:-machine-wide}"
+  for pid in $keep; do
+    printf '  %-7s %s\n' $pid "$(ps -p $pid -o command= 2>/dev/null | cut -c1-90)"
+  done
+  (( dry )) && return 0
+
+  local mypgid=$(ps -p $$ -o pgid= | tr -d ' ')
+  local -aU groups; local g
+  for pid in $keep; do
+    g=$(ps -p $pid -o pgid= 2>/dev/null | tr -d ' ')
+    [[ -n $g && $g != $mypgid && $g != 0 && $g != 1 ]] && groups+=$g
+  done
+
+  local sig i; local -a alive
+  for sig in TERM KILL; do
+    alive=(); for pid in $keep; do kill -0 $pid 2>/dev/null && alive+=$pid; done
+    (( ${#alive} )) || break
+    for g in $groups; do command kill -$sig -- -$g 2>/dev/null; done
+    for pid in $alive; do command kill -$sig $pid 2>/dev/null; done
+    for i in {1..20}; do
+      alive=(); for pid in $keep; do kill -0 $pid 2>/dev/null && alive+=$pid; done
+      (( ${#alive} )) || break
+      sleep 0.25
     done
   done
 
-  # 2) name-based, any port (already unambiguous dev processes)
-  kept="$kept $(pgrep -f 'next dev|next-server|vite|nodemon|webpack serve|react-scripts start|astro dev|nuxt dev|(npm|pnpm|yarn|bun) (run )?dev' 2>/dev/null)"
-
-  kept=$(echo "$kept" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -u)
-  if [[ -z "$kept" ]]; then
-    echo "✓ No dev servers running"
-    return 0
-  fi
-  echo "Killing dev servers:"
-  local k
-  for k in ${(f)kept}; do
-    echo "  PID $k  $(ps -p $k -o command= 2>/dev/null | cut -c1-80)"
+  local -aU busy
+  for p in $ports; do
+    for pid in ${(f)"$(lsof -ti tcp:$p -sTCP:LISTEN 2>/dev/null)"}; do
+      [[ -n $pid ]] || continue
+      if (( all )); then
+        busy+=$p
+      else
+        cwd=$(lsof -a -p $pid -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | tail -1)
+        [[ -n $cwd && ( $cwd == $root || $cwd == $root/* ) ]] && busy+=$p
+      fi
+    done
   done
-  echo "$kept" | xargs kill -9 2>/dev/null
-  echo "✓ Done"
+  if (( ${#busy} )); then
+    print -ru2 -- "⚠ still bound: $busy"
+    return 1
+  fi
+  print -- "✓ killed ${#keep} process(es); ports clear"
 }
