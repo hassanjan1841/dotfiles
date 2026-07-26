@@ -253,20 +253,21 @@ export PATH=/Users/hassanjan/.opencode/bin:$PATH
 # They are then filtered by process cwd, so a dev server in another checkout
 # survives. Kills the process group, otherwise children (concurrently -> vite,
 # tsx) outlive the parent and keep holding the port.
-#   killdev          scope to the current repo (git toplevel of $PWD)
-#   killdev <path>   scope to <path>
+#   killdev          kill every dev project on the machine
+#   killdev --here   only the current repo (git toplevel of $PWD)
+#   killdev <path>   only processes working under <path>
 #   killdev --dry    list what would be killed
-#   killdev --all    machine-wide sweep, vetted by command line only
 killdev() {
   emulate -L zsh
-  local all=0 dry=0 root="" arg
+  local all=1 dry=0 root="" arg
   for arg in "$@"; do
     case $arg in
-      -a|--all)           all=1 ;;
-      -n|--dry|--dry-run) dry=1 ;;
-      -h|--help) print -r -- "usage: killdev [--all] [--dry] [path]"; return 0 ;;
+      -a|--all)                all=1 ;;
+      -p|--here|--project)     all=0 ;;
+      -n|--dry|--dry-run)      dry=1 ;;
+      -h|--help) print -r -- "usage: killdev [--here] [--dry] [path]"; return 0 ;;
       -*) print -ru2 -- "killdev: unknown flag: $arg"; return 2 ;;
-      *)  root=$arg ;;
+      *)  root=$arg; all=0 ;;
     esac
   done
 
