@@ -32,7 +32,6 @@
       "Bash(jq *)"
     ]
   },
-  "model": "opus",
   "hooks": {
     "PostToolUse": [
       {
@@ -151,6 +150,7 @@
     }
   },
   "alwaysThinkingEnabled": true,
+  "effortLevel": "high",
   "voice": {
     "enabled": true,
     "mode": "hold"
