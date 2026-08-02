@@ -321,6 +321,75 @@ func axTree(_ root: AXUIElement, limit: Int = 4000, maxDepth: Int = 24) -> [Seen
     return out
 }
 
+/// Sheets and dialogs are what actually break an unattended run: they steal focus,
+/// they sit on top of the thing you were about to click, and nothing about sending a
+/// click reveals that one appeared.
+func frontDialog() -> (title: String, buttons: [(String, CGRect)])? {
+    guard let root = axRoot(nil) else { return nil }
+
+    // A sheet is a child element with role AXSheet, not an attribute on the window.
+    // Scanning the tree also catches dialog windows and alerts in one pass.
+    let tree = axTree(root, limit: 2000)
+    guard let panel = tree.first(where: {
+        $0.role == "AXSheet" || $0.subrole == "AXDialog" || $0.subrole == "AXSystemDialog"
+    }) else { return nil }
+
+    // Buttons belonging to the panel are the ones sitting inside its rectangle.
+    let buttons = tree.compactMap { seen -> (String, CGRect)? in
+        guard seen.role == "AXButton", !seen.label.isEmpty,
+              panel.rect.insetBy(dx: -4, dy: -4).contains(CGPoint(x: seen.rect.midX, y: seen.rect.midY))
+        else { return nil }
+        return (seen.label, seen.rect)
+    }
+    let title = tree.first(where: {
+        $0.role == "AXStaticText" && !$0.label.isEmpty
+            && panel.rect.contains(CGPoint(x: $0.rect.midX, y: $0.rect.midY))
+    })?.label ?? panel.name
+    return (title, buttons)
+}
+
+/// A hash of what the app publishes: every element's role, label and rectangle. This
+/// is the honest way to ask "did anything change": exact, instant, and blind to
+/// blinking carets, because a caret is not in the tree. Pixels are the fallback for
+/// apps that publish nothing.
+/// Some apps publish a tree but none of their content: a terminal drawing on the GPU
+/// still exposes its menu bar and window. Trusting that tree means never seeing the
+/// thing you care about, so the tree is only used when it carries text inside the
+/// window itself.
+func treeCarriesContent(_ tree: [Seen], window: CGRect?) -> Bool {
+    guard let window = window else { return false }
+    let textRoles: Set<String> = ["AXTextArea", "AXTextField", "AXStaticText", "AXCell", "AXRow"]
+    return tree.contains { seen in
+        textRoles.contains(seen.role) && !seen.label.isEmpty
+            && window.insetBy(dx: -2, dy: -2).contains(CGPoint(x: seen.rect.midX, y: seen.rect.midY))
+    }
+}
+
+func axStateHash(_ app: String?) -> UInt64? {
+    guard let root = axRoot(app) else { return nil }
+    let tree = axTree(root, limit: 3000)
+    guard tree.count > 2, treeCarriesContent(tree, window: frontWindowRect()) else { return nil }
+    var h: UInt64 = 0xcbf2_9ce4_8422_2325
+    func mix(_ v: UInt64) { h = (h ^ v) &* 0x0000_0100_0000_01b3 }
+    for seen in tree {
+        for b in seen.role.utf8 { mix(UInt64(b)) }
+        for b in seen.label.utf8 { mix(UInt64(b)) }
+        mix(UInt64(bitPattern: Int64(Int(seen.rect.minX))))
+        mix(UInt64(bitPattern: Int64(Int(seen.rect.minY))))
+        mix(UInt64(bitPattern: Int64(Int(seen.rect.width))))
+        mix(UInt64(bitPattern: Int64(Int(seen.rect.height))))
+    }
+    return h
+}
+
+/// What is in the field that has keyboard focus right now.
+func focusedValue(_ app: String?) -> String? {
+    guard let root = axRoot(app),
+          let el = axValue(root, kAXFocusedUIElementAttribute as String),
+          CFGetTypeID(el) == AXUIElementGetTypeID() else { return nil }
+    return axText(el as! AXUIElement, kAXValueAttribute as String)
+}
+
 /// The frontmost window's rectangle, so verification does not need hand-measured
 /// coordinates. Falls back to the whole screen when no window can be found.
 func frontWindowRect() -> CGRect? {
@@ -1491,6 +1560,9 @@ human - drive macOS the way a person does, and read the screen three ways
     human read [--region x,y,w,h] [--fast]  read the screen with OCR
     human pane list|read <id>|send <id> "text" [--enter]|waitfor <id> "pattern"
     human waitfor "Done" [--gone] [--timeout 20]
+    human dialog check|dismiss [--button "Don't Save"]
+                                    report or clear a sheet sitting on top
+    human state [--app X]           fingerprint of what an app publishes, for change checks
     human changed [x,y,w,h] [--timeout 3]   wait until a region, or the front window, repaints
 
   act
@@ -1501,7 +1573,7 @@ human - drive macOS the way a person does, and read the screen three ways
     human click <x y | "name"> [--right --middle --double --triple --precise --hold s]
     human drag <x1> <y1> <x2> <y2> [--precise]
     human scroll <amount> [x y] [--horizontal]     negative scrolls down
-    human type "text" [--wpm 70] [--accuracy clean|human|raw] [--keys]
+    human type "text" [--wpm 70] [--accuracy clean|human|raw] [--keys] [--verify]
     human key <chord> [--repeat N] [--hold s]      e.g. cmd+a, shift+right
     human open <AppName> / human wait <seconds>
     human idle [--minutes N] [--no-yield]
@@ -1510,7 +1582,7 @@ human - drive macOS the way a person does, and read the screen three ways
   keep it safe
     --require <AppName>             refuse to act unless that app is frontmost
     --dry                           rehearse, touch nothing
-    --expect-change [x,y,w,h] | --expect "text" [--retry N]
+    --expect-change [x,y,w,h] | --expect "text" [--retry N] [--recover]
                                     region defaults to the frontmost window
                                     prove the action landed, repeat it if not
     human stop / human go           set or clear the abort flag
@@ -1537,9 +1609,12 @@ argv.removeFirst()
 /// An action that cannot tell whether it worked is a guess. Anything can be asked to
 /// prove its effect, and to try again when it cannot.
 func verify(against before: Baseline?, region: CGRect?, expectText: String?,
-            app: String?, timeout: Double) -> Bool {
+            app: String?, timeout: Double, axBefore: UInt64? = nil) -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
+        // The tree first: exact, instant, and a caret is not in it. Pixels only when
+        // the app publishes nothing worth reading.
+        if let start = axBefore, let now = axStateHash(app), now != start { return true }
         if let region = region, let start = before {
             if let now = signature(region), start.changed(now) {
                 nap(0.35)
@@ -1686,6 +1761,51 @@ func execute(_ cmd: String, _ rest: [String]) {
         default:
             FileHandle.standardError.write("human: window where|move|place|resize\n".data(using: .utf8)!); exit(2)
         }
+
+    case "dialog":
+        let sub = argv.first ?? "check"
+        if !argv.isEmpty && !argv[0].hasPrefix("--") { argv.removeFirst() }
+        guard let found = frontDialog() else {
+            if sub == "check" { print("none") }
+            exit(sub == "check" ? 1 : 0)      // nothing to dismiss is not a failure
+        }
+        switch sub {
+        case "check":
+            print("\(found.title)")
+            for (label, rect) in found.buttons {
+                print("  \(Int(rect.midX)),\(Int(rect.midY))\t\(label)")
+            }
+        case "dismiss":
+            let wanted = takeValue("--button")
+            if let wanted = wanted,
+               let hit = found.buttons.first(where: { $0.0.localizedCaseInsensitiveContains(wanted) }) {
+                click(at: CGPoint(x: hit.1.midX, y: hit.1.midY))
+                print("clicked \(hit.0)")
+            } else if wanted == nil, let safe = found.buttons.first(where: {
+                ["cancel", "don't save", "dont save", "later", "not now", "close"]
+                    .contains($0.0.lowercased())
+            }) {
+                // Prefer the choice that changes nothing. Never press the one that
+                // commits: a dialog appeared because something unexpected happened.
+                click(at: CGPoint(x: safe.1.midX, y: safe.1.midY))
+                print("clicked \(safe.0)")
+            } else {
+                pressKey("escape", extra: [])
+                print("pressed escape")
+            }
+        default:
+            FileHandle.standardError.write("human: dialog check|dismiss [--button X]\n".data(using: .utf8)!)
+            exit(2)
+        }
+
+    case "state":
+        // A cheap fingerprint of what the app publishes, for scripts that want to ask
+        // "has anything changed" without touching pixels.
+        guard let h = axStateHash(takeValue("--app")) else {
+            FileHandle.standardError.write("human: that app publishes no usable tree\n".data(using: .utf8)!)
+            exit(1)
+        }
+        print(h)
 
     case "changed":
         // With no region given, watch the window in front. Hand-measured coordinates
@@ -1888,6 +2008,7 @@ func execute(_ cmd: String, _ rest: [String]) {
         }
         if takeFlag("--keys") { typeWithKeycodes = true }
         if let style = takeValue("--style") { typingStyle = style }
+        let readBack = takeFlag("--verify")
         let repeatArg = takeValue("--repeat")
         let text = argv.joined(separator: " ").replacingOccurrences(of: "\\n", with: "\n")
         guard !text.isEmpty else { exit(0) }
@@ -1909,6 +2030,25 @@ func execute(_ cmd: String, _ rest: [String]) {
             if dry { dryBuffer = "" }
             typeText(text, wpm: wpm, accuracy: accuracy)
             dryBuffer = nil
+            // Reading the field back is the only way to know the text really landed.
+            // Autocorrect can rewrite a word while a correction is still in flight, and
+            // nothing about sending the keystrokes reveals that.
+            if readBack && !dry {
+                nap(Double.random(in: 0.2...0.45))
+                guard let got = focusedValue(requiredApp) else {
+                    FileHandle.standardError.write(
+                        "human: typed, but the field publishes no value to check\n".data(using: .utf8)!)
+                    exit(9)
+                }
+                // Case-insensitive, because apps capitalise the first letter of a
+                // sentence themselves. A dropped or wrong letter still fails.
+                if got.range(of: text, options: .caseInsensitive) == nil {
+                    FileHandle.standardError.write(
+                        "human: typed text did not land. wanted \"\(text)\", field holds \"\(got.suffix(120))\"\n"
+                            .data(using: .utf8)!)
+                    exit(9)
+                }
+            }
         }
 
     case "key":
@@ -2005,6 +2145,7 @@ func executeChecked(_ cmd: String, _ rest: [String]) {
     var expectText: String?
     var retries = 0
     var timeout = 4.0
+    var recover = false
 
     // Pulled out before the action sees them, and kept for every retry.
     if let i = rest.firstIndex(of: "--expect-change") {
@@ -2026,17 +2167,30 @@ func executeChecked(_ cmd: String, _ rest: [String]) {
     if let i = rest.firstIndex(of: "--expect-timeout"), i + 1 < rest.count {
         timeout = Double(rest[i + 1]) ?? 4; rest.removeSubrange(i...(i + 1))
     }
+    if let i = rest.firstIndex(of: "--recover") { recover = true; rest.remove(at: i) }
 
     guard expectChange != nil || expectText != nil else { execute(cmd, rest); return }
 
     let app = rest.firstIndex(of: "--app").map { rest[$0 + 1] }
     for attempt in 0...retries {
-        // The baseline has to be taken before the action, or it records the result and
-        // then waits for a change that already happened.
-        let before = expectChange.flatMap { baseline($0) }
+        // Clear the way before acting, not only after failing. A sheet on top does not
+        // block input, it absorbs it: keystrokes meant for the document land in the
+        // save panel's filename field, and the screen changes, so the action even
+        // looks like it worked.
+        if recover, let blocking = frontDialog() {
+            FileHandle.standardError.write(
+                "human: '\(blocking.title)' is in the way, clearing it first\n".data(using: .utf8)!)
+            execute("dialog", ["dismiss"])
+            nap(Double.random(in: 0.4...0.9))
+        }
+        // Taken before the action, or it records the result and then waits for a change
+        // that already happened. The tree is free, so it is always sampled; the pixel
+        // baseline costs seconds and is only paid for when there is no tree.
+        let axBefore = expectChange != nil ? axStateHash(app) : nil
+        let before = (expectChange != nil && axBefore == nil) ? expectChange.flatMap { baseline($0) } : nil
         execute(cmd, rest)
         if verify(against: before, region: expectChange, expectText: expectText,
-                  app: app, timeout: timeout) { return }
+                  app: app, timeout: timeout, axBefore: axBefore) { return }
         if attempt < retries {
             FileHandle.standardError.write("human: no effect, trying again\n".data(using: .utf8)!)
             nap(Double.random(in: 0.4...1.1))      // a person pauses before repeating
