@@ -215,6 +215,26 @@ A tweened curve reads as animation no matter how pretty the easing is.
 - **`--next x,y`** starts the pointer drifting toward the next target after a click,
   the way a hand leads into what it is about to do.
 
+## Record once, replay forever
+
+No model, no API, no cost. Do the thing by hand while it watches, and it writes the
+script for you:
+
+```bash
+human record -o reconcile.human      # do the work; hold ctrl+opt+cmd to stop
+human plan reconcile.human           # read back what it captured
+human run reconcile.human --confirm
+```
+
+It captures clicks, double and right clicks, drags, typing, key chords, scrolling, app
+switches, and the pauses you took. Verified end to end: a recorded session replayed
+and produced the same result.
+
+Recording needs Input Monitoring (`human check` reports it). Replay is not a pixel
+re-enactment — the recorded steps run through the same human motion model, verification
+and safety gates as a hand-written script, so you can add `--require` or `--expect` to
+any line afterwards.
+
 ## Describing a task instead of writing the steps
 
 `human-do` is the piece that decides. It looks at what is on screen, works out the

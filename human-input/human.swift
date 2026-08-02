@@ -1573,6 +1573,187 @@ func runIdle(minutes: Double, verbose: Bool, yield: Bool) {
 }
 
 // ============================================================================
+// Recording
+//
+// Watch real input and write it out as a script. This is the half of the tool that
+// needs no model at all: do the thing once by hand, replay it forever.
+// ============================================================================
+
+var recorded: [String] = []
+var recordLastAt = Date()
+var typeBuffer = ""
+var pressedAt: CGPoint?
+var scrollAccum = 0
+var recordLastApp = ""
+var recordDeadline = Date.distantFuture
+
+let namesByCode: [CGKeyCode: String] = {
+    var out: [CGKeyCode: String] = [:]
+    for (name, code) in keyCodes where out[code] == nil { out[code] = name }
+    return out
+}()
+
+func flushTyping() {
+    guard !typeBuffer.isEmpty else { return }
+    recorded.append("type \"\(typeBuffer.replacingOccurrences(of: "\"", with: ""))\"")
+    typeBuffer = ""
+}
+
+func flushScroll() {
+    guard scrollAccum != 0 else { return }
+    let at = cursor()
+    recorded.append("scroll \(scrollAccum) \(Int(at.x)) \(Int(at.y))")
+    scrollAccum = 0
+}
+
+/// A pause you took is part of what you did, so it is recorded too.
+func noteGap() {
+    let gap = Date().timeIntervalSince(recordLastAt)
+    recordLastAt = Date()
+    if gap > 1.5 {
+        flushTyping()
+        flushScroll()
+        recorded.append(String(format: "wait %.0f", min(gap, 30)))
+    }
+}
+
+func noteApp() {
+    let app = frontmostApp()
+    guard !app.isEmpty, app != recordLastApp else { return }
+    flushTyping()
+    flushScroll()
+    recorded.append("focus \(app)")
+    recordLastApp = app
+}
+
+func chordName(_ flags: CGEventFlags, _ key: String) -> String {
+    var parts: [String] = []
+    if flags.contains(.maskControl) { parts.append("ctrl") }
+    if flags.contains(.maskAlternate) { parts.append("opt") }
+    if flags.contains(.maskShift) { parts.append("shift") }
+    if flags.contains(.maskCommand) { parts.append("cmd") }
+    parts.append(key)
+    return parts.joined(separator: "+")
+}
+
+let recordTap: CGEventTapCallBack = { _, type, event, _ in
+    let passthrough = Unmanaged.passUnretained(event)
+    let flags = event.flags
+    // The same combination that aborts a run also ends a recording.
+    if flags.contains([.maskControl, .maskAlternate, .maskCommand]) {
+        CFRunLoopStop(CFRunLoopGetCurrent())
+        return passthrough
+    }
+
+    switch type {
+    case .keyDown:
+        noteGap()
+        noteApp()
+        let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+        let modified = flags.contains(.maskCommand) || flags.contains(.maskControl)
+            || flags.contains(.maskAlternate)
+        let named = namesByCode[code]
+        let isText = !modified && ![36, 48, 53, 51, 123, 124, 125, 126].contains(Int(code))
+
+        if isText {
+            var length = 0
+            var chars = [UniChar](repeating: 0, count: 8)
+            event.keyboardGetUnicodeString(maxStringLength: 8, actualStringLength: &length,
+                                           unicodeString: &chars)
+            if length > 0 {
+                typeBuffer += String(utf16CodeUnits: chars, count: length)
+            }
+        } else if let name = named {
+            flushTyping()
+            flushScroll()
+            recorded.append("key \(chordName(flags, name))")
+        }
+
+    case .leftMouseDown, .rightMouseDown:
+        noteGap()
+        noteApp()
+        flushTyping()
+        flushScroll()
+        pressedAt = event.location
+
+    case .leftMouseUp, .rightMouseUp:
+        let up = event.location
+        let down = pressedAt ?? up
+        pressedAt = nil
+        let right = (type == .rightMouseUp)
+        // A press and release far apart is a drag, not a click.
+        if dist(down, up) > 8 {
+            recorded.append("drag \(Int(down.x)) \(Int(down.y)) \(Int(up.x)) \(Int(up.y))")
+        } else {
+            let clicks = event.getIntegerValueField(.mouseEventClickState)
+            var line = "click \(Int(up.x)) \(Int(up.y))"
+            if right { line += " --right" }
+            if clicks == 2 { line += " --double" }
+            if clicks >= 3 { line += " --triple" }
+            recorded.append(line)
+        }
+        recordLastAt = Date()
+
+    case .scrollWheel:
+        noteApp()
+        scrollAccum += Int(event.getIntegerValueField(.scrollWheelEventDeltaAxis1)) * 10
+        recordLastAt = Date()
+
+    default:
+        break
+    }
+    return passthrough
+}
+
+func recordSession(seconds: Double, into path: String?) {
+    let mask = (1 << CGEventType.keyDown.rawValue)
+        | (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.leftMouseUp.rawValue)
+        | (1 << CGEventType.rightMouseDown.rawValue) | (1 << CGEventType.rightMouseUp.rawValue)
+        | (1 << CGEventType.scrollWheel.rawValue)
+
+    guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
+                                      options: .listenOnly, eventsOfInterest: CGEventMask(mask),
+                                      callback: recordTap, userInfo: nil) else {
+        FileHandle.standardError.write(
+            "human: cannot listen to input. Grant Input Monitoring in System Settings.\n"
+                .data(using: .utf8)!)
+        exit(3)
+    }
+
+    recordLastApp = frontmostApp()
+    recorded.append("focus \(recordLastApp)")
+    recordLastAt = Date()
+    recordDeadline = seconds > 0 ? Date().addingTimeInterval(seconds) : Date.distantFuture
+
+    let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+    CGEvent.tapEnable(tap: tap, enable: true)
+
+    // A timer, because with no input the callback never runs and the deadline would
+    // never be noticed.
+    let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, Date().timeIntervalSinceReferenceDate,
+                                                0.5, 0, 0) { _ in
+        if Date() >= recordDeadline { CFRunLoopStop(CFRunLoopGetCurrent()) }
+    }
+    CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer, .commonModes)
+
+    FileHandle.standardError.write(
+        "recording. do the thing, then hold control+option+command to stop.\n".data(using: .utf8)!)
+    CFRunLoopRun()
+
+    flushTyping()
+    flushScroll()
+    let script = recorded.joined(separator: "\n") + "\n"
+    if let path = path {
+        try? script.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+        FileHandle.standardError.write(
+            "wrote \(recorded.count) steps to \(path)\n".data(using: .utf8)!)
+    } else {
+        print(script, terminator: "")
+    }
+}
+
+// ============================================================================
 // CLI
 // ============================================================================
 
@@ -1643,6 +1824,8 @@ human - drive macOS the way a person does, and read the screen three ways
     human open <AppName> / human wait <seconds>
     human idle [--minutes N] [--no-yield]
     human plan <file|->             read the steps in plain words, touching nothing
+    human record [--seconds N] [-o file.human]
+                                    watch what you do and write it out as a script
     human run <file|-> [--confirm] [--dry] [--verbose]
                                     --confirm shows the plan and asks before acting
 
@@ -1946,6 +2129,10 @@ func execute(_ cmd: String, _ rest: [String]) {
             FileHandle.standardError.write("human: gesture pinch <amount> | swipe <amount>\n".data(using: .utf8)!)
             exit(2)
         }
+
+    case "record":
+        let seconds = Double(takeValue("--seconds") ?? "") ?? 0
+        recordSession(seconds: seconds, into: takeValue("-o") ?? takeValue("--out"))
 
     case "state":
         // A cheap fingerprint of what the app publishes, for scripts that want to ask
