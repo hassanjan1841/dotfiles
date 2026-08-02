@@ -747,14 +747,47 @@ func releaseModifiers(_ held: CGEventFlags) {
     }
 }
 
+var keyHeld: CGKeyCode?
+
+/// Anything held when the process dies stays held: macOS keeps auto-repeating a key
+/// whose key-up never arrived, and the user is left with a keyboard that types by
+/// itself. Released on every exit path, including a signal.
+func releaseEverythingHeld() {
+    if let code = keyHeld {
+        CGEvent(keyboardEventSource: keySource, virtualKey: code, keyDown: false)?
+            .post(tap: .cghidEventTap)
+        keyHeld = nil
+    }
+    for (flag, code) in modifierKeys
+    where CGEventSource.flagsState(.combinedSessionState).contains(flag) {
+        let e = CGEvent(keyboardEventSource: keySource, virtualKey: code, keyDown: false)
+        e?.type = .flagsChanged
+        e?.flags = []
+        e?.post(tap: .cghidEventTap)
+    }
+    if let (button, at) = buttonHeld {
+        let type: CGEventType = button == .right ? .rightMouseUp
+            : button == .center ? .otherMouseUp : .leftMouseUp
+        CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: at, mouseButton: button)?
+            .post(tap: .cghidEventTap)
+        buttonHeld = nil
+    }
+}
+
 func tapKey(_ code: CGKeyCode, flags: CGEventFlags) {
     let down = CGEvent(keyboardEventSource: keySource, virtualKey: code, keyDown: true)
     let up = CGEvent(keyboardEventSource: keySource, virtualKey: code, keyDown: false)
     down?.flags = flags
     up?.flags = flags
-    if !dry { down?.post(tap: .cghidEventTap) }
+    if !dry {
+        keyHeld = code
+        down?.post(tap: .cghidEventTap)
+    }
     nap(Double.random(in: 0.045...0.11))          // held, not instantaneous
-    if !dry { up?.post(tap: .cghidEventTap) }
+    if !dry {
+        up?.post(tap: .cghidEventTap)
+        keyHeld = nil
+    }
 }
 
 /// "cmd+shift+p" reads the way people say it, and it keeps chords in one argument.
@@ -1205,6 +1238,11 @@ front, so a missing window can never send keystrokes into the wrong place.
 Every action lands with its own small delays, so sequences do not tick like a clock.
 """
 
+atexit { releaseEverythingHeld() }
+for sig in [SIGINT, SIGTERM, SIGHUP] {
+    signal(sig) { _ in releaseEverythingHeld(); exit(130) }
+}
+
 guard let cmd = argv.first else { print(usage); exit(0) }
 argv.removeFirst()
 
@@ -1227,6 +1265,11 @@ func execute(_ cmd: String, _ rest: [String]) {
         let listening = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
         print("input monitoring: \(listening ? "granted" : "not granted - only needed to listen, not to send")")
         print("secure input:     \(IsSecureEventInputEnabled() ? "ON - something has a password field focused, keystrokes are blocked" : "off")")
+        // Reported from the hardware's own view, so a key stuck here is the keyboard
+        // itself, not anything this tool posted.
+        let stuckKeys = (CGKeyCode(0)...CGKeyCode(127))
+            .filter { CGEventSource.keyState(.hidSystemState, key: $0) }
+        print("keys held (hardware): \(stuckKeys.isEmpty ? "none" : stuckKeys.map(String.init).joined(separator: ", "))")
         print("screen: \(Int(screen.width))x\(Int(screen.height))")
         print("cursor: \(Int(p.x)),\(Int(p.y))")
 
@@ -1360,6 +1403,15 @@ func execute(_ cmd: String, _ rest: [String]) {
         // An aborted command can leave a modifier or a button down, and everything
         // afterwards behaves strangely for reasons that are invisible.
         var cleared: [String] = []
+        // Every key, not just the ones this tool presses: a key-down without its
+        // key-up leaves macOS auto-repeating forever, whatever put it there.
+        for code in CGKeyCode(0)...CGKeyCode(127)
+        where CGEventSource.keyState(.combinedSessionState, key: code) {
+            CGEvent(keyboardEventSource: keySource, virtualKey: code, keyDown: false)?
+                .post(tap: .cghidEventTap)
+            cleared.append("key \(code)")
+            nap(0.02)
+        }
         for (flag, code) in modifierKeys where CGEventSource.flagsState(.combinedSessionState).contains(flag) {
             let e = CGEvent(keyboardEventSource: keySource, virtualKey: code, keyDown: false)
             e?.type = .flagsChanged
