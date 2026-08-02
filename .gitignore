@@ -12,3 +12,7 @@ taskwarrior/.timewarrior/data/*
 # macOS junk
 .DS_Store
 **/.DS_Store
+
+# human-input: build artefacts, the source is what is tracked
+human-input/human
+human-input/Human.app/

@@ -90,6 +90,9 @@ config.default_cursor_style  = 'BlinkingBar'
 config.cursor_blink_rate     = 500
 config.cursor_blink_ease_in  = 'EaseOut'
 config.cursor_blink_ease_out = 'EaseOut'
+-- Default is true, which hides the mouse pointer on every keystroke until the mouse
+-- moves again. That reads as the pointer flickering in and out.
+config.hide_mouse_cursor_when_typing = false
 
 -- ── Performance ───────────────────────────────────────────────────────────────
 config.front_end              = 'WebGpu'  -- Metal backend on macOS (optimal on Apple Silicon)

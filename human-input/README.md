@@ -1,0 +1,223 @@
+# human
+
+Drives macOS the way a person does. Curved pointer paths, real click dwell, uneven
+keystroke rhythm, and mistakes that get noticed and fixed.
+
+```bash
+./build.sh          # rebuild after editing (links Carbon for the secure input check)
+./make-app.sh       # optional: wrap it in a signed Human.app with its own permissions
+human check         # every permission gate, screen size, cursor
+```
+
+`~/dotfiles/bin/human` symlinks to the built binary and that directory is already on
+PATH, so a fresh clone needs one `./build.sh` and nothing else. The binary and the app
+bundle are gitignored; the source is what is tracked.
+
+## Commands
+
+```
+human check                       permissions, screen size, cursor position
+human where / human front         cursor position, name of the frontmost app
+human see [--app X] [--role R]    list what it can see, with coordinates
+human find "Save" [--app X]       coordinates of a named thing, exit 1 if not there
+human waitfor "Done" [--gone]     wait until something appears or goes away
+human focus <AppName>             bring an app forward and wait until it really is
+human move <x> <y>
+human click <x y | "name"> [--right] [--double] [--precise]
+human drag <x1> <y1> <x2> <y2> [--precise]
+human scroll <amount> [x y] [--horizontal]
+human type "text" [--wpm 70] [--accuracy clean|human|raw]
+human key <name> [--cmd --shift --opt --ctrl]
+human open <AppName> / human wait <seconds>
+human idle [--minutes N] [--no-yield] [--verbose]
+human run <file|-> [--verbose] [--dry]
+human selftest                    prove pointer, typing, guard and sight still work
+human stop / human go             set or clear the abort flag
+```
+
+Any command also takes `--dry` to rehearse without touching anything, and
+`--persona <name>` to pin one consistent hand: same speed, same curve bias, same
+error rate every run.
+
+## Seeing, in three tiers
+
+Exact beats recognised, so it goes in this order.
+
+**1. Terminal panes.** WezTerm publishes nothing to accessibility because it draws on
+the GPU, but its own CLI hands over the exact text and writes back without focus or
+synthetic input:
+
+```bash
+human pane list                             # every pane with its id
+human pane read 22                          # exact text of that pane
+human pane send 22 "bun run build" --enter  # writes into it, no keyboard involved
+human pane waitfor 22 "Compiled|error" --timeout 300
+```
+
+This is the right way to drive a terminal. It cannot land in the wrong window, because
+it targets a pane id rather than whatever has focus.
+
+**2. Accessibility tree.** Names rather than coordinates, exact rectangles:
+
+```bash
+human see --app TextEdit          # everything clickable, with coordinates
+human click "Format"              # finds it and clicks it
+human waitfor "Wrap to Page" --timeout 8
+```
+
+**3. Pixels.** For anything that publishes nothing: canvases, games, screen shares,
+terminals. `screencapture` plus Apple's Vision OCR, offline and free, returning text
+with coordinates so it can click what it reads.
+
+```bash
+human read --region 0,0,900,120 --fast   # text and coordinates, about 1s
+human find "bypass permissions" --ocr    # falls back to pixels when the tree is blank
+```
+
+OCR is a fallback by design: `--ocr` only reaches for pixels when the tree cannot
+answer. A full screen read at accurate quality takes about 3s, a small region with
+`--fast` about 1s. Verified against the tree: OCR put the WezTerm menu at 84,14 where
+accessibility said 84,15.
+
+## Stopping it
+
+Hold **control+option+command**, or run `human stop`, and any running action aborts
+within about 50ms. If it was mid-drag it releases the button first rather than
+leaving your mouse stuck down. `human go` clears the flag.
+
+Add `--require <AppName>` to any action and it refuses to fire unless that app is in
+front. Use it. Without it, a missing window means your keystrokes land wherever focus
+happens to be.
+
+## Typing accuracy modes
+
+- `clean` never mistypes.
+- `human` (default) slips and corrects itself. Final text is always exact.
+- `raw` leaves about one slip in six uncorrected, so the final text can differ.
+
+`--keys` presses the actual keys instead of injecting characters. Slower and bound to a
+US layout, but terminals, games and some Electron apps ignore injected unicode.
+
+`--wpm` means net speed, what a typing test would report. Corrections are already
+accounted for, so `--wpm 70` in human mode delivers roughly 70. Single sentences vary
+a lot, between about 50 and 95, because one thinking pause moves the number. That
+spread is the point.
+
+Slips only happen on letters, never on spaces or punctuation, and a correction never
+crosses a space. Both rules exist because macOS rewrites text behind your back:
+two spaces become a period, and autocorrect rewrites a word the moment you leave it.
+
+## What makes it read as a hand
+
+The pointer model matters more than anything else here, and smooth easing is not it.
+A tweened curve reads as animation no matter how pretty the easing is.
+
+- **Submovements, not one sweep.** A fast ballistic throw lands near the target and
+  misses by an amount that grows with the distance thrown, then one or two smaller
+  corrections close the gap. That structure is what a person looks like.
+- **Whole pixels at a real polling rate.** An ordinary mouse reports at 125Hz and only
+  ever in whole pixels, so the interval stays put and the step sizes vary, between 1
+  and 25px on a long throw. Sub-pixel interpolation on a jittery clock is the opposite,
+  and it is the single biggest reason synthetic motion looks animated.
+- **Tremor at 8 to 12Hz**, which is where physiological hand tremor actually sits, with
+  the wrist drifting underneath at 1 to 3Hz. Frequencies in real seconds, not in path
+  progress. Amplitude stays sub-pixel, because a whole pixel of shake at 10Hz is a
+  visible shimmer.
+- **Never sets event deltas.** With an absolute cursor position the system applies
+  pointer acceleration on top of the warp and the cursor visibly fights itself.
+- **Hovering before acting.** Converging on a target and firing instantly is the
+  clearest bot signature there is.
+- **Fitts' law with target width**, and the budget covers the whole movement including
+  its corrections. Spending the full budget on the throw and adding corrections after
+  makes everything about twice as slow as a person, and slow smooth motion is exactly
+  what reads as a camera pan. Measured: 0.84s to cross 1400px, against 0.86s predicted.
+- **Paced to a deadline, not by sleeping.** Asking for an 8ms sleep gets you about 10 on
+  macOS, so pacing by sleep alone stretches every movement by a quarter.
+- **An asymmetric velocity curve.** Aimed movement accelerates hard and spends longer
+  slowing down. A symmetric bell is a tween.
+- **Motor noise on the rate of travel**, smooth and always positive, so the velocity
+  curve has a wobble in it and progress still never goes backwards.
+- Long reaches sometimes stall partway while the eyes catch up.
+- Keystroke gaps are lognormal, not uniform. Alternating hands are faster than one
+  hand, and repeating a finger is slowest.
+- Pause mixture drawn from writing research: word retrieval near 330ms, phrase
+  boundaries near 735ms, occasional planning pauses of a couple of seconds.
+- Error mix from typing corpora: substitution 39%, insertion 33%, omission 18%,
+  transposition 11%.
+
+## Scripts
+
+One command per line, `#` for comments. Quoted text stays one argument.
+
+```
+focus TextEdit
+key a --cmd --require TextEdit
+key delete
+type "Sellerboard reconciliation notes"
+key return
+type "Checked the account daily totals against the dashboard."
+key s --cmd
+```
+
+```bash
+human run notes.human --verbose
+```
+
+## Things that will bite you
+
+- **Scroll acts on whatever is under the pointer.** Pass `x y` to put it over the
+  right view first, or nothing happens and nothing complains.
+- **Accessibility coordinates for a text area inside a scroll view are the whole
+  document**, often thousands of pixels tall. Aim at the scroll area's rect, which is
+  the visible box.
+- **Small targets need `--precise`.** Aim jitter is about 2.5px and a window resize
+  edge is roughly 4px, so a jittered grab misses and nothing resizes.
+- **Only the main display.** Everything is clamped to it, by choice.
+- **Never posts a click of its own accord.** `idle` only moves the pointer.
+- **A vanishing pointer is usually the terminal, not this.** WezTerm defaults
+  `hide_mouse_cursor_when_typing` to true, so the pointer disappears on every keystroke
+  until the mouse moves. Set it to false in `~/.wezterm.lua`.
+
+## Testing without a window
+
+`--dry` models the screen buffer instead of posting events, and adds up the intended
+delays instead of sleeping, so hundreds of runs finish instantly:
+
+```bash
+./human type "some sentence" --dry --repeat 500          # must be exact 500/500
+./human type "some sentence" --dry --repeat 300 --wpm 80  # speed check
+```
+
+## Permissions, all of them
+
+`human check` reports every gate at once. There are four that matter:
+
+- **Accessibility** is the one that counts. It covers sending clicks and keys, and
+  reading the interface. Pointer movement alone needs nothing.
+- **Screen Recording** is only for pixel eyes, capture and OCR. Not needed otherwise.
+- **Input Monitoring** is for *listening* to input, not sending it. Nothing here needs
+  it today; it would matter for a global hotkey listener.
+- **Secure Input** is not a permission you grant, it is a state an app turns on when a
+  password field is focused. While it is on, keystrokes are silently swallowed. Typing
+  refuses with exit 7 rather than sending half a sentence into a void.
+
+Permissions attach to the app that launches this, so a binary run from your terminal
+inherits the terminal's grants. Running it from cron or launchd means granting them
+again for that parent. Bundling it as a signed .app would give it a stable identity of
+its own, which is the proper fix and is not done yet.
+
+## Keyboard
+
+Modifiers are pressed as real `flagsChanged` events, not just flags stamped on a key
+event. That distinction is not cosmetic: it is what makes `cmd+tab` possible at all,
+and what makes shift+click extend a selection, because apps ask the system whether
+shift is down *right now* rather than reading the event.
+
+```bash
+human key cmd+a                    # chords read the way people say them
+human key shift+right --repeat 5   # modifier stays down across all five
+human key cmd+tab                  # holds cmd across the tab press
+human key down --hold 1.5          # holds the key, with real repeat rate
+human click 400 300 --shift        # modifier held across the click
+human click 400 300 --triple       # or --double, --right, --middle, --hold 0.8
+```
