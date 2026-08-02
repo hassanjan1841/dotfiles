@@ -99,6 +99,7 @@ var dry = false
 var buttonHeld: (CGMouseButton, CGPoint)?
 let stopFile = NSHomeDirectory() + "/.human-stop"
 var lastPanicCheck = Date.distantPast
+var terminateRequested: sig_atomic_t = 0
 
 /// Hold control+option+command, or touch ~/.human-stop, and everything stops.
 func panicCheck() {
@@ -118,6 +119,11 @@ func nap(_ seconds: Double) {
     // Rehearsals add up the intended delays instead of living through them, so a run
     // can be checked, and speed calibrated, without touching the machine.
     if dry { dryElapsed += max(0, seconds); return }
+    if terminateRequested != 0 {
+        releaseEverythingHeld()
+        saveFamiliarity()
+        exit(130)
+    }
     panicCheck()
     Thread.sleep(forTimeInterval: max(0, seconds))
 }
@@ -922,7 +928,10 @@ func pressKey(_ spec: String, extra: CGEventFlags, repeats: Int = 1, holdFor: Do
         // Holding a key down, the way you hold an arrow to run a cursor along a line.
         let down = CGEvent(keyboardEventSource: keySource, virtualKey: code, keyDown: true)
         down?.flags = held
-        if !dry { down?.post(tap: .cghidEventTap) }
+        if !dry {
+            keyHeld = code
+            down?.post(tap: .cghidEventTap)
+        }
         nap(0.03)
         var waited = 0.03
         while waited < holdFor {                  // the system repeat rate, roughly
@@ -935,7 +944,10 @@ func pressKey(_ spec: String, extra: CGEventFlags, repeats: Int = 1, holdFor: Do
         }
         let up = CGEvent(keyboardEventSource: keySource, virtualKey: code, keyDown: false)
         up?.flags = held
-        if !dry { up?.post(tap: .cghidEventTap) }
+        if !dry {
+            up?.post(tap: .cghidEventTap)
+            keyHeld = nil
+        }
     } else {
         for n in 0..<max(1, repeats) {
             tapKey(code, flags: held)
@@ -1408,8 +1420,10 @@ Every action carries its own delays, so a sequence never ticks like a clock.
 """
 
 atexit { releaseEverythingHeld(); saveFamiliarity() }
+// A signal handler may not allocate or post events, so it only raises a flag and the
+// cleanup happens in normal context, at the next pause.
 for sig in [SIGINT, SIGTERM, SIGHUP] {
-    signal(sig) { _ in releaseEverythingHeld(); exit(130) }
+    signal(sig) { _ in terminateRequested = 1 }
 }
 
 guard let cmd = argv.first else { print(usage); exit(0) }
@@ -1785,11 +1799,18 @@ func execute(_ cmd: String, _ rest: [String]) {
         check("accessibility granted", trusted)
         check("no stop flag set", !FileManager.default.fileExists(atPath: stopFile))
 
+        // Retried, because a hand on the mouse mid-test looks exactly like a failure
+        // and this check is about the tool's aim, not the user's.
         var worst = 0.0
         for t in [CGPoint(x: 260, y: 220), CGPoint(x: screen.maxX - 180, y: screen.maxY - 160),
                   CGPoint(x: screen.midX, y: screen.midY)] {
-            moveTo(t)
-            worst = max(worst, dist(cursor(), t))
+            var best = Double.infinity
+            for _ in 0..<3 {
+                moveTo(t)
+                best = min(best, dist(cursor(), t))
+                if best < 5 { break }
+            }
+            worst = max(worst, best)
         }
         // It lands inside the target, not on a chosen pixel: the last couple of pixels
         // are left to the settle, because a hand does not spend a submovement on them.
