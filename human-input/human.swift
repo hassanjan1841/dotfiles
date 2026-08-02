@@ -49,19 +49,70 @@ func personaTraits(_ name: String) -> Traits {
 
 let startedAt = Date()
 
+/// Every action, appended, so an unattended run can be read afterwards. Without this a
+/// long run is a black box: you know what you asked for and not what happened.
+let auditPath = NSHomeDirectory() + "/Library/Logs/human-input.log"
+
+func audit(_ line: String) {
+    guard !dry else { return }
+    let stamp = ISO8601DateFormatter().string(from: Date())
+    let entry = "\(stamp) \(line)\n"
+    let url = URL(fileURLWithPath: auditPath)
+    try? FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    if let handle = FileHandle(forWritingAtPath: auditPath) {
+        handle.seekToEndOfFile()
+        handle.write(entry.data(using: .utf8)!)
+        try? handle.close()
+    } else {
+        try? entry.write(to: url, atomically: true, encoding: .utf8)
+    }
+}
+
 /// A session has a shape: a slow start while you settle in, a long steady middle, then
 /// a gradual slide as you tire. Returned as a time multiplier, so above 1 is slower.
 func drift() -> Double {
-    let mins = Date().timeIntervalSince(startedAt) / 60
-    if mins < 2 { return 1.10 - 0.05 * (mins / 2) }     // warming up
-    if mins < 15 { return 1.0 }
-    return min(1.0 + (mins - 15) * 0.005, 1.18)         // tiring
+    let worked = Double(session.actions)
+    if worked < 8 { return 1.10 - 0.05 * (worked / 8) }        // still warming up
+    if worked < 150 { return 1.0 }
+    return min(1.0 + (worked - 150) * 0.0006, 1.18)            // tiring
 }
 
-/// Tiredness costs accuracy as well as speed.
+/// Work done, not just time passed. Each command is its own process, so the count is
+/// kept on disk and reset when there has been a real gap: an hour of steady clicking
+/// tires a person, an hour of sitting there does not.
+struct Session {
+    var actions: Int
+    var lastAt: Date
+}
+
+func loadSession() -> Session {
+    let path = NSHomeDirectory() + "/Library/Caches/human-input/session.json"
+    guard let d = FileManager.default.contents(atPath: path),
+          let j = try? JSONSerialization.jsonObject(with: d) as? [String: Double],
+          let n = j["actions"], let at = j["lastAt"] else { return Session(actions: 0, lastAt: Date()) }
+    let last = Date(timeIntervalSince1970: at)
+    // A gap of ten minutes means they got up. Start fresh.
+    if Date().timeIntervalSince(last) > 600 { return Session(actions: 0, lastAt: Date()) }
+    return Session(actions: Int(n), lastAt: last)
+}
+
+var session = loadSession()
+
+func saveSession() {
+    let dir = NSHomeDirectory() + "/Library/Caches/human-input"
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    let blob: [String: Double] = ["actions": Double(session.actions),
+                                  "lastAt": Date().timeIntervalSince1970]
+    if let raw = try? JSONSerialization.data(withJSONObject: blob) {
+        try? raw.write(to: URL(fileURLWithPath: dir + "/session.json"))
+    }
+}
+
+/// Tiredness costs accuracy as well as speed, and it comes from doing things.
 func fatigueErrorScale() -> Double {
-    let mins = Date().timeIntervalSince(startedAt) / 60
-    return mins < 15 ? 1.0 : min(1 + (mins - 15) * 0.012, 1.45)
+    let worked = Double(session.actions)
+    return worked < 120 ? 1.0 : min(1 + (worked - 120) * 0.0015, 1.45)
 }
 
 var device = "mouse"
@@ -628,6 +679,18 @@ func fingerprint(_ region: CGRect) -> UInt64? {
 func cacheFile(_ name: String) -> String {
     let dir = NSHomeDirectory() + "/Library/Caches/human-input"
     try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    // Bounded, because there is one file per distinct region watched and nothing else
+    // ever removes them. Relying on the habit of watching few regions is not a bound.
+    if let names = try? FileManager.default.contentsOfDirectory(atPath: dir), names.count > 60 {
+        let stale = names.filter { $0.hasPrefix("ocr-") }.compactMap { file -> (String, Date)? in
+            let path = dir + "/" + file
+            let when = (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate]) as? Date
+            return (path, when ?? Date.distantPast)
+        }.sorted { $0.1 < $1.1 }
+        for (path, _) in stale.prefix(max(0, stale.count - 40)) {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+    }
     return dir + "/" + name
 }
 
@@ -1575,6 +1638,8 @@ human - drive macOS the way a person does, and read the screen three ways
     human scroll <amount> [x y] [--horizontal]     negative scrolls down
     human type "text" [--wpm 70] [--accuracy clean|human|raw] [--keys] [--verify]
     human key <chord> [--repeat N] [--hold s]      e.g. cmd+a, shift+right
+    human text select all|line|word|to-end | replace "new" | find "needle"
+    human gesture pinch <amount> | swipe <amount>      attempted, not all apps listen
     human open <AppName> / human wait <seconds>
     human idle [--minutes N] [--no-yield]
     human run <file|-> [--verbose] [--dry]
@@ -1587,6 +1652,7 @@ human - drive macOS the way a person does, and read the screen three ways
                                     prove the action landed, repeat it if not
     human stop / human go           set or clear the abort flag
     human unstick                   release anything left held down
+    every action is appended to ~/Library/Logs/human-input.log
     human selftest                  prove pointer, typing, guard and sight still work
 
   who is typing
@@ -1596,7 +1662,7 @@ human - drive macOS the way a person does, and read the screen three ways
 Every action carries its own delays, so a sequence never ticks like a clock.
 """
 
-atexit { releaseEverythingHeld(); saveFamiliarity() }
+atexit { releaseEverythingHeld(); saveFamiliarity(); saveSession() }
 // A signal handler may not allocate or post events, so it only raises a flag and the
 // cleanup happens in normal context, at the next pause.
 for sig in [SIGINT, SIGTERM, SIGHUP] {
@@ -1631,6 +1697,13 @@ func execute(_ cmd: String, _ rest: [String]) {
     let saved = argv
     argv = rest
     defer { argv = saved }
+    switch cmd {
+    case "check", "where", "front", "see", "find", "read", "state", "dialog", "selftest":
+        break                                   // reads are not worth logging
+    default:
+        session.actions += 1
+        audit("\(cmd) \(rest.joined(separator: " ")) [front: \(frontmostApp())]")
+    }
     if let want = takeValue("--require") { requiredApp = want }
     if takeFlag("--precise") { precise = true }
     if takeFlag("--fallible") { fallible = true }
@@ -1795,6 +1868,76 @@ func execute(_ cmd: String, _ rest: [String]) {
             }
         default:
             FileHandle.standardError.write("human: dialog check|dismiss [--button X]\n".data(using: .utf8)!)
+            exit(2)
+        }
+
+    case "text":
+        let what = argv.first ?? ""
+        if !argv.isEmpty { argv.removeFirst() }
+        switch what {
+        case "select":
+            switch argv.first ?? "all" {
+            case "all": pressKey("cmd+a", extra: [])
+            case "line": pressKey("cmd+left", extra: []); pressKey("shift+cmd+right", extra: [])
+            case "word": click(at: nil, button: .left, times: 2)
+            case "to-end": pressKey("shift+cmd+down", extra: [])
+            default:
+                FileHandle.standardError.write("human: text select all|line|word|to-end\n".data(using: .utf8)!)
+                exit(2)
+            }
+        case "replace":
+            // Whatever is selected is replaced by typing over it, exactly as a person does.
+            let with = argv.dropFirst(0).joined(separator: " ")
+            guard !with.isEmpty else {
+                FileHandle.standardError.write("human: text replace needs the new text\n".data(using: .utf8)!)
+                exit(2)
+            }
+            typeText(with, wpm: traits.wpm, accuracy: .clean)
+        case "find":
+            let needle = argv.joined(separator: " ")
+            guard !needle.isEmpty else {
+                FileHandle.standardError.write("human: text find needs something to look for\n".data(using: .utf8)!)
+                exit(2)
+            }
+            pressKey("cmd+f", extra: [])
+            nap(Double.random(in: 0.3...0.6))
+            typeText(needle, wpm: traits.wpm, accuracy: .clean)
+            pressKey("return", extra: [])
+            nap(Double.random(in: 0.2...0.5))
+            pressKey("escape", extra: [])
+        default:
+            FileHandle.standardError.write("human: text select|replace|find\n".data(using: .utf8)!)
+            exit(2)
+        }
+
+    case "gesture":
+        // Magnify and swipe are not in the public event API. The type numbers are
+        // stable and widely used, but an app is free to ignore them, so this is
+        // attempted rather than promised.
+        let kind = argv.first ?? ""
+        if !argv.isEmpty { argv.removeFirst() }
+        let amount = Double(argv.first ?? "") ?? 1
+        requireTrust("gestures")
+        switch kind {
+        case "pinch", "zoom":
+            let steps = 14
+            for i in 1...steps {
+                guard let e = CGEvent(source: nil) else { break }
+                e.type = CGEventType(rawValue: 29)!          // magnify
+                e.setDoubleValueField(CGEventField(rawValue: 113)!, value: amount / Double(steps))
+                e.location = cursor()
+                e.post(tap: .cghidEventTap)
+                nap(0.012 * Double.random(in: 0.85...1.2))
+                _ = i
+            }
+        case "swipe":
+            guard let e = CGEvent(source: nil) else { break }
+            e.type = CGEventType(rawValue: 31)!              // swipe
+            e.setDoubleValueField(CGEventField(rawValue: 115)!, value: amount)
+            e.location = cursor()
+            e.post(tap: .cghidEventTap)
+        default:
+            FileHandle.standardError.write("human: gesture pinch <amount> | swipe <amount>\n".data(using: .utf8)!)
             exit(2)
         }
 
@@ -1964,7 +2107,11 @@ func execute(_ cmd: String, _ rest: [String]) {
             if hit.rect.width < 12 || hit.rect.height < 12 { precise = true }
             // Off by a hair, notice, correct. Opt-in, because a stray click lands on
             // whatever is actually there.
-            if fallible && Double.random(in: 0...1) < 0.03 {
+            // Fitts again: the smaller the target, the likelier the miss. A flat 3%
+            // chance is decoration; error rate is a property of the target.
+            let smallest = min(hit.rect.width, hit.rect.height)
+            let missChance = min(max(0.02 * (24 / max(smallest, 6)), 0.004), 0.14)
+            if fallible && Double.random(in: 0...1) < missChance {
                 let missX = hit.centre.x + CGFloat(hit.rect.width * Double.random(in: 0.6...0.85))
                 click(at: CGPoint(x: missX, y: hit.centre.y), button: .left, times: 1)
                 nap(Double.random(in: 0.35...0.9))          // the pause of noticing

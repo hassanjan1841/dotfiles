@@ -91,6 +91,30 @@ happens to be.
 
 ## Knowing whether it worked
 
+Verification asks the **app** what it publishes, not the pixels: exact, instant, and
+blind to a blinking caret because a caret is not in the accessibility tree. Pixels are
+the fallback, chosen automatically. An app whose tree carries no text inside its window
+(a terminal drawing on the GPU) gets the pixel path, because trusting its tree would
+mean never seeing the thing you care about.
+
+```bash
+human state                              # fingerprint of what the app publishes
+human type "note" --verify               # read the field back; did the text land
+human click "Save" --expect-change --retry 2 --recover
+human dialog check                       # is a sheet sitting on top
+human dialog dismiss                     # clears it, preferring the safe button
+```
+
+`--verify` on typing exists because sending keystrokes tells you nothing about whether
+they arrived, and autocorrect can rewrite a word while a correction is still in flight.
+Proven: catches the errors `--accuracy raw` leaves behind, no false alarms in clean
+mode, and tolerant of an app capitalising a first letter by itself.
+
+`--recover` clears a blocking panel **before** acting, not only after failing. A sheet
+does not block input, it absorbs it: keystrokes meant for the document land in the save
+panel's filename field, the screen changes, and the action looks like it worked.
+
+
 An action that cannot tell whether it landed is a guess. Any action can be asked to
 prove its effect and repeat itself when it cannot:
 
