@@ -220,6 +220,25 @@ never by reading the code.** The build was clean each time.
 35. `CGDisplayCreateImage` is **removed** in this macOS. `screencapture` is used instead
     (ScreenCaptureKit is an async stream API, awkward for a one-shot tool).
 
+### WhatsApp, found by sending one real message
+39. **`NSRunningApplication.activate` is ignored by WhatsApp** on macOS 26. `focus`
+    failed by name *and* by bundle id while Chrome, TextEdit and Finder all worked, so
+    it read like a name-matching bug — it was not; `appMatches` strips the U+200E fine.
+    An Apple Event still activates it. `focusApp` now waits 1.5 s for the cooperative
+    path and then asks the other way.
+40. **The accessibility tree went stale.** After search filtered the chat list, `see`
+    still reported the old unfiltered chats and the previously open group. Only the
+    screenshot showed the truth. Trusting the tree would have clicked the wrong row.
+    Unfixed — for Electron apps, confirm a filtered list with pixels.
+41. **A "business chats that use AI from Meta" sheet absorbed the Return.** `key return`
+    reported success, the message sat unsent in the compose box. This is §29 again in
+    the wild: the sheet does not block input, it eats it. Anything that *sends* wants
+    `--recover` and `--expect-change`, never a bare `key return`.
+42. **`find` matched a message bubble, not the chat.** `find "Hassan Jan"` returned the
+    coordinates of a "Replying to HASSAN JAN" bubble inside the open group. Clicking it
+    blind would have sent to a family group. Search by the app's own search field and
+    confirm the header before typing.
+
 ### Test bugs (mine, and they matter)
 36. The selftest failed whenever a hand touched the mouse mid-test — it read as a 562 px
     failure. It now retries; the check is about the tool's aim, not the user's.
@@ -253,6 +272,7 @@ never by reading the code.** The build was clean each time.
 | Recording | recorded session replayed and produced the same document |
 | `human-do` | described task → 8 steps → correct document |
 | Chrome | focused, clicked a tab **by name**, verified, read page text |
+| WhatsApp send | searched, opened the right chat of two, sent, ✓✓ delivered |
 
 ---
 
@@ -277,7 +297,6 @@ never by reading the code.** The build was clean each time.
 
 ## Untested
 
-- WhatsApp *send* flow (inspected only — 85 elements, compose field found)
 - Most Electron apps beyond WhatsApp and Chrome
 - The fatigue curve (needs a 15+ minute continuous run)
 - `Human.app` under launchd (needs its own Accessibility grant)

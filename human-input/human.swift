@@ -277,6 +277,7 @@ func runningApp(named: String) -> NSRunningApplication? {
 }
 
 func focusApp(_ name: String, timeout: Double = 12) -> Bool {
+    let wasRunning = runningApp(named: name) != nil
     if let app = runningApp(named: name) {
         app.activate(options: [.activateAllWindows])
     } else {
@@ -298,8 +299,22 @@ func focusApp(_ name: String, timeout: Double = 12) -> Bool {
             task.waitUntilExit()
         }
     }
-    // NSWorkspace only learns about the switch through notifications, so the run loop
-    // has to be pumped while waiting or frontmostApplication never changes here.
+    // An app that is already running comes forward at once or not at all, so spending
+    // the whole timeout before trying the other way just makes every failure slow.
+    if waitForFront(name, timeout: wasRunning ? 1.5 : timeout) { return true }
+
+    // WhatsApp ignores NSRunningApplication.activate on macOS 26 while still honouring
+    // an Apple Event. Nothing is lost by asking a second way before giving up.
+    if let bundle = runningApp(named: name)?.bundleIdentifier {
+        _ = run("/usr/bin/osascript", ["-e", "tell application id \"\(bundle)\" to activate"])
+        if waitForFront(name, timeout: wasRunning ? max(timeout - 3, 4) : 4) { return true }
+    }
+    return NSWorkspace.shared.frontmostApplication.map { appMatches($0, name) } ?? false
+}
+
+/// NSWorkspace only learns about the switch through notifications, so the run loop has
+/// to be pumped while waiting or frontmostApplication never changes in this process.
+func waitForFront(_ name: String, timeout: Double) -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
@@ -308,7 +323,7 @@ func focusApp(_ name: String, timeout: Double = 12) -> Bool {
             return true
         }
     }
-    return NSWorkspace.shared.frontmostApplication.map { appMatches($0, name) } ?? false
+    return false
 }
 
 var requiredApp: String?
