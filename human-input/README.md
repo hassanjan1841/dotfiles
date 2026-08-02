@@ -89,6 +89,23 @@ Add `--require <AppName>` to any action and it refuses to fire unless that app i
 front. Use it. Without it, a missing window means your keystrokes land wherever focus
 happens to be.
 
+## Knowing whether it worked
+
+An action that cannot tell whether it landed is a guess. Any action can be asked to
+prove its effect and repeat itself when it cannot:
+
+```bash
+human click "Save" --expect-change 400,200,600,400 --retry 2
+human click "Send" --expect "Message sent" --retry 1
+human changed 400,200,600,400 --timeout 3     # or just watch a region
+```
+
+Change detection is a sampled perceptual hash of the region, quantised so antialiasing
+and a blinking cursor do not count as change but a repaint does. It costs about 250ms,
+against 1 to 3 seconds for OCR, which is why OCR results are cached against that same
+hash and only re-read when the pixels actually move. Exit 8 means the action produced
+no visible effect after its retries.
+
 ## Typing accuracy modes
 
 - `clean` never mistypes.
@@ -144,6 +161,27 @@ A tweened curve reads as animation no matter how pretty the easing is.
   boundaries near 735ms, occasional planning pauses of a couple of seconds.
 - Error mix from typing corpora: substitution 39%, insertion 33%, omission 18%,
   transposition 11%.
+
+## The parts that behave like a person, not just move like one
+
+- **Familiarity.** Targets you have hit before are approached faster and with fewer
+  corrections, and it remembers across runs. Measured: 1.03s on the first visit to a
+  target, 0.71s by the sixth.
+- **Session shape.** A slow start while warming up, a long steady middle, then a
+  gradual slide in both speed and accuracy as it tires.
+- **Device profile.** `--device trackpad` is steadier and more direct than the default
+  mouse, because direct manipulation overshoots less. Measured: 0.71s against 0.95s
+  over the same distance.
+- **Idle in episodes.** Reading, scanning, busy work, and genuinely away from the desk,
+  rather than a steady drip of movement. Reading tracks along a real line of text and
+  nudges the page, because that is what reading looks like.
+- **Typing that knows what it is typing.** Code is detected by symbol density and typed
+  with its own rhythm: pauses hunting for brackets rather than at sentence ends, and a
+  higher error rate. `--style prose|code|auto`.
+- **`--fallible`** lets a click miss occasionally, notice, and correct. Off by default,
+  because a stray click lands on whatever is really there.
+- **`--next x,y`** starts the pointer drifting toward the next target after a click,
+  the way a hand leads into what it is about to do.
 
 ## Scripts
 

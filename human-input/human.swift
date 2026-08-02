@@ -49,12 +49,43 @@ func personaTraits(_ name: String) -> Traits {
 
 let startedAt = Date()
 
-/// People warm up and then tire, and both show up as speed.
+/// A session has a shape: a slow start while you settle in, a long steady middle, then
+/// a gradual slide as you tire. Returned as a time multiplier, so above 1 is slower.
 func drift() -> Double {
     let mins = Date().timeIntervalSince(startedAt) / 60
-    if mins < 0.5 { return 1.06 }
+    if mins < 2 { return 1.10 - 0.05 * (mins / 2) }     // warming up
     if mins < 15 { return 1.0 }
-    return min(1.0 + (mins - 15) * 0.005, 1.18)
+    return min(1.0 + (mins - 15) * 0.005, 1.18)         // tiring
+}
+
+/// Tiredness costs accuracy as well as speed.
+func fatigueErrorScale() -> Double {
+    let mins = Date().timeIntervalSince(startedAt) / 60
+    return mins < 15 ? 1.0 : min(1 + (mins - 15) * 0.012, 1.45)
+}
+
+var device = "mouse"
+var familiarHaste = 1.0
+
+/// Targets you have hit before need less checking and get hit faster. Repeat visits
+/// getting quicker is one of the strongest signals of a person rather than a script.
+var familiarity: [String: Int] = {
+    let path = NSHomeDirectory() + "/Library/Caches/human-input/familiarity.json"
+    guard let d = FileManager.default.contents(atPath: path),
+          let j = try? JSONSerialization.jsonObject(with: d) as? [String: Int] else { return [:] }
+    return j
+}()
+var familiarityDirty = false
+
+func familiarKey(_ p: CGPoint) -> String { "\(Int(p.x) / 20),\(Int(p.y) / 20)" }
+
+func saveFamiliarity() {
+    guard familiarityDirty else { return }
+    let dir = NSHomeDirectory() + "/Library/Caches/human-input"
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    if let raw = try? JSONSerialization.data(withJSONObject: familiarity) {
+        try? raw.write(to: URL(fileURLWithPath: dir + "/familiarity.json"))
+    }
 }
 
 func cursor() -> CGPoint {
@@ -313,7 +344,7 @@ func find(_ needle: String, app: String?, role: String?, all: Bool) -> [Seen] {
     if let root = axRoot(app) { seen = axTree(root) }
     // Only reach for pixels when the tree cannot answer: it is slower and fallible.
     if useOCR && seen.allSatisfy({ matches($0, needle: needle, role: role) == nil }) {
-        seen += ocrRead(screen, fast: ocrFast)
+        seen += cachedOCR(screen, fast: ocrFast)
     }
     var scored: [(Int, Seen)] = []
     for s in seen {
@@ -397,6 +428,62 @@ func captureScreen(_ region: CGRect) -> (CGImage, CGFloat)? {
     return (img, CGFloat(img.width) / max(region.width, 1))     // retina factor
 }
 
+/// A cheap perceptual hash of a screen region. Sampled on a grid and quantised, so
+/// antialiasing and a blinking cursor do not count as change, but a repaint does.
+func fingerprint(_ region: CGRect) -> UInt64? {
+    guard let (img, _) = captureScreen(region),
+          let data = img.dataProvider?.data,
+          let bytes = CFDataGetBytePtr(data) else { return nil }
+    let rowBytes = img.bytesPerRow, pixelBytes = max(1, img.bitsPerPixel / 8)
+    let stepX = max(1, img.width / 48), stepY = max(1, img.height / 48)
+    var h: UInt64 = 0xcbf2_9ce4_8422_2325
+    for y in stride(from: 0, to: img.height, by: stepY) {
+        for x in stride(from: 0, to: img.width, by: stepX) {
+            let o = y * rowBytes + x * pixelBytes
+            guard o + 2 < CFDataGetLength(data) else { continue }
+            let grey = (UInt64(bytes[o]) + UInt64(bytes[o + 1]) + UInt64(bytes[o + 2])) / 3
+            h = (h ^ (grey >> 3)) &* 0x0000_0100_0000_01b3    // >>3 tolerates dithering
+        }
+    }
+    return h
+}
+
+func cacheFile(_ name: String) -> String {
+    let dir = NSHomeDirectory() + "/Library/Caches/human-input"
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    return dir + "/" + name
+}
+
+/// OCR costs seconds, so a region is only re-read when its fingerprint says it changed.
+func cachedOCR(_ region: CGRect, fast: Bool) -> [Seen] {
+    let tag = "ocr-\(Int(region.minX))-\(Int(region.minY))-\(Int(region.width))-\(Int(region.height)).json"
+    let path = cacheFile(tag)
+    let print = fingerprint(region)
+
+    if let print = print, let raw = FileManager.default.contents(atPath: path),
+       let blob = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
+       let stamp = blob["fingerprint"] as? String, stamp == String(print),
+       let rows = blob["lines"] as? [[String: Any]] {
+        return rows.compactMap { row in
+            guard let text = row["text"] as? String, let box = row["rect"] as? [Double], box.count == 4
+            else { return nil }
+            return Seen(role: "AXOCRText", subrole: "", label: text,
+                        rect: CGRect(x: box[0], y: box[1], width: box[2], height: box[3]), depth: 0)
+        }
+    }
+
+    let lines = ocrRead(region, fast: fast)
+    if let print = print {
+        let blob: [String: Any] = ["fingerprint": String(print), "lines": lines.map {
+            ["text": $0.label, "rect": [$0.rect.minX, $0.rect.minY, $0.rect.width, $0.rect.height]]
+        }]
+        if let raw = try? JSONSerialization.data(withJSONObject: blob) {
+            try? raw.write(to: URL(fileURLWithPath: path))
+        }
+    }
+    return lines
+}
+
 func ocrRead(_ region: CGRect, fast: Bool) -> [Seen] {
     guard let (img, scale) = captureScreen(region) else { return [] }
     let request = VNRecognizeTextRequest()
@@ -432,7 +519,8 @@ func submove(from start: CGPoint, to end: CGPoint, width: Double, primary: Bool)
     // makes every move about twice as slow as a person, and slow smooth motion is
     // precisely what reads as an animation.
     let difficulty = log2(2 * d / max(width, 2) + 1)
-    var duration = (0.035 + 0.062 * difficulty) * Double.random(in: 0.82...1.3) * traits.pace * drift()
+    var duration = (0.035 + 0.062 * difficulty) * Double.random(in: 0.82...1.3)
+        * traits.pace * drift() / familiarHaste
     duration = min(max(duration, 0.035), 1.0)
 
     let dx = end.x - start.x, dy = end.y - start.y
@@ -451,7 +539,7 @@ func submove(from start: CGPoint, to end: CGPoint, width: Double, primary: Bool)
     // which is what makes them read as a hand rather than a decorative wave.
     let tremorHz = Double.random(in: 8...12), tremorPhase = Double.random(in: 0...(2 * Double.pi))
     let driftHz = Double.random(in: 1.1...2.8), driftPhase = Double.random(in: 0...(2 * Double.pi))
-    let tremorAmp = Double.random(in: 0.2...0.6) * traits.tremor
+    let tremorAmp = Double.random(in: 0.2...0.6) * traits.tremor * (device == "trackpad" ? 0.6 : 1)
     let driftAmp = min(0.8 + 0.011 * d, 5.5) * traits.tremor
 
     // An ordinary mouse polls at 125Hz. The interval stays put and the deltas vary,
@@ -516,12 +604,24 @@ func moveTo(_ target: CGPoint, width: Double = 26) {
     if dist(cursor(), target) < 1 { return }
     let close = max(width * 0.3, 1.6)
 
-    for attempt in 0..<3 {
+    let key = familiarKey(target)
+    let visits = familiarity[key] ?? 0
+    familiarity[key] = visits + 1
+    familiarityDirty = true
+    // Somewhere you go often, you stop checking your aim so carefully.
+    familiarHaste = min(1 + Double(visits) * 0.05, 1.3)
+    let attempts = visits >= 4 ? 1 : visits >= 1 ? 2 : 3
+    defer { familiarHaste = 1 }
+
+    for attempt in 0..<attempts {
         let here = cursor()
         let gap = dist(here, target)
         if gap <= close { break }
 
-        let coverage = attempt == 0 ? Double.random(in: 0.84...1.04) : Double.random(in: 0.55...1.1)
+        let spread = device == "trackpad" ? 0.06 : 0.10
+        let coverage = attempt == 0
+            ? Double.random(in: (0.94 - spread)...(0.94 + spread))
+            : Double.random(in: 0.55...1.1)
         let sigma = 0.012 * gap + 0.6                    // motor noise scales with the throw
         let aim = CGPoint(x: here.x + (target.x - here.x) * CGFloat(coverage) + CGFloat(gauss() * sigma),
                           y: here.y + (target.y - here.y) * CGFloat(coverage) + CGFloat(gauss() * sigma))
@@ -555,6 +655,7 @@ func moveTo(_ target: CGPoint, width: Double = 26) {
 /// Nobody lands on the exact centre of a button, and nobody holds perfectly still.
 /// Precise mode turns that off for targets too small to miss, like a 4px resize edge.
 var precise = false
+var fallible = false
 
 func aimJitter(_ p: CGPoint, spread: Double = 2.5) -> CGPoint {
     guard !precise else { return p }
@@ -950,6 +1051,8 @@ func handFactor(_ prev: Character?, _ ch: Character) -> Double {
     return 1
 }
 
+var codeStyle = false
+
 func emit(_ ch: Character, _ prev: inout Character?, _ base: Double) {
     typeUnicode(String(ch))
     var delay = iki(base) * handFactor(prev, ch)
@@ -957,8 +1060,16 @@ func emit(_ ch: Character, _ prev: inout Character?, _ base: Double) {
 
     // Writing pauses cluster into three components: word retrieval near 330ms,
     // phrase boundaries near 735ms, and planning pauses of a couple of seconds.
-    if ch == " " && Double.random(in: 0...1) < 0.07 { delay += 0.33 * exp(gauss() * 0.4) }
-    if ".,;:!?".contains(ch) && Double.random(in: 0...1) < 0.45 { delay += 0.74 * exp(gauss() * 0.4) }
+    if codeStyle {
+        // Hunting for a bracket or an operator costs time before the key, not after.
+        if "{}[]()<>|&$#@_".contains(ch) && Double.random(in: 0...1) < 0.5 {
+            delay += 0.18 * exp(gauss() * 0.5)
+        }
+        if ch == "\n" { delay += Double.random(in: 0.1...0.4) }
+    } else {
+        if ch == " " && Double.random(in: 0...1) < 0.07 { delay += 0.33 * exp(gauss() * 0.4) }
+        if ".,;:!?".contains(ch) && Double.random(in: 0...1) < 0.45 { delay += 0.74 * exp(gauss() * 0.4) }
+    }
     if ch == "\n" { delay += Double.random(in: 0.2...0.6) }
     if Double.random(in: 0...1) < 0.004 { delay += 2.7 * exp(gauss() * 0.5) }
     nap(delay)
@@ -1019,6 +1130,15 @@ func slip(_ chars: [Character], _ i: Int, _ prev: inout Character?, _ base: Doub
     return restart
 }
 
+/// Code is not prose. It is symbol-heavy, comes in short bursts around identifiers,
+/// pauses before punctuation rather than after it, and gets corrected more often.
+func looksLikeCode(_ text: String) -> Bool {
+    let symbols = text.filter { "{}[]()<>;=/\\|&*_$#@`~+".contains($0) }.count
+    return Double(symbols) / Double(max(text.count, 1)) > 0.08
+}
+
+var typingStyle = "auto"
+
 func typeText(_ text: String, wpm: Double, accuracy: Accuracy) {
     if !dry {
         requireTrust("typing")
@@ -1038,7 +1158,10 @@ func typeText(_ text: String, wpm: Double, accuracy: Accuracy) {
     let base = (12.0 / max(wpm, 5)) * (accuracy == .clean ? 0.65 : 0.49) * drift()
     let chars = Array(text)
     // Corrections run about 6% of keystrokes, and roughly one error in six survives.
-    let errorRate = accuracy == .clean ? 0.0 : 0.055 * traits.errorScale
+    let code = typingStyle == "code" || (typingStyle == "auto" && looksLikeCode(text))
+    codeStyle = code
+    let errorRate = accuracy == .clean ? 0.0
+        : 0.055 * traits.errorScale * fatigueErrorScale() * (code ? 1.35 : 1)
     var prev: Character? = nil
     var i = 0
 
@@ -1150,16 +1273,39 @@ func runIdle(minutes: Double, verbose: Bool, yield: Bool) {
             (moves, gapLow, gapHigh, label) = (Int.random(in: 3...8), 0.15, 0.6, "busy")
         }
 
+        // Reading is not fidgeting near one spot. The pointer tracks along a line of
+        // text and steps down to the next, and the page gets nudged along on the way.
+        var readingLine: CGRect?
+        if label == "reading", let root = axRoot(nil) {
+            readingLine = axTree(root, limit: 400).filter {
+                ($0.role == "AXStaticText" || $0.role == "AXTextArea")
+                    && $0.rect.width > 120 && $0.rect.height < 400
+            }.randomElement()?.rect
+        }
+
         var travelled = 0.0
         for i in 0..<moves {
             if Date() >= deadline { break }
             let from = cursor()
-            // Reading stays put and fidgets; scanning and busy work move between things.
-            let target = label == "reading" && i > 0
-                ? onScreen(CGPoint(x: from.x + CGFloat(Double.random(in: -60...60)),
-                                   y: from.y + CGFloat(Double.random(in: -40...40))))
-                : idleTarget(near: from)
+            let target: CGPoint
+            if let line = readingLine {
+                // Left to right across the text, dropping a line at a time.
+                let across = Double(i + 1) / Double(moves + 1)
+                target = onScreen(CGPoint(
+                    x: line.minX + line.width * CGFloat(across * Double.random(in: 0.85...1.15)),
+                    y: line.minY + min(line.height, 22) * CGFloat(i) + CGFloat(Double.random(in: -4...8))))
+            } else if label == "reading" && i > 0 {
+                target = onScreen(CGPoint(x: from.x + CGFloat(Double.random(in: -60...60)),
+                                          y: from.y + CGFloat(Double.random(in: -40...40))))
+            } else {
+                target = idleTarget(near: from)
+            }
             moveTo(target)
+            // Nudge the page along, then read what arrived.
+            if label == "reading" && Double.random(in: 0...1) < 0.35 {
+                scroll(-Int.random(in: 60...180), over: nil)
+                napUntil(Double.random(in: 0.8...3.0))
+            }
             travelled += dist(from, target)
             if Double.random(in: 0...1) < 0.3 { settleTremor() }
             napUntil(Double.random(in: gapLow...gapHigh))
@@ -1202,43 +1348,59 @@ func modifierFlags() -> CGEventFlags {
     return f
 }
 
+func parseRegion(_ spec: String) -> CGRect? {
+    let n = spec.split(separator: ",").compactMap { Double($0) }
+    guard n.count == 4 else { return nil }
+    return CGRect(x: n[0], y: n[1], width: n[2], height: n[3])
+}
+
 func point(_ a: String?, _ b: String?) -> CGPoint? {
     guard let a = a, let b = b, let x = Double(a), let y = Double(b) else { return nil }
     return CGPoint(x: x, y: y)
 }
 
 let usage = """
-human - drive macOS the way a person does (curved pointer paths, real dwell, varied timing)
+human - drive macOS the way a person does, and read the screen three ways
 
-  human check                       permissions, screen size, cursor position
-  human where                       print cursor as x,y
-  human front                       name of the frontmost app
-  human focus <AppName>             bring an app forward and wait until it really is
-  human move <x> <y>                glide the pointer there
-  human click [x y] [--right] [--double]
-  human drag <x1> <y1> <x2> <y2> [--precise]
-  human scroll <amount> [x y] [--horizontal] negative scrolls down; x y puts the
-                                    pointer over the thing to scroll first
-  human type "text" [--wpm 70] [--accuracy clean|human|raw]
-                                    human (default) slips and fixes them, final text exact
-                                    raw leaves about 1 in 6 slips uncorrected
-                                    clean never mistypes
-  human key <name> [--cmd --shift --opt --ctrl]
-  human open <AppName>              bring an app to the front, then settle
-  human wait <seconds>              waits a human-ish spread around that value
-  human idle [--minutes N] [--no-yield] [--verbose]
-  human run <file|-> [--verbose] [--dry]   one command per line, # comments allowed
-  human selftest                    prove the pointer, typing, guard and sight still work
-  human stop / human go             set or clear the abort flag
-  human unstick                     release any modifier or button left held down
+  see
+    human check                     every permission gate, screen, cursor, held keys
+    human where / human front       cursor position, name of the frontmost app
+    human see [--app X] [--role R]  everything on screen, with coordinates
+    human find "Save" [--app X] [--ocr]     coordinates of a named thing
+    human read [--region x,y,w,h] [--fast]  read the screen with OCR
+    human pane list|read <id>|send <id> "text" [--enter]|waitfor <id> "pattern"
+    human waitfor "Done" [--gone] [--timeout 20]
+    human changed <x,y,w,h> [--timeout 3]   wait until a region repaints
 
-Add --require <AppName> to any action and it refuses to fire unless that app is in
-front, so a missing window can never send keystrokes into the wrong place.
+  act
+    human focus <AppName>           bring an app forward, wait until it really is
+    human move <x> <y>
+    human click <x y | "name"> [--right --middle --double --triple --precise --hold s]
+    human drag <x1> <y1> <x2> <y2> [--precise]
+    human scroll <amount> [x y] [--horizontal]     negative scrolls down
+    human type "text" [--wpm 70] [--accuracy clean|human|raw] [--keys]
+    human key <chord> [--repeat N] [--hold s]      e.g. cmd+a, shift+right
+    human open <AppName> / human wait <seconds>
+    human idle [--minutes N] [--no-yield]
+    human run <file|-> [--verbose] [--dry]
 
-Every action lands with its own small delays, so sequences do not tick like a clock.
+  keep it safe
+    --require <AppName>             refuse to act unless that app is frontmost
+    --dry                           rehearse, touch nothing
+    --expect-change <x,y,w,h> | --expect "text" [--retry N]
+                                    prove the action landed, repeat it if not
+    human stop / human go           set or clear the abort flag
+    human unstick                   release anything left held down
+    human selftest                  prove pointer, typing, guard and sight still work
+
+  who is typing
+    --persona <name>                one consistent hand: speed, curve bias, slips
+    --device mouse|trackpad
+
+Every action carries its own delays, so a sequence never ticks like a clock.
 """
 
-atexit { releaseEverythingHeld() }
+atexit { releaseEverythingHeld(); saveFamiliarity() }
 for sig in [SIGINT, SIGTERM, SIGHUP] {
     signal(sig) { _ in releaseEverythingHeld(); exit(130) }
 }
@@ -1246,13 +1408,31 @@ for sig in [SIGINT, SIGTERM, SIGHUP] {
 guard let cmd = argv.first else { print(usage); exit(0) }
 argv.removeFirst()
 
+/// An action that cannot tell whether it worked is a guess. Anything can be asked to
+/// prove its effect, and to try again when it cannot.
+func verify(expectChange: CGRect?, expectText: String?, app: String?, timeout: Double) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    var before: UInt64?
+    if let region = expectChange { before = fingerprint(region) }
+    while Date() < deadline {
+        if let region = expectChange, let start = before {
+            if let now = fingerprint(region), now != start { return true }
+        }
+        if let needle = expectText, !find(needle, app: app, role: nil, all: false).isEmpty { return true }
+        nap(0.3)
+    }
+    return false
+}
+
 func execute(_ cmd: String, _ rest: [String]) {
     let saved = argv
     argv = rest
     defer { argv = saved }
     if let want = takeValue("--require") { requiredApp = want }
     if takeFlag("--precise") { precise = true }
+    if takeFlag("--fallible") { fallible = true }
     if takeFlag("--ocr") { useOCR = true }
+    if let d = takeValue("--device") { device = d }
     if takeFlag("--fast") { ocrFast = true }
     if takeFlag("--dry") { dry = true }
     if let who = takeValue("--persona") { traits = personaTraits(who) }
@@ -1346,6 +1526,22 @@ func execute(_ cmd: String, _ rest: [String]) {
             FileHandle.standardError.write("human: pane list|read|send|waitfor\n".data(using: .utf8)!)
             exit(2)
         }
+
+    case "changed":
+        guard let spec = takeValue("--region") ?? argv.first, let region = parseRegion(spec) else {
+            FileHandle.standardError.write("human: changed needs x,y,w,h\n".data(using: .utf8)!); exit(2)
+        }
+        let timeout = Double(takeValue("--timeout") ?? "") ?? 3
+        guard let before = fingerprint(region) else {
+            FileHandle.standardError.write("human: could not read that region\n".data(using: .utf8)!); exit(1)
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            nap(0.25)
+            if let now = fingerprint(region), now != before { print("changed"); exit(0) }
+        }
+        print("unchanged")
+        exit(1)
 
     case "read":
         var region = screen
@@ -1474,9 +1670,28 @@ func execute(_ cmd: String, _ rest: [String]) {
             }
             t = hit.centre
             if hit.rect.width < 12 || hit.rect.height < 12 { precise = true }
+            // Off by a hair, notice, correct. Opt-in, because a stray click lands on
+            // whatever is actually there.
+            if fallible && Double.random(in: 0...1) < 0.03 {
+                let missX = hit.centre.x + CGFloat(hit.rect.width * Double.random(in: 0.6...0.85))
+                click(at: CGPoint(x: missX, y: hit.centre.y), button: .left, times: 1)
+                nap(Double.random(in: 0.35...0.9))          // the pause of noticing
+            }
+        }
+        let next = takeValue("--next").flatMap { spec -> CGPoint? in
+            let n = spec.split(separator: ",").compactMap { Double($0) }
+            return n.count == 2 ? CGPoint(x: n[0], y: n[1]) : nil
         }
         click(at: t, button: right ? .right : middle ? .center : .left,
               times: triple ? 3 : double ? 2 : 1, modifiers: clickMods, holdFor: holdFor)
+        // A hand does not park where it clicked; it starts drifting toward whatever
+        // it is going to do next.
+        if let next = next {
+            let here = cursor()
+            let lead = Double.random(in: 0.15...0.4)
+            moveTo(CGPoint(x: here.x + (next.x - here.x) * CGFloat(lead),
+                           y: here.y + (next.y - here.y) * CGFloat(lead)))
+        }
 
     case "drag":
         guard argv.count >= 4, let a = point(argv[0], argv[1]), let b = point(argv[2], argv[3]) else {
@@ -1500,6 +1715,7 @@ func execute(_ cmd: String, _ rest: [String]) {
         default: accuracy = .human
         }
         if takeFlag("--keys") { typeWithKeycodes = true }
+        if let style = takeValue("--style") { typingStyle = style }
         let repeatArg = takeValue("--repeat")
         let text = argv.joined(separator: " ").replacingOccurrences(of: "\\n", with: "\n")
         guard !text.isEmpty else { exit(0) }
@@ -1600,6 +1816,43 @@ func execute(_ cmd: String, _ rest: [String]) {
     }
 }
 
+/// Runs an action and, when an expectation was given, proves it happened.
+func executeChecked(_ cmd: String, _ rest: [String]) {
+    var rest = rest
+    var expectChange: CGRect?
+    var expectText: String?
+    var retries = 0
+    var timeout = 4.0
+
+    // Pulled out before the action sees them, and kept for every retry.
+    if let i = rest.firstIndex(of: "--expect-change"), i + 1 < rest.count {
+        expectChange = parseRegion(rest[i + 1]); rest.removeSubrange(i...(i + 1))
+    }
+    if let i = rest.firstIndex(of: "--expect"), i + 1 < rest.count {
+        expectText = rest[i + 1]; rest.removeSubrange(i...(i + 1))
+    }
+    if let i = rest.firstIndex(of: "--retry"), i + 1 < rest.count {
+        retries = Int(rest[i + 1]) ?? 0; rest.removeSubrange(i...(i + 1))
+    }
+    if let i = rest.firstIndex(of: "--expect-timeout"), i + 1 < rest.count {
+        timeout = Double(rest[i + 1]) ?? 4; rest.removeSubrange(i...(i + 1))
+    }
+
+    guard expectChange != nil || expectText != nil else { execute(cmd, rest); return }
+
+    let app = rest.firstIndex(of: "--app").map { rest[$0 + 1] }
+    for attempt in 0...retries {
+        execute(cmd, rest)
+        if verify(expectChange: expectChange, expectText: expectText, app: app, timeout: timeout) { return }
+        if attempt < retries {
+            FileHandle.standardError.write("human: no effect, trying again\n".data(using: .utf8)!)
+            nap(Double.random(in: 0.4...1.1))      // a person pauses before repeating
+        }
+    }
+    FileHandle.standardError.write("human: \(cmd) had no visible effect\n".data(using: .utf8)!)
+    exit(8)
+}
+
 if cmd == "run" {
     let verbose = takeFlag("--verbose")
     if takeFlag("--dry") { dry = true }
@@ -1625,12 +1878,12 @@ if cmd == "run" {
         if !current.isEmpty { parts.append(current) }
         guard let head = parts.first else { continue }
         if verbose { FileHandle.standardError.write("human: \(line)\n".data(using: .utf8)!) }
-        execute(head, Array(parts.dropFirst()))
+        executeChecked(head, Array(parts.dropFirst()))
         nap(Double.random(in: 0.12...0.45))       // gap between deliberate actions
     }
     if dry {
         print(String(format: "rehearsal only, nothing was touched. would take about %.0fs", dryElapsed))
     }
 } else {
-    execute(cmd, argv)
+    executeChecked(cmd, argv)
 }
