@@ -1197,6 +1197,7 @@ human - drive macOS the way a person does (curved pointer paths, real dwell, var
   human run <file|-> [--verbose] [--dry]   one command per line, # comments allowed
   human selftest                    prove the pointer, typing, guard and sight still work
   human stop / human go             set or clear the abort flag
+  human unstick                     release any modifier or button left held down
 
 Add --require <AppName> to any action and it refuses to fire unless that app is in
 front, so a missing window can never send keystrokes into the wrong place.
@@ -1354,6 +1355,27 @@ func execute(_ cmd: String, _ rest: [String]) {
             "human: waited \(Int(timeout))s, '\(needle)' never \(untilGone ? "went away" : "appeared")\n"
                 .data(using: .utf8)!)
         exit(6)
+
+    case "unstick":
+        // An aborted command can leave a modifier or a button down, and everything
+        // afterwards behaves strangely for reasons that are invisible.
+        var cleared: [String] = []
+        for (flag, code) in modifierKeys where CGEventSource.flagsState(.combinedSessionState).contains(flag) {
+            let e = CGEvent(keyboardEventSource: keySource, virtualKey: code, keyDown: false)
+            e?.type = .flagsChanged
+            e?.flags = []
+            e?.post(tap: .cghidEventTap)
+            cleared.append("modifier \(code)")
+            nap(0.03)
+        }
+        for button in [CGMouseButton.left, .right, .center]
+        where CGEventSource.buttonState(.combinedSessionState, button: button) {
+            let type: CGEventType = button == .right ? .rightMouseUp
+                : button == .center ? .otherMouseUp : .leftMouseUp
+            postMouse(type, cursor(), button)
+            cleared.append("button \(button.rawValue)")
+        }
+        print(cleared.isEmpty ? "nothing was stuck" : "released " + cleared.joined(separator: ", "))
 
     case "stop":
         FileManager.default.createFile(atPath: stopFile, contents: nil)
