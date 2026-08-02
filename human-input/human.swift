@@ -351,6 +351,9 @@ struct Seen {
     let label: String
     let rect: CGRect
     let depth: Int
+    /// Kept so a candidate can be checked for identity against a hit test. Elements read
+    /// from pixels have none.
+    var el: AXUIElement? = nil
     var centre: CGPoint { CGPoint(x: rect.midX, y: rect.midY) }
     /// What to call it when it has no label of its own: AXCloseButton reads as "close".
     var name: String {
@@ -402,7 +405,8 @@ func axTree(_ root: AXUIElement, limit: Int = 4000, maxDepth: Int = 24) -> [Seen
         let role = axText(el, kAXRoleAttribute as String) ?? "?"
         let subrole = axText(el, kAXSubroleAttribute as String) ?? ""
         if let r = axRect(el), r.width > 0, r.height > 0 {
-            out.append(Seen(role: role, subrole: subrole, label: axLabel(el), rect: r, depth: depth))
+            out.append(Seen(role: role, subrole: subrole, label: axLabel(el), rect: r,
+                            depth: depth, el: el))
         }
         if let kids = axValue(el, kAXChildrenAttribute as String) as? [AXUIElement] {
             for kid in kids { stack.append((kid, depth + 1)) }
@@ -507,12 +511,22 @@ let clickableRoles: Set<String> = [
     "AXDisclosureTriangle", "AXIncrementor", "AXToolbar", "AXScrollBar"
 ]
 
+/// Labels arrive with directional marks embedded — WhatsApp's are full of U+200E — and
+/// one invisible character is enough to turn an exact match into a substring one, which
+/// then loses to any container that merely starts with the same word. "Search" found a
+/// group called "Search results" instead of the search field for exactly this reason.
+func plain(_ s: String) -> String {
+    String(String.UnicodeScalarView(s.unicodeScalars.filter {
+        !(0x200B...0x200F).contains($0.value) && $0.value != 0xFEFF
+    })).trimmingCharacters(in: .whitespaces).lowercased()
+}
+
 func matches(_ s: Seen, needle: String, role: String?) -> Int? {
     if let want = role, s.role.lowercased() != want.lowercased() { return nil }
     guard !needle.isEmpty else { return role == nil ? nil : 1000 }
-    let n = needle.lowercased()
+    let n = plain(needle)
     var best: Int?
-    for hay in [s.label.lowercased(), s.name.lowercased(), s.subrole.lowercased()] where !hay.isEmpty {
+    for hay in [plain(s.label), plain(s.name), plain(s.subrole)] where !hay.isEmpty {
         let score = hay == n ? 0 : hay.hasPrefix(n) ? 1 : hay.contains(n) ? 2 : nil
         if let sc = score, sc < (best ?? 99) { best = sc }
     }
@@ -521,31 +535,6 @@ func matches(_ s: Seen, needle: String, role: String?) -> Int? {
 
 var useOCR = false
 var ocrFast = false
-
-/// WhatsApp keeps publishing the unfiltered chat rows after a search has filtered the
-/// list, so two elements claim almost the same rectangle and only one is really on
-/// screen. Nothing in the tree distinguishes them — a hit test does, because it answers
-/// with what the user would actually hit.
-func reallyOnScreen(_ s: Seen) -> Bool {
-    guard !s.label.isEmpty else { return true }
-    let centre = CGPoint(x: s.rect.midX, y: s.rect.midY)
-    var hit: AXUIElement?
-    guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(),
-                                           Float(centre.x), Float(centre.y), &hit) == .success,
-          var cur = hit else { return true }   // no answer is not evidence of a ghost
-
-    // The hit lands on the deepest leaf under the point, which is usually a label inside
-    // the row rather than the row itself, so walk up looking for the text we matched.
-    for _ in 0..<6 {
-        let there = axLabel(cur)
-        if !there.isEmpty,
-           there == s.label || there.contains(s.label) || s.label.contains(there) { return true }
-        guard let parent = axValue(cur, kAXParentAttribute as String),
-              CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
-        cur = unsafeBitCast(parent, to: AXUIElement.self)
-    }
-    return false
-}
 
 func find(_ needle: String, app: String?, role: String?, all: Bool) -> [Seen] {
     var seen: [Seen] = []
@@ -564,13 +553,7 @@ func find(_ needle: String, app: String?, role: String?, all: Bool) -> [Seen] {
         scored.append((score * 100 + bonus * 10 + min(area, 9), s))
     }
     scored.sort { $0.0 < $1.0 }
-    let ranked = scored.map { $0.1 }
-    if all { return ranked }
-    // Hit testing costs an IPC round trip each, so only the leaders pay it, and a list
-    // with no ghosts in it answers on the first one.
-    // Refusing beats guessing: a ghost's rectangle belongs to whatever really sits there
-    // now, so returning it would click a different chat entirely.
-    return ranked.prefix(6).first(where: reallyOnScreen).map { [$0] } ?? []
+    return all ? scored.map { $0.1 } : Array(scored.prefix(1).map { $0.1 })
 }
 
 // ============================================================================

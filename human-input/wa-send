@@ -1,12 +1,12 @@
 #!/bin/sh
 # Send a WhatsApp message to a named chat, refusing unless that chat is really open.
 #
-# usage: wa-send [--yes] "<chat name>" "<message>"
+# usage: wa-send [--yes] [--dry] "<chat name>" "<message>"
 #
-# The guard is the point. WhatsApp keeps stale rows in its accessibility tree and its
-# search matches message bodies as well as chats, so "the thing called X" and "the chat
-# called X" are not the same element. Nothing is typed until the open chat's own title
-# says otherwise.
+# The chat list on screen is tried before searching, because searching is where this
+# gets dangerous: WhatsApp keeps publishing the unfiltered rows after a search filters
+# the list, so stale coordinates sit alongside real ones. Either way exactly one chat
+# may match, and the opened chat has to agree before anything is typed.
 set -eu
 
 yes=0
@@ -15,6 +15,8 @@ while :; do
     case "${1:-}" in
         --yes) yes=1; shift ;;
         --dry) dry=1; shift ;;
+        --) shift; break ;;
+        -*) echo "wa-send: unknown option $1" >&2; exit 2 ;;
         *) break ;;
     esac
 done
@@ -26,34 +28,115 @@ chat=$1
 msg=$2
 human=${HUMAN:-human}
 
-$human focus WhatsApp
-$human key escape --require WhatsApp                    # drop any search still in progress
-$human click "Search" --require WhatsApp --recover
-$human type "$chat" --require WhatsApp --accuracy clean
-sleep 2
+# Chat rows are the 375x68 buttons down the left column. Message hits from a search are
+# a different size and must never be clickable here — one of them is what put a test
+# message into a real group.
+pick() {
+    $human see 2>/dev/null | python3 -c '
+import sys, unicodedata
 
-if ! $human click "$chat" --require WhatsApp; then
-    echo "wa-send: nothing matching \"$chat\" is on screen" >&2
-    exit 1
-fi
-sleep 2
+def norm(s):
+    s = "".join(c for c in s if unicodedata.category(c) != "Cf")
+    return " ".join(s.split()).casefold()
+
+want = norm(sys.argv[1])
+rows = []
+for line in sys.stdin:
+    f = line.rstrip("\n").split("\t")
+    if len(f) < 4 or f[1] != "AXButton":
+        continue
+    try:
+        w, h = f[2].split("x")
+        x, y = (int(v) for v in f[0].split(","))
+        if int(w) != 375 or int(h) != 68 or x >= 500:
+            continue
+    except ValueError:
+        continue
+    rows.append((x, y, f[3]))
+
+# Count distinct names, not rows: the same chat is published more than once, so two rows
+# reading "HASSAN JAN. HJ" are one chat and not an ambiguity.
+names = []
+for _, _, label in rows:
+    if norm(label) not in [norm(n) for n in names]:
+        names.append(label)
+
+exact = [n for n in names if norm(n) == want]
+hits = exact or [n for n in names if want in norm(n)]
+if not hits:
+    sys.exit(1)
+if len(hits) > 1:
+    sys.stderr.write("".join("    %s\n" % h for h in hits))
+    sys.exit(3)
+
+# Topmost row carrying the winning name: a filtered result is drawn at the top, while a
+# stale row keeps its old position further down.
+x, y, _ = min((r for r in rows if norm(r[2]) == norm(hits[0])), key=lambda r: r[1])
+sys.stdout.write("%s\n%d %d\n%s\n" % (hits[0], x, y, "exact" if exact else "partial"))
+' "$1"
+}
 
 # An open chat publishes its title as the widest button along the top of the window.
-header=$($human see 2>/dev/null | awk -F'\t' '
-    { split($1, p, ","); split($3, d, "x")
-      if ($2 == "AXButton" && p[2] < 100 && p[1] > 500 && d[1] + 0 > w) { w = d[1] + 0; t = $4 } }
-    END { print t }')
+read_header() {
+    $human see 2>/dev/null | awk -F'\t' '
+        { split($1, p, ","); split($3, d, "x")
+          if ($2 == "AXButton" && p[2] < 110 && p[1] > 500 && d[1] + 0 > w) { w = d[1] + 0; t = $4 } }
+        END { print t }'
+}
 
+$human focus WhatsApp
+$human key escape --require WhatsApp                    # drop any search still in progress
+sleep 1
+
+# The visible list first. It carries no stale rows, so it is both safer and quicker.
+found=0
+if out=$(pick "$chat" 2>/tmp/wa-send.err); then
+    found=1
+elif [ "$(cat /tmp/wa-send.err)" != "" ]; then
+    echo "wa-send: \"$chat\" matches more than one chat, be more specific" >&2
+    cat /tmp/wa-send.err >&2
+    exit 1
+fi
+
+if [ "$found" -eq 0 ]; then
+    $human click "Search" --require WhatsApp --recover
+    $human type "$chat" --require WhatsApp --accuracy clean
+    sleep 2
+    if ! out=$(pick "$chat" 2>/tmp/wa-send.err); then
+        if [ "$(cat /tmp/wa-send.err)" != "" ]; then
+            echo "wa-send: \"$chat\" matches more than one chat, be more specific" >&2
+            cat /tmp/wa-send.err >&2
+        else
+            echo "wa-send: no chat matching \"$chat\"" >&2
+        fi
+        exit 1
+    fi
+fi
+
+row=$(printf '%s\n' "$out" | sed -n 1p)
+coords=$(printf '%s\n' "$out" | sed -n 2p)
+kind=$(printf '%s\n' "$out" | sed -n 3p)
+$human click $coords --require WhatsApp
+sleep 2
+
+header=$(read_header)
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 case "$(lower "$header")" in
-    *"$(lower "$chat")"*) ;;
-    *)  echo "wa-send: refusing to type, \"$header\" is open, not \"$chat\"" >&2
+    *"$(lower "$row")"*) ;;
+    *)  echo "wa-send: refusing to type, \"$header\" is open, not \"$row\"" >&2
         exit 1 ;;
 esac
 
 # Always say who this resolved to, even under --yes: a name like "Vu hacks" matching a
 # forty-character group title is exactly how a test message reaches real people.
 printf '  chat:    %s\n  message: %s\n' "$header" "$msg"
+
+# --yes is for names you typed in full. "Vu hacks" standing in for a forty-character
+# group title is the shape of every accidental send, so a partial match always asks.
+if [ "$yes" -eq 1 ] && [ "$kind" = "partial" ]; then
+    echo "  (\"$chat\" is not this chat's full name, so --yes does not apply)"
+    yes=0
+fi
 
 if [ "$dry" -eq 1 ]; then
     echo "  --dry, nothing typed"

@@ -231,12 +231,17 @@ never by reading the code.** The build was clean each time.
     unfiltered chats. It is worse than staleness. WhatsApp keeps publishing the *old*
     rows alongside the new ones, so `Family grup🥰` sits at y=208 and the real
     `HASSAN JAN. HJ` at y=213 — two elements, five pixels apart, both claiming to be
-    there. Nothing in the tree tells them apart. `AXUIElementCopyElementAtPosition`
-    does, because it answers with what a click would actually hit, so `find` now hit
-    tests its leading candidates and returns nothing rather than a ghost's rectangle.
-    Verified: `Family grup` and `Maaz Husain` both exit 1 while the list is filtered.
-    `AXManualAccessibility` was tried first and A/B tested — a no-op here, so it is not
-    in the code.
+    there. **Still unfixed in `human`, and two attempts failed:** `AXManualAccessibility`
+    was A/B tested and is a no-op here; hit testing with
+    `AXUIElementCopyElementAtPosition` rejected the ghosts but also rejected real
+    elements, because the hit lands on a descendant whose identity and label both differ
+    from the candidate's, so `find "Search"` started returning a chat row. Both were
+    removed rather than kept on a plausible story.
+    The working answer is not to filter at all: `wa-send` reads the **visible** chat list
+    first, where no ghosts exist, and only searches if the name is not there. When it
+    must search it takes the topmost row carrying the name, since a filtered result is
+    drawn at the top while a stale row keeps its old position. The opened chat's own
+    title is the oracle either way.
 41. **A "business chats that use AI from Meta" sheet absorbed the Return.** `key return`
     reported success, the message sat unsent in the compose box. This is §29 again in
     the wild: the sheet does not block input, it eats it. Anything that *sends* wants
@@ -245,6 +250,14 @@ never by reading the code.** The build was clean each time.
     coordinates of a "Replying to HASSAN JAN" bubble inside the open group. Clicking it
     blind would have sent to a family group. Search by the app's own search field and
     confirm the header before typing.
+
+44. **An invisible character demoted every exact match.** `find "Search"` returned an
+    `AXGroup` called "Search results" instead of the search field, because the field's
+    label is `U+200E` + "Search": the mark broke both the equality and the prefix test,
+    leaving it a mere substring at score 2, which loses to a container that genuinely
+    starts with the word. §25 fixed this for *app* names and nobody carried it across to
+    *element* names. `matches` now strips directional marks on both sides. This is the
+    second time the same invisible character has cost hours.
 
 ### Test bugs (mine, and they matter)
 43. **A test string sent a real message to a real group.** Testing `wa-send`'s refusal
