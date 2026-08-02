@@ -255,8 +255,29 @@ func frontmostApp() -> String {
     NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
 }
 
+/// App names are not always what they look like: WhatsApp's begins with an invisible
+/// left-to-right mark, so an exact comparison silently fails to find a running app.
+/// Bundle identifiers are accepted too, since they have no such surprises.
+func appMatches(_ app: NSRunningApplication, _ wanted: String) -> Bool {
+    func clean(_ s: String) -> String {
+        s.unicodeScalars.filter { !(0x200B...0x200F).contains($0.value) && $0.value != 0xFEFF }
+            .map(String.init).joined()
+            .trimmingCharacters(in: .whitespaces)
+            .lowercased()
+    }
+    let want = clean(wanted)
+    if let name = app.localizedName, clean(name) == want { return true }
+    if let bundle = app.bundleIdentifier, bundle.lowercased() == want { return true }
+    if let name = app.localizedName, clean(name).contains(want), !want.isEmpty { return true }
+    return false
+}
+
+func runningApp(named: String) -> NSRunningApplication? {
+    NSWorkspace.shared.runningApplications.first { appMatches($0, named) }
+}
+
 func focusApp(_ name: String, timeout: Double = 12) -> Bool {
-    if let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == name }) {
+    if let app = runningApp(named: name) {
         app.activate(options: [.activateAllWindows])
     } else {
         // Not running yet, so it has to be launched. A name is not a bundle id, so look
@@ -282,9 +303,12 @@ func focusApp(_ name: String, timeout: Double = 12) -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-        if frontmostApp() == name { nap(Double.random(in: 0.25...0.6)); return true }
+        if let front = NSWorkspace.shared.frontmostApplication, appMatches(front, name) {
+            nap(Double.random(in: 0.25...0.6))
+            return true
+        }
     }
-    return frontmostApp() == name
+    return NSWorkspace.shared.frontmostApplication.map { appMatches($0, name) } ?? false
 }
 
 var requiredApp: String?
@@ -292,7 +316,7 @@ var requiredApp: String?
 func enforceFocus(_ what: String) {
     guard let want = requiredApp, !dry else { return }
     let have = frontmostApp()
-    guard have != want else { return }
+    if let front = NSWorkspace.shared.frontmostApplication, appMatches(front, want) { return }
     FileHandle.standardError.write(
         "human: refusing to \(what), '\(want)' must be frontmost but '\(have)' is\n".data(using: .utf8)!)
     exit(4)
@@ -456,8 +480,7 @@ func frontWindowRect() -> CGRect? {
 
 func axRoot(_ appName: String?) -> AXUIElement? {
     let name = appName ?? frontmostApp()
-    guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == name })
-    else { return nil }
+    guard let app = runningApp(named: name) else { return nil }
     return AXUIElementCreateApplication(app.processIdentifier)
 }
 
