@@ -81,6 +81,12 @@ func familiarKey(_ p: CGPoint) -> String { "\(Int(p.x) / 20),\(Int(p.y) / 20)" }
 
 func saveFamiliarity() {
     guard familiarityDirty else { return }
+    // Bounded, because this is written on every run and nothing ever removes a target.
+    // The rarely-visited entries are the ones that were not teaching it anything.
+    if familiarity.count > 3000 {
+        let keep = familiarity.sorted { $0.value > $1.value }.prefix(2000)
+        familiarity = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
+    }
     let dir = NSHomeDirectory() + "/Library/Caches/human-input"
     try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     if let raw = try? JSONSerialization.data(withJSONObject: familiarity) {
