@@ -215,6 +215,25 @@ A tweened curve reads as animation no matter how pretty the easing is.
 - **`--next x,y`** starts the pointer drifting toward the next target after a click,
   the way a hand leads into what it is about to do.
 
+## Describing a task instead of writing the steps
+
+`human-do` is the piece that decides. It looks at what is on screen, works out the
+steps, shows them in plain words, and runs them only after you agree.
+
+```bash
+human-do "open the ecomm page and tell me if the KPI tiles loaded"
+human-do "write today's reconciliation note in TextEdit" --read-screen
+```
+
+It needs credentials (`ant auth login`, or `ANTHROPIC_API_KEY`) and the Anthropic SDK
+(`pip3 install anthropic`). Everything below it — the plan, the approval, the
+verification, the audit log — is the same machinery documented here, so a task you
+describe in words ends up going through exactly the same gates as a script you wrote
+by hand.
+
+The split is deliberate: `human` executes and decides nothing, `human-do` decides and
+executes nothing. You can use either alone.
+
 ## How you actually use it: plan, agree, run
 
 Assign a task, read what it intends to do in plain words, say yes, watch it happen.

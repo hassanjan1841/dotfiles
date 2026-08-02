@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""Turn a task described in words into human-input steps: look, plan, agree, run.
+
+The binary executes; it decides nothing. This is the piece that decides. It looks at
+what is on screen, asks Claude for a plan of concrete steps, shows that plan in plain
+words, and runs it only after you say yes.
+
+Needs credentials: `ant auth login`, or ANTHROPIC_API_KEY in the environment.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import tempfile
+
+HUMAN = os.path.expanduser("~/dotfiles/bin/human")
+
+# The model is told what the hands can do. Kept in one place so it cannot drift from
+# the binary's actual command set.
+CAPABILITIES = """
+focus <AppName>                     bring an app forward
+move <x> <y>                        move the pointer
+click <x> <y> | click "name"        click a point, or a thing found by name
+click "name" --double|--right|--triple
+drag <x1> <y1> <x2> <y2> [--precise]
+scroll <amount> [x y]               negative scrolls down; give x y to aim it
+type "text" [--accuracy clean] [--verify]
+key <chord>                         e.g. cmd+a, shift+right, cmd+tab
+text select all|line|word | text find "needle"
+window move <dx> <dy> | window resize <dw> <dh>
+waitfor "text" [--timeout 20] [--gone]
+pane send <id> "text" --enter | pane waitfor <id> "pattern"
+wait <seconds>
+"""
+
+RULES = """
+Rules for the plan:
+- One command per line, in the order they should happen. No prose, no numbering.
+- Put --require <AppName> on every step that types or clicks, naming the app that must
+  be in front. Without it a missing window sends keystrokes somewhere else entirely.
+- Prefer clicking things by name over coordinates. Names survive a window moving.
+- Use --expect-change or --expect "text" on steps whose effect matters, so the step
+  proves it landed instead of assuming.
+- Add --recover to steps that could be blocked by a save sheet or a dialog.
+- Use --accuracy clean when the exact characters matter; the default makes and fixes
+  human typos, which autocorrect can occasionally turn into a real difference.
+- For a terminal, use `pane send` and `pane waitfor` rather than typing: it targets a
+  pane by id, so it cannot land in the wrong window.
+- Never include a step that deletes, sends, purchases, or overwrites unless the task
+  explicitly asks for it.
+"""
+
+
+def run(args, **kw):
+    return subprocess.run(args, capture_output=True, text=True, **kw)
+
+
+def observe(deep=False):
+    """What is on screen right now, in the words the model will plan against."""
+    front = run([HUMAN, "front"]).stdout.strip()
+    seen = run([HUMAN, "see", "--limit", "60"]).stdout.strip()
+    parts = [f"Frontmost app: {front}", "", "Visible elements (x,y / role / size / name):", seen]
+    if deep:
+        # OCR costs a second or two, so it is opt-in: only worth it when the app
+        # publishes nothing useful.
+        text = run([HUMAN, "read", "--fast"]).stdout.strip()
+        parts += ["", "Text read from the screen:", text[:4000]]
+    return "\n".join(parts)
+
+
+def ask_for_plan(task, screen, model, effort):
+    try:
+        import anthropic
+    except ImportError:
+        sys.exit("human-do: needs the Anthropic SDK.  pip3 install anthropic")
+
+    client = anthropic.Anthropic()
+    schema = {
+        "type": "object",
+        "properties": {
+            "approach": {"type": "string", "description": "One sentence on how you will do it."},
+            "steps": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "human commands, one per element, no numbering.",
+            },
+            "unclear": {
+                "type": "string",
+                "description": "What you had to assume, or empty if nothing.",
+            },
+        },
+        "required": ["approach", "steps", "unclear"],
+        "additionalProperties": False,
+    }
+
+    message = client.messages.create(
+        model=model,
+        max_tokens=8000,
+        output_config={
+            "effort": effort,
+            "format": {"type": "json_schema", "schema": schema},
+        },
+        system=(
+            "You drive a macOS machine through a command line tool called `human`, "
+            "which moves the pointer and types the way a person does. You are given "
+            "what is currently on screen and a task. Produce the steps.\n"
+            f"\nCommands available:\n{CAPABILITIES}\n{RULES}"
+        ),
+        messages=[{"role": "user", "content": f"On screen now:\n{screen}\n\nTask: {task}"}],
+    )
+    text = "".join(b.text for b in message.content if b.type == "text")
+    return json.loads(text)
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Describe a task; it plans, you agree, it acts.")
+    ap.add_argument("task", nargs="+", help="what you want done, in plain words")
+    ap.add_argument("--model", default="claude-opus-5")
+    ap.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
+    ap.add_argument("--read-screen", action="store_true", help="also OCR the screen (slower)")
+    ap.add_argument("--yes", action="store_true", help="skip the approval prompt")
+    args = ap.parse_args()
+    task = " ".join(args.task)
+
+    print("looking at the screen...", file=sys.stderr)
+    screen = observe(deep=args.read_screen)
+
+    print("working out the steps...", file=sys.stderr)
+    plan = ask_for_plan(task, screen, args.model, args.effort)
+
+    if not plan["steps"]:
+        sys.exit("human-do: it could not find a way to do that from what is on screen.")
+
+    script = tempfile.NamedTemporaryFile("w", suffix=".human", delete=False)
+    script.write(f"# {task}\n" + "\n".join(plan["steps"]) + "\n")
+    script.close()
+
+    print(f"\n{plan['approach']}")
+    if plan["unclear"].strip():
+        print(f"assumed: {plan['unclear']}")
+    print()
+    subprocess.run([HUMAN, "plan", script.name])
+
+    if not args.yes:
+        try:
+            answer = input("\nrun it? [y/N] ").strip().lower()
+        except EOFError:
+            answer = ""
+        if answer not in ("y", "yes"):
+            print("stopped, nothing was done")
+            return
+    print()
+
+    result = subprocess.run([HUMAN, "run", script.name])
+    if result.returncode == 0:
+        print("\nchecking what changed...", file=sys.stderr)
+        print(run([HUMAN, "front"]).stdout.strip(), "is in front now")
+    sys.exit(result.returncode)
+
+
+if __name__ == "__main__":
+    main()
