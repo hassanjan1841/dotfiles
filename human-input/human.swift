@@ -1642,7 +1642,9 @@ human - drive macOS the way a person does, and read the screen three ways
     human gesture pinch <amount> | swipe <amount>      attempted, not all apps listen
     human open <AppName> / human wait <seconds>
     human idle [--minutes N] [--no-yield]
-    human run <file|-> [--verbose] [--dry]
+    human plan <file|->             read the steps in plain words, touching nothing
+    human run <file|-> [--confirm] [--dry] [--verbose]
+                                    --confirm shows the plan and asks before acting
 
   keep it safe
     --require <AppName>             refuse to act unless that app is frontmost
@@ -1661,6 +1663,10 @@ human - drive macOS the way a person does, and read the screen three ways
 
 Every action carries its own delays, so a sequence never ticks like a clock.
 """
+
+// Unbuffered, so the plan and the prompt appear before the steps they describe when
+// the output is piped rather than sitting in a terminal.
+setvbuf(stdout, nil, _IONBF, 0)
 
 atexit { releaseEverythingHeld(); saveFamiliarity(); saveSession() }
 // A signal handler may not allocate or post events, so it only raises a flag and the
@@ -2073,7 +2079,10 @@ func execute(_ cmd: String, _ rest: [String]) {
         guard !name.isEmpty else {
             FileHandle.standardError.write("human: focus needs an app name\n".data(using: .utf8)!); exit(2)
         }
-        if dry { print("would focus \(name)"); break }
+        if dry {
+            FileHandle.standardError.write("  would focus \(name)\n".data(using: .utf8)!)
+            break
+        }
         if !focusApp(name) {
             FileHandle.standardError.write(
                 "human: could not bring '\(name)' to the front, '\(frontmostApp())' still is\n".data(using: .utf8)!)
@@ -2285,6 +2294,79 @@ func execute(_ cmd: String, _ rest: [String]) {
     }
 }
 
+/// A step written in the words a person would use, so a plan can be read and agreed to
+/// before anything touches the machine. The whole point of showing a plan is that it is
+/// legible; printing the raw command back is not a plan.
+func describe(_ cmd: String, _ args: [String]) -> String {
+    func val(_ flag: String) -> String? {
+        guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+    // Skipping the flags is not enough: their values are arguments too, and a leaked
+    // "--require TextEdit" turns into text the plan claims will be typed.
+    let takesValue: Set<String> = [
+        "--require", "--app", "--role", "--wpm", "--accuracy", "--style", "--persona",
+        "--device", "--timeout", "--expect", "--expect-timeout", "--retry", "--button",
+        "--region", "--limit", "--minutes", "--repeat", "--hold", "--next"
+    ]
+    var plain: [String] = []
+    var skip = false
+    for (i, a) in args.enumerated() {
+        if skip { skip = false; continue }
+        if a == "--expect-change" {
+            // its value is optional, and only present when it parses as a region
+            if i + 1 < args.count, parseRegion(args[i + 1]) != nil { skip = true }
+            continue
+        }
+        if a.hasPrefix("--") { skip = takesValue.contains(a); continue }
+        plain.append(a)
+    }
+    let quoted = plain.joined(separator: " ")
+    var line: String
+
+    switch cmd {
+    case "focus": line = "bring \(quoted) to the front"
+    case "open": line = "open \(quoted)"
+    case "move": line = "move the pointer to \(quoted)"
+    case "click":
+        let what = plain.count >= 2 && Double(plain[0]) != nil ? "at \(plain.joined(separator: ","))"
+                                                              : "on \"\(quoted)\""
+        let kind = args.contains("--double") ? "double click" : args.contains("--right") ? "right click"
+                 : args.contains("--triple") ? "triple click" : "click"
+        line = "\(kind) \(what)"
+    case "drag": line = "drag from \(plain.prefix(2).joined(separator: ",")) to \(plain.dropFirst(2).joined(separator: ","))"
+    case "scroll":
+        let n = Int(plain.first ?? "0") ?? 0
+        line = "scroll \(n < 0 ? "down" : "up") \(abs(n))px"
+    case "type": line = "type \"\(quoted)\""
+    case "key": line = "press \(quoted)"
+    case "text": line = "\(plain.first ?? "") text \(plain.dropFirst().joined(separator: " "))"
+    case "window": line = "\(plain.first ?? "") the window \(plain.dropFirst().joined(separator: " "))"
+    case "waitfor":
+        line = "wait until \"\(quoted)\" \(args.contains("--gone") ? "goes away" : "appears")"
+    case "pane":
+        let sub = plain.first ?? ""
+        line = sub == "send" ? "write into terminal pane \(plain.dropFirst().joined(separator: " "))"
+             : sub == "waitfor" ? "wait for terminal pane \(plain.dropFirst().joined(separator: " "))"
+             : "read terminal pane \(plain.dropFirst().joined(separator: " "))"
+    case "changed": line = "wait for the screen to change"
+    case "dialog": line = plain.first == "dismiss" ? "clear any dialog in the way" : "check for a dialog"
+    case "wait": line = "pause \(quoted)s"
+    case "idle": line = "idle"
+    default: line = "\(cmd) \(args.joined(separator: " "))"
+    }
+
+    var notes: [String] = []
+    if let app = val("--require") { notes.append("only if \(app) is in front") }
+    if args.contains("--expect-change") { notes.append("confirm the screen changed") }
+    if let t = val("--expect") { notes.append("confirm \"\(t)\" appears") }
+    if args.contains("--verify") { notes.append("read it back") }
+    if let r = val("--retry") { notes.append("retry up to \(r)x") }
+    if args.contains("--recover") { notes.append("clear anything in the way first") }
+    if let t = val("--timeout") { notes.append("up to \(t)s") }
+    return notes.isEmpty ? line : "\(line), \(notes.joined(separator: ", "))"
+}
+
 /// Runs an action and, when an expectation was given, proves it happened.
 func executeChecked(_ cmd: String, _ rest: [String]) {
     var rest = rest
@@ -2347,37 +2429,105 @@ func executeChecked(_ cmd: String, _ rest: [String]) {
     exit(8)
 }
 
-if cmd == "run" {
-    let verbose = takeFlag("--verbose")
-    if takeFlag("--dry") { dry = true }
-    let path = argv.first ?? "-"
-    let body: String
-    if path == "-" {
-        body = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
-    } else {
-        body = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-    }
+/// One command per line, # for comments. Quoted text stays a single argument.
+func parseScript(_ body: String) -> [(String, [String])] {
+    var steps: [(String, [String])] = []
     for raw in body.split(separator: "\n", omittingEmptySubsequences: false) {
         let line = raw.trimmingCharacters(in: .whitespaces)
         if line.isEmpty || line.hasPrefix("#") { continue }
-        // Quoted text stays one argument so `type "hello there"` works.
         var parts: [String] = []
         var current = ""
         var quoted = false
         for c in line {
             if c == "\"" { quoted.toggle(); continue }
-            if c == " " && !quoted { if !current.isEmpty { parts.append(current); current = "" }; continue }
+            if c == " " && !quoted {
+                if !current.isEmpty { parts.append(current); current = "" }
+                continue
+            }
             current.append(c)
         }
         if !current.isEmpty { parts.append(current) }
         guard let head = parts.first else { continue }
-        if verbose { FileHandle.standardError.write("human: \(line)\n".data(using: .utf8)!) }
-        executeChecked(head, Array(parts.dropFirst()))
+        steps.append((head, Array(parts.dropFirst())))
+    }
+    return steps
+}
+
+func loadScript(_ path: String) -> String {
+    if path == "-" {
+        return String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    }
+    return (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+}
+
+/// How long the whole thing would take, measured by rehearsing it rather than guessing.
+func rehearse(_ steps: [(String, [String])]) -> Double {
+    let wasDry = dry
+    dry = true
+    dryElapsed = 0
+    for (cmd, args) in steps { execute(cmd, args) }
+    let total = dryElapsed
+    dry = wasDry
+    dryElapsed = 0
+    return total
+}
+
+func printPlan(_ steps: [(String, [String])], _ name: String) {
+    print("\(name), \(steps.count) step\(steps.count == 1 ? "" : "s")")
+    for (i, step) in steps.enumerated() {
+        print(String(format: "  %2d. %@", i + 1, describe(step.0, step.1)))
+    }
+    let seconds = rehearse(steps)
+    print(String(format: "  about %@ at a human pace",
+                 seconds < 90 ? "\(Int(seconds.rounded()))s"
+                              : String(format: "%.1f minutes", seconds / 60)))
+}
+
+if cmd == "plan" {
+    let path = argv.first ?? "-"
+    printPlan(parseScript(loadScript(path)), path == "-" ? "plan" : path)
+
+} else if cmd == "run" {
+    let verbose = takeFlag("--verbose")
+    let confirm = takeFlag("--confirm")
+    if takeFlag("--dry") { dry = true }
+    let path = argv.first ?? "-"
+    let steps = parseScript(loadScript(path))
+
+    if confirm || dry {
+        printPlan(steps, path == "-" ? "plan" : path)
+    }
+    if confirm && !dry {
+        // Asked once, before anything happens, because the point of a plan is the
+        // chance to say no.
+        print("\nrun it? [y/N] ", terminator: "")
+        let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        guard answer == "y" || answer == "yes" else { print("stopped, nothing was done"); exit(0) }
+        print("")
+    }
+
+    var done = 0
+    let began = Date()
+    for (i, step) in steps.enumerated() {
+        if !dry {
+            FileHandle.standardError.write(
+                "[\(i + 1)/\(steps.count)] \(describe(step.0, step.1))\n".data(using: .utf8)!)
+        } else if verbose {
+            FileHandle.standardError.write("  would: \(describe(step.0, step.1))\n".data(using: .utf8)!)
+        }
+        executeChecked(step.0, step.1)
+        done += 1
         nap(Double.random(in: 0.12...0.45))       // gap between deliberate actions
     }
+
     if dry {
-        print(String(format: "rehearsal only, nothing was touched. would take about %.0fs", dryElapsed))
+        print("rehearsal only, nothing was touched")
+    } else {
+        let took = Date().timeIntervalSince(began)
+        FileHandle.standardError.write(
+            String(format: "done: %d of %d steps in %.0fs\n", done, steps.count, took).data(using: .utf8)!)
     }
+
 } else {
     executeChecked(cmd, argv)
 }

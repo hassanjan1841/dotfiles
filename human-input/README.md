@@ -215,6 +215,38 @@ A tweened curve reads as animation no matter how pretty the easing is.
 - **`--next x,y`** starts the pointer drifting toward the next target after a click,
   the way a hand leads into what it is about to do.
 
+## How you actually use it: plan, agree, run
+
+Assign a task, read what it intends to do in plain words, say yes, watch it happen.
+
+```bash
+human plan reconcile.human        # the steps, in words, touching nothing
+human run reconcile.human --confirm
+```
+
+```
+reconcile.human, 7 steps
+   1. bring TextEdit to the front
+   2. press cmd+a, only if TextEdit is in front
+   3. press delete
+   4. type "Sellerboard reconciliation, 3 August", only if TextEdit is in front, read it back
+   5. press return
+   6. type "Account daily totals match the dashboard...", read it back, clear anything in the way first
+   7. press s, only if TextEdit is in front
+  about 17s at a human pace
+
+run it? [y/N] y
+
+[1/7] bring TextEdit to the front
+[2/7] press cmd+a, only if TextEdit is in front
+...
+done: 7 of 7 steps in 20s
+```
+
+The duration is measured by rehearsing the script, not estimated. Answering anything
+but yes does nothing at all. Every step is appended to `~/Library/Logs/human-input.log`
+so a finished run can be read back afterwards.
+
 ## Scripts
 
 One command per line, `#` for comments. Quoted text stays one argument.
