@@ -5,7 +5,9 @@ The binary executes; it decides nothing. This is the piece that decides. It look
 what is on screen, asks Claude for a plan of concrete steps, shows that plan in plain
 words, and runs it only after you say yes.
 
-Needs credentials: `ant auth login`, or ANTHROPIC_API_KEY in the environment.
+Uses the `claude` CLI you already have, in headless mode, so there is no API key to
+manage and no separate bill. Falls back to the Anthropic SDK with --api if you'd
+rather use a key.
 """
 
 import argparse
@@ -70,11 +72,58 @@ def observe(deep=False):
     return "\n".join(parts)
 
 
-def ask_for_plan(task, screen, model, effort):
+def build_prompt(task, screen):
+    return (
+        "You drive a macOS machine through a command line tool called `human`, which "
+        "moves the pointer and types the way a person does. Below is what is on screen "
+        "right now, and a task. Work out the steps.\n"
+        f"\nCommands available:\n{CAPABILITIES}\n{RULES}\n"
+        f"On screen now:\n{screen}\n\nTask: {task}\n\n"
+        "Reply with JSON only, no prose and no code fence:\n"
+        '{"approach": "one sentence", "steps": ["human command", ...], '
+        '"unclear": "what you assumed, or empty"}'
+    )
+
+
+def extract_json(text):
+    """The CLI may wrap the answer in prose or a fence; take the first JSON object."""
+    start = text.find("{")
+    if start < 0:
+        raise ValueError(f"no JSON in the reply:\n{text[:400]}")
+    depth, in_string, escaped = 0, False, False
+    for i, ch in enumerate(text[start:], start):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return json.loads(text[start:i + 1])
+    raise ValueError("the reply's JSON never closed")
+
+
+def ask_via_cli(task, screen):
+    # stdin is closed for the planner: `claude -p` reads piped input, and left open it
+    # swallows the keystroke meant for the approval prompt further down.
+    result = run(["claude", "-p", build_prompt(task, screen)], stdin=subprocess.DEVNULL)
+    if result.returncode != 0:
+        sys.exit(f"human-do: claude failed:\n{result.stderr.strip()[:400]}")
+    return extract_json(result.stdout)
+
+
+def ask_via_api(task, screen, model, effort):
     try:
         import anthropic
     except ImportError:
-        sys.exit("human-do: needs the Anthropic SDK.  pip3 install anthropic")
+        sys.exit("human-do: --api needs the Anthropic SDK.  pip3 install anthropic")
 
     client = anthropic.Anthropic()
     schema = {
@@ -117,6 +166,8 @@ def ask_for_plan(task, screen, model, effort):
 def main():
     ap = argparse.ArgumentParser(description="Describe a task; it plans, you agree, it acts.")
     ap.add_argument("task", nargs="+", help="what you want done, in plain words")
+    ap.add_argument("--api", action="store_true",
+                    help="plan via the Anthropic SDK and an API key instead of the claude CLI")
     ap.add_argument("--model", default="claude-opus-5")
     ap.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
     ap.add_argument("--read-screen", action="store_true", help="also OCR the screen (slower)")
@@ -128,7 +179,8 @@ def main():
     screen = observe(deep=args.read_screen)
 
     print("working out the steps...", file=sys.stderr)
-    plan = ask_for_plan(task, screen, args.model, args.effort)
+    plan = (ask_via_api(task, screen, args.model, args.effort) if args.api
+            else ask_via_cli(task, screen))
 
     if not plan["steps"]:
         sys.exit("human-do: it could not find a way to do that from what is on screen.")

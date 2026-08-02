@@ -1980,13 +1980,17 @@ func execute(_ cmd: String, _ rest: [String]) {
             let timeout = Double(takeValue("--timeout") ?? "") ?? 300
             let gone = takeFlag("--gone")
             let pattern = argv.joined(separator: " ")
+            if dry { nap(min(timeout, 2)); break }
             let deadline = Date().addingTimeInterval(timeout)
+            var seen = false
             while Date() < deadline {
-                if paneMatches(paneText(id), pattern) != gone { exit(0) }
+                if paneMatches(paneText(id), pattern) != gone { seen = true; break }
                 nap(1.0)
             }
-            FileHandle.standardError.write("human: pane \(id) never \(gone ? "cleared" : "showed") '\(pattern)'\n".data(using: .utf8)!)
-            exit(6)
+            if !seen {
+                FileHandle.standardError.write("human: pane \(id) never \(gone ? "cleared" : "showed") '\(pattern)'\n".data(using: .utf8)!)
+                exit(6)
+            }
         default:
             FileHandle.standardError.write("human: pane list|read|send|waitfor\n".data(using: .utf8)!)
             exit(2)
@@ -2028,8 +2032,8 @@ func execute(_ cmd: String, _ rest: [String]) {
         let sub = argv.first ?? "check"
         if !argv.isEmpty && !argv[0].hasPrefix("--") { argv.removeFirst() }
         guard let found = frontDialog() else {
-            if sub == "check" { print("none") }
-            exit(sub == "check" ? 1 : 0)      // nothing to dismiss is not a failure
+            if sub == "check" { print("none"); exit(1) }
+            break                             // nothing to dismiss is not a failure
         }
         switch sub {
         case "check":
@@ -2155,21 +2159,23 @@ func execute(_ cmd: String, _ rest: [String]) {
             FileHandle.standardError.write("human: changed needs x,y,w,h or no argument for the front window\n"
                 .data(using: .utf8)!); exit(2)
         }
+        if dry { nap(min(timeout, 2)); break }
         guard let before = baseline(region) else {
             FileHandle.standardError.write("human: could not read that region\n".data(using: .utf8)!); exit(1)
         }
         let deadline = Date().addingTimeInterval(timeout)
+        var moved = false
         while Date() < deadline {
             nap(0.2)
             // Confirmed a beat later: a rendering blip does not survive a second look,
             // a repaint does.
             if let now = signature(region), before.changed(now) {
                 nap(0.35)
-                if let again = signature(region), before.changed(again) { print("changed"); exit(0) }
+                if let again = signature(region), before.changed(again) { moved = true; break }
             }
         }
-        print("unchanged")
-        exit(1)
+        guard moved else { print("unchanged"); exit(1) }
+        print("changed")
 
     case "read":
         var region = screen
@@ -2209,19 +2215,29 @@ func execute(_ cmd: String, _ rest: [String]) {
         let timeout = Double(takeValue("--timeout") ?? "") ?? 20
         let untilGone = takeFlag("--gone")
         let needle = argv.joined(separator: " ")
+        // A rehearsal must not really sit and poll: it would spend the whole timeout
+        // and then report a failure for something that was never going to happen.
+        if dry { nap(min(timeout, 2)); break }
+        // Succeeding returns to the caller rather than exiting: inside a script the
+        // steps run in this same process, and exit(0) here would silently end the run
+        // with a success code partway through.
         let deadline = Date().addingTimeInterval(timeout)
+        var arrived = false
         while Date() < deadline {
             let there = !find(needle, app: app, role: role, all: false).isEmpty
             if there != untilGone {
                 nap(Double.random(in: 0.2...0.5))     // a person does not react instantly
-                exit(0)
+                arrived = true
+                break
             }
             nap(0.25)
         }
-        FileHandle.standardError.write(
-            "human: waited \(Int(timeout))s, '\(needle)' never \(untilGone ? "went away" : "appeared")\n"
-                .data(using: .utf8)!)
-        exit(6)
+        if !arrived {
+            FileHandle.standardError.write(
+                "human: waited \(Int(timeout))s, '\(needle)' never \(untilGone ? "went away" : "appeared")\n"
+                    .data(using: .utf8)!)
+            exit(6)
+        }
 
     case "unstick":
         // An aborted command can leave a modifier or a button down, and everything

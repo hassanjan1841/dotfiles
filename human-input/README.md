@@ -245,8 +245,9 @@ human-do "open the ecomm page and tell me if the KPI tiles loaded"
 human-do "write today's reconciliation note in TextEdit" --read-screen
 ```
 
-It needs credentials (`ant auth login`, or `ANTHROPIC_API_KEY`) and the Anthropic SDK
-(`pip3 install anthropic`). Everything below it — the plan, the approval, the
+It plans through the `claude` CLI you already have, in headless mode, so there is no
+API key and no separate bill. `--api` switches to the Anthropic SDK with a key if you
+prefer that. Everything below it — the plan, the approval, the
 verification, the audit log — is the same machinery documented here, so a task you
 describe in words ends up going through exactly the same gates as a script you wrote
 by hand.
