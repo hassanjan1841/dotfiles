@@ -315,6 +315,19 @@ func axTree(_ root: AXUIElement, limit: Int = 4000, maxDepth: Int = 24) -> [Seen
     return out
 }
 
+/// The frontmost window's rectangle, so verification does not need hand-measured
+/// coordinates. Falls back to the whole screen when no window can be found.
+func frontWindowRect() -> CGRect? {
+    guard let root = axRoot(nil) else { return nil }
+    for attr in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
+        if let win = axValue(root, attr as String), CFGetTypeID(win) == AXUIElementGetTypeID(),
+           let rect = axRect(win as! AXUIElement), rect.width > 0 {
+            return rect
+        }
+    }
+    return nil
+}
+
 func axRoot(_ appName: String?) -> AXUIElement? {
     let name = appName ?? frontmostApp()
     guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == name })
@@ -434,23 +447,106 @@ func captureScreen(_ region: CGRect) -> (CGImage, CGFloat)? {
     return (img, CGFloat(img.width) / max(region.width, 1))     // retina factor
 }
 
-/// A cheap perceptual hash of a screen region. Sampled on a grid and quantised, so
-/// antialiasing and a blinking cursor do not count as change, but a repaint does.
-func fingerprint(_ region: CGRect) -> UInt64? {
+/// A coarse grid of quantised brightness samples. Comparing how MANY cells differ,
+/// rather than whether a single hash changed, is what separates a repaint from a
+/// blinking caret: a caret moves one or two cells, a repaint moves dozens.
+func signature(_ region: CGRect) -> [UInt8]? {
     guard let (img, _) = captureScreen(region),
           let data = img.dataProvider?.data,
           let bytes = CFDataGetBytePtr(data) else { return nil }
     let rowBytes = img.bytesPerRow, pixelBytes = max(1, img.bitsPerPixel / 8)
-    let stepX = max(1, img.width / 48), stepY = max(1, img.height / 48)
-    var h: UInt64 = 0xcbf2_9ce4_8422_2325
-    for y in stride(from: 0, to: img.height, by: stepY) {
-        for x in stride(from: 0, to: img.width, by: stepX) {
-            let o = y * rowBytes + x * pixelBytes
-            guard o + 2 < CFDataGetLength(data) else { continue }
-            let grey = (UInt64(bytes[o]) + UInt64(bytes[o + 1]) + UInt64(bytes[o + 2])) / 3
-            h = (h ^ (grey >> 3)) &* 0x0000_0100_0000_01b3    // >>3 tolerates dithering
+    let length = CFDataGetLength(data)
+    // Cells are a fixed size in pixels, not a fixed count, so sensitivity does not
+    // change with the size of the region being watched. A grid of fixed count means
+    // two typed characters are obvious in a small field and invisible in a window.
+    let cellPixels = 7
+    let cellsX = min(max(img.width / cellPixels, 12), 260)
+    let cellsY = min(max(img.height / cellPixels, 12), 260)
+    var out: [UInt8] = []
+    // Each cell averages its own area rather than poking a single pixel. Point samples
+    // miss text entirely: strokes are one or two pixels wide and the samples are a
+    // dozen apart, so nearly every one lands on the background between letters.
+    out.reserveCapacity(cellsX * cellsY)
+    for cy in 0..<cellsY {
+        let y0 = img.height * cy / cellsY, y1 = max(y0 + 1, img.height * (cy + 1) / cellsY)
+        for cx in 0..<cellsX {
+            let x0 = img.width * cx / cellsX, x1 = max(x0 + 1, img.width * (cx + 1) / cellsX)
+            var total = 0, count = 0
+            var y = y0
+            while y < y1 {
+                var x = x0
+                while x < x1 {
+                    let o = y * rowBytes + x * pixelBytes
+                    if o + 2 < length {
+                        total += (Int(bytes[o]) + Int(bytes[o + 1]) + Int(bytes[o + 2])) / 3
+                        count += 1
+                    }
+                    x += max(1, (x1 - x0) / 4)
+                }
+                y += max(1, (y1 - y0) / 4)
+            }
+            let mean = count > 0 ? total / count : 0
+            out.append(UInt8(mean >> 2))          // quantised, so dithering is not news
         }
     }
+    return out
+}
+
+/// A baseline is several samples of the same region. Cells that already disagree
+/// across those samples are flickering on their own: a fading caret, an animation, a
+/// spinner. They are masked out, and change is judged only on the cells that were
+/// holding still. This is what separates a repaint from a blinking cursor; no
+/// magnitude threshold can, because a caret is a large fraction of a small region and
+/// a few typed characters are a tiny fraction of a large one.
+struct Baseline {
+    let reference: [UInt8]
+    let stable: [Bool]
+
+    var stableCount: Int { stable.filter { $0 }.count }
+
+    /// A cell counts as moved only on a real brightness shift. Ink against background
+    /// is dozens of grey levels; capture noise and antialiasing are one or two, and
+    /// exact-equality comparison treats those as news.
+    static let step: Int = 4
+
+    /// An absolute count, not a percentage. A percentage cannot work across region
+    /// sizes: two typed characters are a fifth of a small field and a rounding error
+    /// of a whole window. Cells that flicker on their own are already excluded, so a
+    /// few stable cells moving really is something happening.
+    func changed(_ now: [UInt8]) -> Bool {
+        guard now.count == reference.count, stableCount > 20 else { return false }
+        var differing = 0
+        for i in 0..<now.count where stable[i] {
+            if abs(Int(now[i]) - Int(reference[i])) >= Baseline.step {
+                differing += 1
+                if differing >= 4 { return true }
+            }
+        }
+        return false
+    }
+}
+
+func baseline(_ region: CGRect, samples: Int = 4) -> Baseline? {
+    var shots: [[UInt8]] = []
+    for i in 0..<samples {
+        guard let s = signature(region) else { continue }
+        shots.append(s)
+        if i + 1 < samples { nap(0.3) }
+    }
+    guard let first = shots.first, !first.isEmpty else { return nil }
+    var stable = [Bool](repeating: true, count: first.count)
+    for shot in shots.dropFirst() where shot.count == first.count {
+        for i in 0..<first.count where abs(Int(shot[i]) - Int(first[i])) >= Baseline.step {
+            stable[i] = false
+        }
+    }
+    return Baseline(reference: first, stable: stable)
+}
+
+func fingerprint(_ region: CGRect) -> UInt64? {
+    guard let sig = signature(region) else { return nil }
+    var h: UInt64 = 0xcbf2_9ce4_8422_2325
+    for v in sig { h = (h ^ UInt64(v)) &* 0x0000_0100_0000_01b3 }
     return h
 }
 
@@ -1389,10 +1485,12 @@ human - drive macOS the way a person does, and read the screen three ways
     human read [--region x,y,w,h] [--fast]  read the screen with OCR
     human pane list|read <id>|send <id> "text" [--enter]|waitfor <id> "pattern"
     human waitfor "Done" [--gone] [--timeout 20]
-    human changed <x,y,w,h> [--timeout 3]   wait until a region repaints
+    human changed [x,y,w,h] [--timeout 3]   wait until a region, or the front window, repaints
 
   act
     human focus <AppName>           bring an app forward, wait until it really is
+    human window where|move <dx> <dy>|place <x> <y>|resize <dw> <dh>
+                                    drag the front window by its title bar or corner
     human move <x> <y>
     human click <x y | "name"> [--right --middle --double --triple --precise --hold s]
     human drag <x1> <y1> <x2> <y2> [--precise]
@@ -1406,7 +1504,8 @@ human - drive macOS the way a person does, and read the screen three ways
   keep it safe
     --require <AppName>             refuse to act unless that app is frontmost
     --dry                           rehearse, touch nothing
-    --expect-change <x,y,w,h> | --expect "text" [--retry N]
+    --expect-change [x,y,w,h] | --expect "text" [--retry N]
+                                    region defaults to the frontmost window
                                     prove the action landed, repeat it if not
     human stop / human go           set or clear the abort flag
     human unstick                   release anything left held down
@@ -1431,13 +1530,15 @@ argv.removeFirst()
 
 /// An action that cannot tell whether it worked is a guess. Anything can be asked to
 /// prove its effect, and to try again when it cannot.
-func verify(expectChange: CGRect?, expectText: String?, app: String?, timeout: Double) -> Bool {
+func verify(against before: Baseline?, region: CGRect?, expectText: String?,
+            app: String?, timeout: Double) -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
-    var before: UInt64?
-    if let region = expectChange { before = fingerprint(region) }
     while Date() < deadline {
-        if let region = expectChange, let start = before {
-            if let now = fingerprint(region), now != start { return true }
+        if let region = region, let start = before {
+            if let now = signature(region), start.changed(now) {
+                nap(0.35)
+                if let again = signature(region), start.changed(again) { return true }
+            }
         }
         if let needle = expectText, !find(needle, app: app, role: nil, all: false).isEmpty { return true }
         nap(0.3)
@@ -1548,18 +1649,62 @@ func execute(_ cmd: String, _ rest: [String]) {
             exit(2)
         }
 
-    case "changed":
-        guard let spec = takeValue("--region") ?? argv.first, let region = parseRegion(spec) else {
-            FileHandle.standardError.write("human: changed needs x,y,w,h\n".data(using: .utf8)!); exit(2)
+    case "window":
+        let sub = argv.first ?? "where"
+        if !argv.isEmpty { argv.removeFirst() }
+        guard let rect = frontWindowRect() else {
+            FileHandle.standardError.write("human: no front window\n".data(using: .utf8)!); exit(1)
         }
+        // The title bar, clear of the traffic lights on the left.
+        let grip = CGPoint(x: rect.midX, y: rect.minY + 12)
+        switch sub {
+        case "where":
+            print("\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width)),\(Int(rect.height))")
+        case "move":
+            guard argv.count >= 2, let dx = Double(argv[0]), let dy = Double(argv[1]) else {
+                FileHandle.standardError.write("human: window move needs <dx> <dy>\n".data(using: .utf8)!); exit(2)
+            }
+            drag(from: grip, to: CGPoint(x: grip.x + CGFloat(dx), y: grip.y + CGFloat(dy)))
+        case "place":
+            guard argv.count >= 2, let x = Double(argv[0]), let y = Double(argv[1]) else {
+                FileHandle.standardError.write("human: window place needs <x> <y>\n".data(using: .utf8)!); exit(2)
+            }
+            drag(from: grip, to: CGPoint(x: CGFloat(x) + rect.width / 2, y: CGFloat(y) + 12))
+        case "resize":
+            guard argv.count >= 2, let dw = Double(argv[0]), let dh = Double(argv[1]) else {
+                FileHandle.standardError.write("human: window resize needs <dw> <dh>\n".data(using: .utf8)!); exit(2)
+            }
+            precise = true          // a resize edge is about 4px, aim jitter is wider
+            drag(from: CGPoint(x: rect.maxX - 1, y: rect.maxY - 1),
+                 to: CGPoint(x: rect.maxX - 1 + CGFloat(dw), y: rect.maxY - 1 + CGFloat(dh)))
+        default:
+            FileHandle.standardError.write("human: window where|move|place|resize\n".data(using: .utf8)!); exit(2)
+        }
+
+    case "changed":
+        // With no region given, watch the window in front. Hand-measured coordinates
+        // are the fragile part of any of this.
+        // Flags first, so a bare `human changed --timeout 5` does not read the flag
+        // itself as the region.
         let timeout = Double(takeValue("--timeout") ?? "") ?? 3
-        guard let before = fingerprint(region) else {
+        let given = takeValue("--region") ?? argv.first.flatMap { $0.hasPrefix("--") ? nil : $0 }
+        let region = given.flatMap(parseRegion) ?? (given == nil ? (frontWindowRect() ?? screen) : nil)
+        guard let region = region else {
+            FileHandle.standardError.write("human: changed needs x,y,w,h or no argument for the front window\n"
+                .data(using: .utf8)!); exit(2)
+        }
+        guard let before = baseline(region) else {
             FileHandle.standardError.write("human: could not read that region\n".data(using: .utf8)!); exit(1)
         }
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            nap(0.25)
-            if let now = fingerprint(region), now != before { print("changed"); exit(0) }
+            nap(0.2)
+            // Confirmed a beat later: a rendering blip does not survive a second look,
+            // a repaint does.
+            if let now = signature(region), before.changed(now) {
+                nap(0.35)
+                if let again = signature(region), before.changed(again) { print("changed"); exit(0) }
+            }
         }
         print("unchanged")
         exit(1)
@@ -1856,8 +2001,15 @@ func executeChecked(_ cmd: String, _ rest: [String]) {
     var timeout = 4.0
 
     // Pulled out before the action sees them, and kept for every retry.
-    if let i = rest.firstIndex(of: "--expect-change"), i + 1 < rest.count {
-        expectChange = parseRegion(rest[i + 1]); rest.removeSubrange(i...(i + 1))
+    if let i = rest.firstIndex(of: "--expect-change") {
+        let arg = i + 1 < rest.count ? rest[i + 1] : nil
+        if let arg = arg, let region = parseRegion(arg) {
+            expectChange = region
+            rest.removeSubrange(i...(i + 1))
+        } else {
+            expectChange = frontWindowRect() ?? screen
+            rest.remove(at: i)
+        }
     }
     if let i = rest.firstIndex(of: "--expect"), i + 1 < rest.count {
         expectText = rest[i + 1]; rest.removeSubrange(i...(i + 1))
@@ -1873,8 +2025,12 @@ func executeChecked(_ cmd: String, _ rest: [String]) {
 
     let app = rest.firstIndex(of: "--app").map { rest[$0 + 1] }
     for attempt in 0...retries {
+        // The baseline has to be taken before the action, or it records the result and
+        // then waits for a change that already happened.
+        let before = expectChange.flatMap { baseline($0) }
         execute(cmd, rest)
-        if verify(expectChange: expectChange, expectText: expectText, app: app, timeout: timeout) { return }
+        if verify(against: before, region: expectChange, expectText: expectText,
+                  app: app, timeout: timeout) { return }
         if attempt < retries {
             FileHandle.standardError.write("human: no effect, trying again\n".data(using: .utf8)!)
             nap(Double.random(in: 0.4...1.1))      // a person pauses before repeating

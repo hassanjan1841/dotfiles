@@ -124,6 +124,13 @@ Slips only happen on letters, never on spaces or punctuation, and a correction n
 crosses a space. Both rules exist because macOS rewrites text behind your back:
 two spaces become a period, and autocorrect rewrites a word the moment you leave it.
 
+**Autocorrect can still beat it.** Measured in TextEdit: 8/8 exact with system
+autocorrect off, and occasional differences with it on, where a word gets rewritten
+while a correction is mid-flight. The slip logic itself is proven over 500 dry runs,
+so this is the environment rewriting text, not the model. Where the exact string
+matters, use `--accuracy clean`: nothing is mistyped, so nothing needs correcting and
+there is nothing for autocorrect to collide with.
+
 ## What makes it read as a hand
 
 The pointer model matters more than anything else here, and smooth easing is not it.
@@ -170,8 +177,9 @@ A tweened curve reads as animation no matter how pretty the easing is.
 - **Session shape.** A slow start while warming up, a long steady middle, then a
   gradual slide in both speed and accuracy as it tires.
 - **Device profile.** `--device trackpad` is steadier and more direct than the default
-  mouse, because direct manipulation overshoots less. Measured: 0.71s against 0.95s
-  over the same distance.
+  mouse, because direct manipulation overshoots less. Measured with familiarity cleared
+  and separate targets: 0.89s against 0.95s, about 6%. An earlier claim of 0.71s
+  against 0.95s was wrong, confounded by the second run reusing a familiar target.
 - **Idle in episodes.** Reading, scanning, busy work, and genuinely away from the desk,
   rather than a steady drip of movement. Reading tracks along a real line of text and
   nudges the page, because that is what reading looks like.
