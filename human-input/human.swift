@@ -528,6 +528,124 @@ func find(_ needle: String, app: String?, role: String?, all: Bool) -> [Seen] {
 }
 
 // ============================================================================
+// Matching by appearance
+//
+// Text is not the only thing on a screen, and OCR cannot read an icon, a canvas, or a
+// game. Matching a small reference image is what makes those targets findable: it does
+// not care what the thing means, only what it looks like.
+// ============================================================================
+
+/// One byte per pixel, drawn through a grayscale context so any source format works.
+func grayBuffer(_ img: CGImage) -> (pixels: [UInt8], width: Int, height: Int)? {
+    let w = img.width, h = img.height
+    guard w > 0, h > 0 else { return nil }
+    var pixels = [UInt8](repeating: 0, count: w * h)
+    let ok = pixels.withUnsafeMutableBytes { raw -> Bool in
+        guard let ctx = CGContext(data: raw.baseAddress, width: w, height: h,
+                                  bitsPerComponent: 8, bytesPerRow: w,
+                                  space: CGColorSpaceCreateDeviceGray(),
+                                  bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
+        ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return true
+    }
+    return ok ? (pixels, w, h) : nil
+}
+
+func loadImage(_ path: String) -> CGImage? {
+    guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else { return nil }
+    return CGImageSourceCreateImageAtIndex(src, 0, nil)
+}
+
+/// Average k by k blocks into one pixel. Averaging, not sampling: a coarse pass that
+/// point-samples every k-th pixel misses the true peak whenever it falls between grid
+/// points, because a two-pixel shift on fine interface detail destroys correlation.
+func downsample(_ buf: (pixels: [UInt8], width: Int, height: Int), by k: Int)
+    -> (pixels: [UInt8], width: Int, height: Int) {
+    guard k > 1 else { return buf }
+    let w = buf.width / k, h = buf.height / k
+    guard w > 0, h > 0 else { return buf }
+    var out = [UInt8](repeating: 0, count: w * h)
+    for y in 0..<h {
+        for x in 0..<w {
+            var sum = 0
+            for dy in 0..<k {
+                let row = (y * k + dy) * buf.width + x * k
+                for dx in 0..<k { sum += Int(buf.pixels[row + dx]) }
+            }
+            out[y * w + x] = UInt8(sum / (k * k))
+        }
+    }
+    return (out, w, h)
+}
+
+/// Correlation of a template against one placement inside a larger buffer.
+/// Normalised cross-correlation, not average pixel difference: on a dark screen almost
+/// every region is within a few grey levels of every other, so a difference score calls
+/// unrelated areas a 0.9 match. Correlation asks whether the *pattern* agrees and is
+/// unmoved by overall brightness.
+func correlate(_ t: (pixels: [UInt8], width: Int, height: Int),
+               _ h: (pixels: [UInt8], width: Int, height: Int),
+               atX ox: Int, y oy: Int) -> Double {
+    var sumT = 0.0, sumH = 0.0, sumTT = 0.0, sumHH = 0.0, sumTH = 0.0
+    let n = Double(t.width * t.height)
+    for ty in 0..<t.height {
+        let hrow = (oy + ty) * h.width + ox, trow = ty * t.width
+        for tx in 0..<t.width {
+            let tv = Double(t.pixels[trow + tx]), hv = Double(h.pixels[hrow + tx])
+            sumT += tv; sumH += hv; sumTT += tv * tv; sumHH += hv * hv; sumTH += tv * hv
+        }
+    }
+    guard n > 1 else { return -1 }
+    let covar = sumTH - sumT * sumH / n
+    let varT = sumTT - sumT * sumT / n
+    let varH = sumHH - sumH * sumH / n
+    // A flat patch has no pattern to agree with; refuse rather than score it high.
+    guard varT > 1e-6, varH > 1e-6 else { return -1 }
+    return covar / (varT * varH).squareRoot()
+}
+
+/// Where a reference image sits inside a larger one, and how sure we are.
+/// Searched on an averaged pyramid, then refined at full resolution around the best
+/// few candidates — a full-resolution sweep of a screen against a button is hundreds
+/// of millions of comparisons.
+func locate(template: (pixels: [UInt8], width: Int, height: Int),
+            inside haystack: (pixels: [UInt8], width: Int, height: Int))
+    -> (x: Int, y: Int, score: Double)? {
+    let (tw, th) = (template.width, template.height)
+    guard tw <= haystack.width, th <= haystack.height, tw > 1, th > 1 else { return nil }
+
+    let k = max(1, min(min(tw, th) / 10, 8))
+    let smallT = downsample(template, by: k)
+    let smallH = downsample(haystack, by: k)
+    guard smallT.width > 1, smallT.height > 1,
+          smallH.width >= smallT.width, smallH.height >= smallT.height else { return nil }
+
+    var candidates: [(x: Int, y: Int, score: Double)] = []
+    for y in 0...(smallH.height - smallT.height) {
+        for x in 0...(smallH.width - smallT.width) {
+            candidates.append((x, y, correlate(smallT, smallH, atX: x, y: y)))
+        }
+    }
+    guard !candidates.isEmpty else { return nil }
+    candidates.sort { $0.score > $1.score }
+
+    var best = (x: 0, y: 0, score: -1.0)
+    for candidate in candidates.prefix(8) {
+        let baseX = candidate.x * k, baseY = candidate.y * k
+        for dy in -k...k {
+            for dx in -k...k {
+                let nx = baseX + dx, ny = baseY + dy
+                guard nx >= 0, ny >= 0, nx <= haystack.width - tw, ny <= haystack.height - th
+                else { continue }
+                let score = correlate(template, haystack, atX: nx, y: ny)
+                if score > best.score { best = (nx, ny, score) }
+            }
+        }
+    }
+    return best.score < -0.5 ? nil : best
+}
+
+// ============================================================================
 // Terminal panes
 //
 // WezTerm publishes nothing to the accessibility tree because it draws on the GPU,
@@ -2160,6 +2278,79 @@ func execute(_ cmd: String, _ rest: [String]) {
     case "record":
         let seconds = Double(takeValue("--seconds") ?? "") ?? 0
         recordSession(seconds: seconds, into: takeValue("-o") ?? takeValue("--out"))
+
+    case "snip":
+        // Capture a reference image now so it can be found again later.
+        guard let spec = argv.first, let region = parseRegion(spec) else {
+            FileHandle.standardError.write("human: snip needs x,y,w,h\n".data(using: .utf8)!); exit(2)
+        }
+        argv.removeFirst()
+        let out = takeValue("-o") ?? takeValue("--out") ?? "snip.png"
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        p.arguments = ["-x", "-o", "-R",
+                       "\(Int(region.minX)),\(Int(region.minY)),\(Int(region.width)),\(Int(region.height))", out]
+        try? p.run()
+        p.waitUntilExit()
+        print(out)
+
+    case "find-image":
+        guard let file = argv.first else {
+            FileHandle.standardError.write("human: find-image needs a png\n".data(using: .utf8)!); exit(2)
+        }
+        argv.removeFirst()
+        let threshold = Double(takeValue("--threshold") ?? "") ?? 0.92
+        let region = takeValue("--region").flatMap(parseRegion) ?? screen
+        guard let templateImage = loadImage(file), let template = grayBuffer(templateImage) else {
+            FileHandle.standardError.write("human: could not read \(file)\n".data(using: .utf8)!); exit(2)
+        }
+        // --in searches a saved image instead of the screen, which makes the matcher
+        // testable against a known answer rather than only against a live display.
+        var scale: CGFloat = 1
+        var haystackImage: CGImage?
+        if let file = takeValue("--in") {
+            haystackImage = loadImage(file)
+            if haystackImage == nil {
+                FileHandle.standardError.write("human: could not read \(file)\n".data(using: .utf8)!); exit(2)
+            }
+        } else if let (shot, s) = captureScreen(region) {
+            haystackImage = shot
+            scale = s
+        }
+        guard let shot = haystackImage, let haystack = grayBuffer(shot) else {
+            FileHandle.standardError.write("human: could not capture the screen\n".data(using: .utf8)!); exit(1)
+        }
+        guard let hit = locate(template: template, inside: haystack) else {
+            FileHandle.standardError.write("human: the reference is larger than the search area\n".data(using: .utf8)!)
+            exit(2)
+        }
+        if hit.score < threshold {
+            FileHandle.standardError.write(String(format: "human: best match only %.2f, below %.2f\n",
+                                                  hit.score, threshold).data(using: .utf8)!)
+            exit(1)
+        }
+        // Back to screen points: the capture is at device resolution.
+        let originX = takeFlag("--pixels") ? 0 : region.minX
+        let originY = takeFlag("--pixels") ? 0 : region.minY
+        let cx = originX + (Double(hit.x) + Double(template.width) / 2) / Double(scale)
+        let cy = originY + (Double(hit.y) + Double(template.height) / 2) / Double(scale)
+        if takeFlag("--score") {
+            print(String(format: "%d %d %.3f", Int(cx), Int(cy), hit.score))
+        } else {
+            print("\(Int(cx)) \(Int(cy))")
+        }
+
+    case "pixel":
+        // The cheapest state check there is: what colour is this point.
+        guard let at = point(argv.first, argv.dropFirst().first) else {
+            FileHandle.standardError.write("human: pixel needs <x> <y>\n".data(using: .utf8)!); exit(2)
+        }
+        guard let (shot, _) = captureScreen(CGRect(x: at.x, y: at.y, width: 1, height: 1)),
+              let data = shot.dataProvider?.data, let bytes = CFDataGetBytePtr(data),
+              CFDataGetLength(data) >= 3 else {
+            FileHandle.standardError.write("human: could not read that pixel\n".data(using: .utf8)!); exit(1)
+        }
+        print(String(format: "#%02X%02X%02X", bytes[0], bytes[1], bytes[2]))
 
     case "state":
         // A cheap fingerprint of what the app publishes, for scripts that want to ask
