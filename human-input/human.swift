@@ -522,6 +522,31 @@ func matches(_ s: Seen, needle: String, role: String?) -> Int? {
 var useOCR = false
 var ocrFast = false
 
+/// WhatsApp keeps publishing the unfiltered chat rows after a search has filtered the
+/// list, so two elements claim almost the same rectangle and only one is really on
+/// screen. Nothing in the tree distinguishes them — a hit test does, because it answers
+/// with what the user would actually hit.
+func reallyOnScreen(_ s: Seen) -> Bool {
+    guard !s.label.isEmpty else { return true }
+    let centre = CGPoint(x: s.rect.midX, y: s.rect.midY)
+    var hit: AXUIElement?
+    guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(),
+                                           Float(centre.x), Float(centre.y), &hit) == .success,
+          var cur = hit else { return true }   // no answer is not evidence of a ghost
+
+    // The hit lands on the deepest leaf under the point, which is usually a label inside
+    // the row rather than the row itself, so walk up looking for the text we matched.
+    for _ in 0..<6 {
+        let there = axLabel(cur)
+        if !there.isEmpty,
+           there == s.label || there.contains(s.label) || s.label.contains(there) { return true }
+        guard let parent = axValue(cur, kAXParentAttribute as String),
+              CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
+        cur = unsafeBitCast(parent, to: AXUIElement.self)
+    }
+    return false
+}
+
 func find(_ needle: String, app: String?, role: String?, all: Bool) -> [Seen] {
     var seen: [Seen] = []
     if let root = axRoot(app) { seen = axTree(root) }
@@ -539,7 +564,13 @@ func find(_ needle: String, app: String?, role: String?, all: Bool) -> [Seen] {
         scored.append((score * 100 + bonus * 10 + min(area, 9), s))
     }
     scored.sort { $0.0 < $1.0 }
-    return all ? scored.map { $0.1 } : Array(scored.prefix(1).map { $0.1 })
+    let ranked = scored.map { $0.1 }
+    if all { return ranked }
+    // Hit testing costs an IPC round trip each, so only the leaders pay it, and a list
+    // with no ghosts in it answers on the first one.
+    // Refusing beats guessing: a ghost's rectangle belongs to whatever really sits there
+    // now, so returning it would click a different chat entirely.
+    return ranked.prefix(6).first(where: reallyOnScreen).map { [$0] } ?? []
 }
 
 // ============================================================================

@@ -226,10 +226,17 @@ never by reading the code.** The build was clean each time.
     it read like a name-matching bug — it was not; `appMatches` strips the U+200E fine.
     An Apple Event still activates it. `focusApp` now waits 1.5 s for the cooperative
     path and then asks the other way.
-40. **The accessibility tree went stale.** After search filtered the chat list, `see`
-    still reported the old unfiltered chats and the previously open group. Only the
-    screenshot showed the truth. Trusting the tree would have clicked the wrong row.
-    Unfixed — for Electron apps, confirm a filtered list with pixels.
+40. **Ghost elements — the tree publishes two lists at once.** This first looked like a
+    stale tree: after a search filtered the chat list, `see` still reported the old
+    unfiltered chats. It is worse than staleness. WhatsApp keeps publishing the *old*
+    rows alongside the new ones, so `Family grup🥰` sits at y=208 and the real
+    `HASSAN JAN. HJ` at y=213 — two elements, five pixels apart, both claiming to be
+    there. Nothing in the tree tells them apart. `AXUIElementCopyElementAtPosition`
+    does, because it answers with what a click would actually hit, so `find` now hit
+    tests its leading candidates and returns nothing rather than a ghost's rectangle.
+    Verified: `Family grup` and `Maaz Husain` both exit 1 while the list is filtered.
+    `AXManualAccessibility` was tried first and A/B tested — a no-op here, so it is not
+    in the code.
 41. **A "business chats that use AI from Meta" sheet absorbed the Return.** `key return`
     reported success, the message sat unsent in the compose box. This is §29 again in
     the wild: the sheet does not block input, it eats it. Anything that *sends* wants
@@ -240,6 +247,13 @@ never by reading the code.** The build was clean each time.
     confirm the header before typing.
 
 ### Test bugs (mine, and they matter)
+43. **A test string sent a real message to a real group.** Testing `wa-send`'s refusal
+    guard, "Vu hacks" was passed as a name assumed not to be a chat. It is one — a
+    forty-character group title that a two-word substring matches. The guard worked
+    perfectly and sent, because that is what it is for. Deleted for everyone within
+    minutes, but the lesson is structural: **there was no way to exercise the flow
+    without sending.** `wa-send --dry` now resolves the chat, prints the header it
+    landed on, and stops before typing. Test names should be nonsense, not plausible.
 36. The selftest failed whenever a hand touched the mouse mid-test — it read as a 562 px
     failure. It now retries; the check is about the tool's aim, not the user's.
 37. A sweep reported three commands "ok" that were never tested, because `timeout` does

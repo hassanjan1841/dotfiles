@@ -1,0 +1,77 @@
+#!/bin/sh
+# Send a WhatsApp message to a named chat, refusing unless that chat is really open.
+#
+# usage: wa-send [--yes] "<chat name>" "<message>"
+#
+# The guard is the point. WhatsApp keeps stale rows in its accessibility tree and its
+# search matches message bodies as well as chats, so "the thing called X" and "the chat
+# called X" are not the same element. Nothing is typed until the open chat's own title
+# says otherwise.
+set -eu
+
+yes=0
+dry=0
+while :; do
+    case "${1:-}" in
+        --yes) yes=1; shift ;;
+        --dry) dry=1; shift ;;
+        *) break ;;
+    esac
+done
+if [ $# -ne 2 ]; then
+    echo 'usage: wa-send [--yes] [--dry] "<chat name>" "<message>"' >&2
+    exit 2
+fi
+chat=$1
+msg=$2
+human=${HUMAN:-human}
+
+$human focus WhatsApp
+$human key escape --require WhatsApp                    # drop any search still in progress
+$human click "Search" --require WhatsApp --recover
+$human type "$chat" --require WhatsApp --accuracy clean
+sleep 2
+
+if ! $human click "$chat" --require WhatsApp; then
+    echo "wa-send: nothing matching \"$chat\" is on screen" >&2
+    exit 1
+fi
+sleep 2
+
+# An open chat publishes its title as the widest button along the top of the window.
+header=$($human see 2>/dev/null | awk -F'\t' '
+    { split($1, p, ","); split($3, d, "x")
+      if ($2 == "AXButton" && p[2] < 100 && p[1] > 500 && d[1] + 0 > w) { w = d[1] + 0; t = $4 } }
+    END { print t }')
+
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+case "$(lower "$header")" in
+    *"$(lower "$chat")"*) ;;
+    *)  echo "wa-send: refusing to type, \"$header\" is open, not \"$chat\"" >&2
+        exit 1 ;;
+esac
+
+# Always say who this resolved to, even under --yes: a name like "Vu hacks" matching a
+# forty-character group title is exactly how a test message reaches real people.
+printf '  chat:    %s\n  message: %s\n' "$header" "$msg"
+
+if [ "$dry" -eq 1 ]; then
+    echo "  --dry, nothing typed"
+    exit 0
+fi
+
+if [ "$yes" -eq 0 ]; then
+    printf '  send? [y/N] '
+    read -r reply < /dev/tty
+    case "$reply" in
+        y|Y) ;;
+        *) echo "  cancelled, nothing sent"; exit 0 ;;
+    esac
+fi
+
+$human click "Compose message" --require WhatsApp --recover
+$human type "$msg" --require WhatsApp --accuracy clean
+# A sheet can swallow the Return and still report success, so the send has to prove it
+# changed something on screen. Exit 8 means it did not.
+$human key return --require WhatsApp --recover --expect-change
+echo "  sent to $header"
