@@ -1226,21 +1226,28 @@ func idlePause() -> Double {
 }
 
 func runIdle(minutes: Double, verbose: Bool, yield: Bool) {
-    let deadline = minutes > 0 ? Date().addingTimeInterval(minutes * 60) : Date.distantFuture
+    // A rehearsal adds delays up instead of living through them, so the clock it runs
+    // against has to be the simulated one. Against a wall clock it would spin at full
+    // speed for the whole duration instead of resting through it.
+    let began = Date()
+    let limit = minutes > 0 ? minutes * 60 : Double.infinity
+    func running() -> Bool {
+        (dry ? dryElapsed : Date().timeIntervalSince(began)) < limit
+    }
     func log(_ s: String) {
         guard verbose else { return }
         FileHandle.standardError.write("human: \(s)\n".data(using: .utf8)!)
     }
     func napUntil(_ seconds: Double) {
         var left = seconds
-        while left > 0 && Date() < deadline { let s = min(left, 0.25); nap(s); left -= s }
+        while left > 0 && running() { let s = min(left, 0.25); nap(s); left -= s }
     }
 
     var lastLeftAt = cursor()
     var firstPass = true
     log("idling on \(Int(screen.width))x\(Int(screen.height))")
 
-    while Date() < deadline {
+    while running() {
         let now = cursor()
         // Something else moved the pointer while we rested: that is the human. Yield
         // rather than fight them for the cursor.
@@ -1285,7 +1292,7 @@ func runIdle(minutes: Double, verbose: Bool, yield: Bool) {
 
         var travelled = 0.0
         for i in 0..<moves {
-            if Date() >= deadline { break }
+            if !running() { break }
             let from = cursor()
             let target: CGPoint
             if let line = readingLine {
@@ -1762,7 +1769,10 @@ func execute(_ cmd: String, _ rest: [String]) {
         nap(s * Double.random(in: 0.85...1.2))
 
     case "idle":
-        let minutes = Double(takeValue("--minutes") ?? "") ?? 0
+        var minutes = Double(takeValue("--minutes") ?? "") ?? 0
+        // A rehearsal accumulates time instead of living through it, so an unbounded
+        // idle would spin at full speed forever rather than resting.
+        if dry && minutes == 0 { minutes = 5 }
         runIdle(minutes: minutes, verbose: takeFlag("--verbose"), yield: !takeFlag("--no-yield"))
 
     case "selftest":
