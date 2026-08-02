@@ -1,5 +1,9 @@
 # human
 
+> Working on this? Read **[HANDOFF.md](./HANDOFF.md)** first — it has the design
+> reasoning, every bug found and its lesson, the verified measurements, the macOS traps,
+> and what is left. This file is the user-facing reference.
+
 Drives macOS the way a person does. Curved pointer paths, real click dwell, uneven
 keystroke rhythm, and mistakes that get noticed and fixed.
 
