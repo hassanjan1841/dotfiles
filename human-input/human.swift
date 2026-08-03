@@ -2044,6 +2044,123 @@ func recordSession(seconds: Double, into path: String?) {
 
 var argv = Array(CommandLine.arguments.dropFirst())
 
+
+// ============================================================================
+// Work log
+//
+// Counts input, never content. How many keys were pressed is a measure of effort;
+// which keys were pressed is a keylogger, and would capture passwords, bank details
+// and other people's messages. There is no version of this worth building, so the
+// key code is never looked at.
+//
+// Only events the HID layer reports are counted. This tool posts from a private
+// source, so its own synthetic input is invisible here and cannot inflate a record
+// that is meant to say a person was working.
+// ============================================================================
+
+var wlKeys = 0, wlLeft = 0, wlRight = 0, wlScroll = 0
+var wlApps: Set<String> = []
+
+let workTap: CGEventTapCallBack = { _, type, event, _ in
+    if event.getIntegerValueField(.eventSourceStateID)
+        == Int64(CGEventSourceStateID.hidSystemState.rawValue) {
+        switch type {
+        case .keyDown:        wlKeys += 1
+        case .leftMouseDown:  wlLeft += 1
+        case .rightMouseDown: wlRight += 1
+        case .scrollWheel:    wlScroll += 1
+        default: break
+        }
+    }
+    return Unmanaged.passUnretained(event)
+}
+
+/// Seconds since the operating system last saw real input.
+///
+/// UNVERIFIED: this reads back near zero even when nothing is being touched, so it is
+/// probably picking the first of several HIDIdleTime entries and landing on a device
+/// that never goes quiet. Trust `active`, which is derived from the counts, until this
+/// has been watched across a genuinely idle machine.
+func hidIdle() -> Double {
+    let out = run("/usr/sbin/ioreg", ["-c", "IOHIDSystem"]).out
+    guard let line = out.split(separator: "\n").first(where: { $0.contains("HIDIdleTime") }),
+          let raw = line.split(separator: "=").last,
+          let ns = Double(raw.trimmingCharacters(in: .whitespaces)) else { return 0 }
+    return ns / 1_000_000_000
+}
+
+func frontWindowTitle() -> String {
+    guard let root = axRoot(nil), let win = focusedWindow(root) else { return "" }
+    return axText(win, kAXTitleAttribute as String) ?? ""
+}
+
+func runWorkLog(interval: Double, minutes: Double, path: String, titles: Bool) {
+    requireTrust("watch input")
+    let mask = (1 << CGEventType.keyDown.rawValue)
+        | (1 << CGEventType.leftMouseDown.rawValue)
+        | (1 << CGEventType.rightMouseDown.rawValue)
+        | (1 << CGEventType.scrollWheel.rawValue)
+
+    guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
+                                      options: .listenOnly, eventsOfInterest: CGEventMask(mask),
+                                      callback: workTap, userInfo: nil) else {
+        FileHandle.standardError.write(
+            "human: cannot listen to input. Grant Input Monitoring in System Settings.\n"
+                .data(using: .utf8)!)
+        exit(3)
+    }
+    let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+    CGEvent.tapEnable(tap: tap, enable: true)
+
+    let url = URL(fileURLWithPath: path)
+    try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                             withIntermediateDirectories: true)
+    // A header line, so a reader knows how the numbers were produced rather than
+    // having to assume. Counts mean nothing without the interval they were counted over.
+    if !FileManager.default.fileExists(atPath: path) {
+        let head = #"{"kind":"header","interval":\#(interval),"titles":\#(titles),"counts":"real HID input only","content":"never recorded"}"#
+        try? (head + "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    let stamp = ISO8601DateFormatter()
+    let deadline = minutes > 0 ? Date().addingTimeInterval(minutes * 60) : Date.distantFuture
+    var samples = 0
+    FileHandle.standardError.write("human: work log -> \(path), every \(Int(interval))s. ctrl-c to stop.\n".data(using: .utf8)!)
+
+    while Date() < deadline {
+        let until = Date().addingTimeInterval(interval)
+        while Date() < until {
+            RunLoop.current.run(until: min(until, Date().addingTimeInterval(0.25)))
+            panicCheck()
+        }
+        let app = frontmostApp()
+        wlApps.insert(app)
+        let acted = wlKeys + wlLeft + wlRight + wlScroll
+        var row: [String: Any] = [
+            "t": stamp.string(from: Date()),
+            "app": app,
+            "keys": wlKeys, "clicks": wlLeft, "rightClicks": wlRight, "scrolls": wlScroll,
+            "idle": Double(round(hidIdle() * 10) / 10),
+            "active": acted > 0,
+        ]
+        if titles {
+            let title = frontWindowTitle()
+            if !title.isEmpty { row["title"] = title }
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: row),
+           var line = String(data: data, encoding: .utf8) {
+            line += "\n"
+            if let h = FileHandle(forWritingAtPath: path) {
+                h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); try? h.close()
+            }
+        }
+        samples += 1
+        wlKeys = 0; wlLeft = 0; wlRight = 0; wlScroll = 0
+    }
+    FileHandle.standardError.write("human: \(samples) samples across \(wlApps.count) apps\n".data(using: .utf8)!)
+}
+
 func takeFlag(_ name: String) -> Bool {
     guard let i = argv.firstIndex(of: name) else { return false }
     argv.remove(at: i)
@@ -2418,6 +2535,14 @@ func execute(_ cmd: String, _ rest: [String]) {
             FileHandle.standardError.write("human: gesture pinch <amount> | swipe <amount>\n".data(using: .utf8)!)
             exit(2)
         }
+
+    case "worklog":
+        let every = Double(takeValue("--interval") ?? "") ?? 15
+        let mins = Double(takeValue("--minutes") ?? "") ?? 0
+        let noTitles = takeFlag("--no-titles")
+        let out = takeValue("-o") ?? takeValue("--out")
+            ?? NSHomeDirectory() + "/Library/Logs/human-worklog.jsonl"
+        runWorkLog(interval: every, minutes: mins, path: out, titles: !noTitles)
 
     case "record":
         let seconds = Double(takeValue("--seconds") ?? "") ?? 0
