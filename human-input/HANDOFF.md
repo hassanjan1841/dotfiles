@@ -226,22 +226,25 @@ never by reading the code.** The build was clean each time.
     it read like a name-matching bug — it was not; `appMatches` strips the U+200E fine.
     An Apple Event still activates it. `focusApp` now waits 1.5 s for the cooperative
     path and then asks the other way.
-40. **Ghost elements — the tree publishes two lists at once.** This first looked like a
-    stale tree: after a search filtered the chat list, `see` still reported the old
-    unfiltered chats. It is worse than staleness. WhatsApp keeps publishing the *old*
-    rows alongside the new ones, so `Family grup🥰` sits at y=208 and the real
-    `HASSAN JAN. HJ` at y=213 — two elements, five pixels apart, both claiming to be
-    there. **Still unfixed in `human`, and two attempts failed:** `AXManualAccessibility`
-    was A/B tested and is a no-op here; hit testing with
-    `AXUIElementCopyElementAtPosition` rejected the ghosts but also rejected real
-    elements, because the hit lands on a descendant whose identity and label both differ
-    from the candidate's, so `find "Search"` started returning a chat row. Both were
-    removed rather than kept on a plausible story.
-    The working answer is not to filter at all: `wa-send` reads the **visible** chat list
-    first, where no ghosts exist, and only searches if the name is not there. When it
-    must search it takes the topmost row carrying the name, since a filtered result is
-    drawn at the top while a stale row keeps its old position. The opened chat's own
-    title is the oracle either way.
+40. **Occlusion — an element can be published, positioned, and still not be there.**
+    WhatsApp draws its search results *over* a chat list it never takes down, so with a
+    search up the tree holds 15 chat rows: 2 real results and 13 sitting underneath the
+    panel at coordinates that now belong to whatever covers them. Clicking one opens a
+    different chat. This was first misread as a stale tree and then as duplicate ghosts;
+    it is neither, and both readings produced a wrong fix.
+    Nothing in the tree can tell the two apart — they are equally real to it. Hit testing
+    can, because it answers with what a click would actually reach. `find` now hit tests
+    its leading candidates, comparing **element identity** up the ancestor chain: labels
+    do not work, because the hit lands on a leaf inside the row that shares no text with
+    it, which is what broke the first attempt. The second attempt failed for a different
+    reason worth remembering: **hit testing only speaks for the app in front**, and every
+    run had WezTerm stealing focus, so it was querying the wrong application and rejected
+    everything. It is now gated on the target app actually being frontmost, and left
+    alone otherwise.
+    Verified both directions: with the panel up the 2 results resolve and 5 covered rows
+    refuse; with it down the list rows resolve and the search-only row refuses.
+    `AXManualAccessibility` was tried first, A/B tested, and is a no-op here.
+
 41. **A "business chats that use AI from Meta" sheet absorbed the Return.** `key return`
     reported success, the message sat unsent in the compose box. This is §29 again in
     the wild: the sheet does not block input, it eats it. Anything that *sends* wants

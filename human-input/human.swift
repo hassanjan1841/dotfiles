@@ -554,6 +554,38 @@ func matches(_ s: Seen, needle: String, role: String?) -> Int? {
 var useOCR = false
 var ocrFast = false
 
+/// An element can be published, correctly positioned, and still not be there: WhatsApp
+/// draws its search results *over* a chat list it never takes down, so thirteen rows sit
+/// under the panel at coordinates that now belong to whatever covers them. Clicking one
+/// opens a different chat.
+///
+/// The tree cannot tell — both are equally real to it. Hit testing can, because it
+/// answers with what a click would reach. It only speaks for the application in front,
+/// so anything else is left alone rather than guessed at.
+func reallyOnScreen(_ s: Seen, frontPid: pid_t?) -> Bool {
+    guard let want = s.el, frontPid != nil else { return true }
+    var hit: AXUIElement?
+    guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(),
+                                           Float(s.rect.midX), Float(s.rect.midY),
+                                           &hit) == .success, var cur = hit else { return true }
+    // The answer is the deepest element under the point, so a visible candidate is either
+    // that one or one of its ancestors.
+    for _ in 0..<12 {
+        if CFEqual(cur, want) { return true }
+        guard let parent = axValue(cur, kAXParentAttribute as String),
+              CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
+        cur = unsafeBitCast(parent, to: AXUIElement.self)
+    }
+    return false
+}
+
+/// Hit testing is only meaningful for the app that owns the screen right now.
+func frontPidIfOwns(_ app: String?) -> pid_t? {
+    guard let front = NSWorkspace.shared.frontmostApplication else { return nil }
+    if let want = app, !appMatches(front, want) { return nil }
+    return front.processIdentifier
+}
+
 func find(_ needle: String, app: String?, role: String?, all: Bool) -> [Seen] {
     var seen: [Seen] = []
     if let root = axRoot(app) { seen = axTree(root, onlyWindow: focusedWindow(root)) }
@@ -571,7 +603,13 @@ func find(_ needle: String, app: String?, role: String?, all: Bool) -> [Seen] {
         scored.append((score * 100 + bonus * 10 + min(area, 9), s))
     }
     scored.sort { $0.0 < $1.0 }
-    return all ? scored.map { $0.1 } : Array(scored.prefix(1).map { $0.1 })
+    let ranked = scored.map { $0.1 }
+    // Hit testing costs a round trip each, so only the leaders pay it and a list with
+    // nothing occluded answers on the first one. Refusing beats returning a rectangle
+    // that now belongs to whatever is drawn over it.
+    let front = frontPidIfOwns(app)
+    if all { return ranked.filter { reallyOnScreen($0, frontPid: front) } }
+    return ranked.prefix(8).first { reallyOnScreen($0, frontPid: front) }.map { [$0] } ?? []
 }
 
 // ============================================================================
