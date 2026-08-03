@@ -397,7 +397,20 @@ func axLabel(_ el: AXUIElement) -> String {
     return ""
 }
 
-func axTree(_ root: AXUIElement, limit: Int = 4000, maxDepth: Int = 24) -> [Seen] {
+/// The window the user is actually looking at. An app publishes every window it owns, so
+/// without this a background window's contents read exactly like the front one's.
+func focusedWindow(_ root: AXUIElement) -> AXUIElement? {
+    guard let v = axValue(root, kAXFocusedWindowAttribute as String),
+          CFGetTypeID(v) == AXUIElementGetTypeID() else { return nil }
+    return unsafeBitCast(v, to: AXUIElement.self)
+}
+
+/// `onlyWindow` keeps the walk out of the app's other windows. Chrome with two windows
+/// open handed out tab coordinates from the background one, and clicking them landed in
+/// whichever window was actually in front — a different tab entirely. Menus and the menu
+/// bar are not AXWindow, so they still come through.
+func axTree(_ root: AXUIElement, limit: Int = 4000, maxDepth: Int = 24,
+            onlyWindow: AXUIElement? = nil) -> [Seen] {
     var out: [Seen] = []
     var stack: [(AXUIElement, Int)] = [(root, 0)]
     while let (el, depth) = stack.popLast(), out.count < limit {
@@ -409,7 +422,12 @@ func axTree(_ root: AXUIElement, limit: Int = 4000, maxDepth: Int = 24) -> [Seen
                             depth: depth, el: el))
         }
         if let kids = axValue(el, kAXChildrenAttribute as String) as? [AXUIElement] {
-            for kid in kids { stack.append((kid, depth + 1)) }
+            for kid in kids {
+                if let want = onlyWindow,
+                   axText(kid, kAXRoleAttribute as String) == "AXWindow",
+                   !CFEqual(kid, want) { continue }
+                stack.append((kid, depth + 1))
+            }
         }
     }
     return out
@@ -538,7 +556,7 @@ var ocrFast = false
 
 func find(_ needle: String, app: String?, role: String?, all: Bool) -> [Seen] {
     var seen: [Seen] = []
-    if let root = axRoot(app) { seen = axTree(root) }
+    if let root = axRoot(app) { seen = axTree(root, onlyWindow: focusedWindow(root)) }
     // Only reach for pixels when the tree cannot answer: it is slower and fallible.
     if useOCR && seen.allSatisfy({ matches($0, needle: needle, role: role) == nil }) {
         seen += cachedOCR(screen, fast: ocrFast)
@@ -2105,7 +2123,7 @@ func execute(_ cmd: String, _ rest: [String]) {
             exit(2)
         }
         var shown = 0
-        for s in axTree(root) {
+        for s in axTree(root, onlyWindow: everything ? nil : focusedWindow(root)) {
             if let want = role, s.role.lowercased() != want.lowercased() { continue }
             if role == nil && !everything && !clickableRoles.contains(s.role) { continue }
             if !everything && s.label.isEmpty && s.subrole.isEmpty { continue }

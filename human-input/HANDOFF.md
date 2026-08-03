@@ -259,6 +259,18 @@ never by reading the code.** The build was clean each time.
     *element* names. `matches` now strips directional marks on both sides. This is the
     second time the same invisible character has cost hours.
 
+45. **An app's other windows read exactly like the front one.** Chrome with two windows
+    published both tab strips into one tree, so `find` handed out a tab's coordinates
+    from the *background* window while a different window was frontmost. Clicking them
+    hit whatever sat at that spot in the window really on screen: a tab titled
+    "…| sellerboard" produced an Intuit sign-in page, and it was only caught because the
+    tab title was checked against what had been clicked. `see` and `find` now refuse to
+    descend into any `AXWindow` that is not the focused one — menus and the menu bar are
+    not windows, so they still come through, and `see --all` still shows everything.
+    Verified both ways: the same `find` returns coordinates with that window in front
+    and exits 1 with the other one in front. `frontDialog` deliberately still scans the
+    whole app, because §28 is exactly a sheet hanging off a window that is not focused.
+
 ### Test bugs (mine, and they matter)
 43. **A test string sent a real message to a real group.** Testing `wa-send`'s refusal
     guard, "Vu hacks" was passed as a name assumed not to be a chat. It is one — a
@@ -306,6 +318,10 @@ never by reading the code.** The build was clean each time.
 ## 8. Known limitations
 
 - **Multi-display unsupported** by choice — everything clamps to the built-in screen.
+- **Multi-window is handled, but only for the focused window.** `see` and `find` ignore
+  an app's other windows (§45). A target in a background window is therefore *not found*
+  rather than found at coordinates that belong to whatever is really on screen. Raise the
+  window first — `cmd+\`` cycles them within an app.
 - **Secure input fields cannot be typed into.** macOS refusing, not a defect. A virtual
   HID driver (Karabiner-style DriverKit) is the only way past it. **`sudo` in a terminal
   is *not* secure input** — that works fine (verified).
