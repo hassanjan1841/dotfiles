@@ -365,3 +365,6 @@ killdev() {
   fi
   print -- "✓ killed ${#keep} process(es); ports clear"
 }
+
+# opencode
+export PATH=/Users/macbookair/.opencode/bin:$PATH
