@@ -803,8 +803,16 @@ func captureScreen(_ region: CGRect) -> (CGImage, CGFloat)? {
 /// rather than whether a single hash changed, is what separates a repaint from a
 /// blinking caret: a caret moves one or two cells, a repaint moves dozens.
 func signature(_ region: CGRect) -> [UInt8]? {
-    guard let (img, _) = captureScreen(region),
-          let data = img.dataProvider?.data,
+    guard let (img, _) = captureScreen(region) else { return nil }
+    return signature(of: img)
+}
+
+/// Taking the signature from an image already in hand matters for more than speed: a
+/// fingerprint and the text cached under it have to describe the *same* frame. Capturing
+/// twice lets the screen move in between, which files one frame's text under another
+/// frame's fingerprint and serves it back for as long as the entry lives.
+func signature(of img: CGImage) -> [UInt8]? {
+    guard let data = img.dataProvider?.data,
           let bytes = CFDataGetBytePtr(data) else { return nil }
     let rowBytes = img.bytesPerRow, pixelBytes = max(1, img.bitsPerPixel / 8)
     let length = CFDataGetLength(data)
@@ -896,7 +904,10 @@ func baseline(_ region: CGRect, samples: Int = 4) -> Baseline? {
 }
 
 func fingerprint(_ region: CGRect) -> UInt64? {
-    guard let sig = signature(region) else { return nil }
+    signature(region).map(fingerprint(of:))
+}
+
+func fingerprint(of sig: [UInt8]) -> UInt64 {
     var h: UInt64 = 0xcbf2_9ce4_8422_2325
     for v in sig { h = (h ^ UInt64(v)) &* 0x0000_0100_0000_01b3 }
     return h
@@ -921,10 +932,13 @@ func cacheFile(_ name: String) -> String {
 }
 
 /// OCR costs seconds, so a region is only re-read when its fingerprint says it changed.
+/// One capture serves both the fingerprint and the recognition, so the key and the text
+/// filed under it always describe the same frame.
 func cachedOCR(_ region: CGRect, fast: Bool) -> [Seen] {
     let tag = "ocr-\(Int(region.minX))-\(Int(region.minY))-\(Int(region.width))-\(Int(region.height)).json"
     let path = cacheFile(tag)
-    let print = fingerprint(region)
+    guard let (img, scale) = captureScreen(region) else { return [] }
+    let print = signature(of: img).map(fingerprint(of:))
 
     if let print = print, let raw = FileManager.default.contents(atPath: path),
        let blob = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
@@ -938,7 +952,7 @@ func cachedOCR(_ region: CGRect, fast: Bool) -> [Seen] {
         }
     }
 
-    let lines = ocrRead(region, fast: fast)
+    let lines = ocrRead(of: img, scale: scale, region: region, fast: fast)
     if let print = print {
         let blob: [String: Any] = ["fingerprint": String(print), "lines": lines.map {
             ["text": $0.label, "rect": [$0.rect.minX, $0.rect.minY, $0.rect.width, $0.rect.height]]
@@ -952,6 +966,10 @@ func cachedOCR(_ region: CGRect, fast: Bool) -> [Seen] {
 
 func ocrRead(_ region: CGRect, fast: Bool) -> [Seen] {
     guard let (img, scale) = captureScreen(region) else { return [] }
+    return ocrRead(of: img, scale: scale, region: region, fast: fast)
+}
+
+func ocrRead(of img: CGImage, scale: CGFloat, region: CGRect, fast: Bool) -> [Seen] {
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = fast ? .fast : .accurate
     request.usesLanguageCorrection = false      // UI text is not prose; do not "fix" it
@@ -2482,7 +2500,9 @@ func execute(_ cmd: String, _ rest: [String]) {
             let n = spec.split(separator: ",").compactMap { Double($0) }
             if n.count == 4 { region = CGRect(x: n[0], y: n[1], width: n[2], height: n[3]) }
         }
-        let lines = ocrRead(region, fast: ocrFast)
+        // Through the cache, so reading the same unchanged region twice costs one capture
+        // and no recognition at all.
+        let lines = cachedOCR(region, fast: ocrFast)
         if lines.isEmpty {
             FileHandle.standardError.write("human: read nothing. is Screen Recording granted?\n".data(using: .utf8)!)
             exit(1)
