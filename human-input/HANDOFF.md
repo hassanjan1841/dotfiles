@@ -274,6 +274,13 @@ never by reading the code.** The build was clean each time.
     and exits 1 with the other one in front. `frontDialog` deliberately still scans the
     whole app, because §28 is exactly a sheet hanging off a window that is not focused.
 
+46. **A fixed sleep and "wait for any repaint" are both the wrong question.** `wa-send`
+    slept a flat 2 s twice. Swapping that for `changed --timeout 3` made it *slower*
+    (11 s to 17 s): if the repaint lands before the watch starts, it burns the whole
+    timeout. Each step now polls for the thing it is actually waiting for — the row
+    appearing, the header agreeing — and stops the moment it is true. 11 s to 2 s dry,
+    6 s for a real send.
+
 ### Test bugs (mine, and they matter)
 43. **A test string sent a real message to a real group.** Testing `wa-send`'s refusal
     guard, "Vu hacks" was passed as a name assumed not to be a chat. It is one — a

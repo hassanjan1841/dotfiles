@@ -86,7 +86,11 @@ read_header() {
 
 $human focus WhatsApp
 $human key escape --require WhatsApp                    # drop any search still in progress
-sleep 1
+
+# Waiting for "any repaint" is the wrong question — if the change lands before the watch
+# starts it burns the whole timeout. Each step instead polls for the thing it is actually
+# waiting for and stops the moment it is true.
+sleep 0.3
 
 # The visible list first. It carries no stale rows, so it is both safer and quicker.
 found=0
@@ -101,26 +105,37 @@ fi
 if [ "$found" -eq 0 ]; then
     $human click "Search" --require WhatsApp --recover
     $human type "$chat" --require WhatsApp --accuracy clean
-    sleep 2
-    if ! out=$(pick "$chat" 2>/tmp/wa-send.err); then
+    tries=0
+    until out=$(pick "$chat" 2>/tmp/wa-send.err); do
         if [ "$(cat /tmp/wa-send.err)" != "" ]; then
             echo "wa-send: \"$chat\" matches more than one chat, be more specific" >&2
             cat /tmp/wa-send.err >&2
-        else
-            echo "wa-send: no chat matching \"$chat\"" >&2
+            exit 1
         fi
-        exit 1
-    fi
+        tries=$((tries + 1))
+        if [ "$tries" -ge 15 ]; then
+            echo "wa-send: no chat matching \"$chat\"" >&2
+            exit 1
+        fi
+        sleep 0.2
+    done
 fi
 
 row=$(printf '%s\n' "$out" | sed -n 1p)
 coords=$(printf '%s\n' "$out" | sed -n 2p)
 kind=$(printf '%s\n' "$out" | sed -n 3p)
 $human click $coords --require WhatsApp
-sleep 2
 
-header=$(read_header)
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+tries=0
+while :; do
+    header=$(read_header)
+    case "$(lower "$header")" in *"$(lower "$row")"*) break ;; esac
+    tries=$((tries + 1))
+    [ "$tries" -ge 15 ] && break
+    sleep 0.2
+done
+
 case "$(lower "$header")" in
     *"$(lower "$row")"*) ;;
     *)  echo "wa-send: refusing to type, \"$header\" is open, not \"$row\"" >&2
