@@ -539,6 +539,25 @@ func plain(_ s: String) -> String {
     })).trimmingCharacters(in: .whitespaces).lowercased()
 }
 
+/// OCR confuses shapes, never meanings: l, I and 1 are the same few pixels, as are O and
+/// 0. Folding them lets a match survive a misread. Only text that came from pixels is
+/// folded — tree labels are exact and must stay that way, or "Sound" starts matching
+/// "5ound" for no reason.
+func confusable(_ s: String) -> String {
+    var out = ""
+    for c in s {
+        switch c {
+        case "l", "i", "|", "!": out.append("1")
+        case "o": out.append("0")
+        case "s": out.append("5")
+        case "b": out.append("8")
+        case "z": out.append("2")
+        default: out.append(c)
+        }
+    }
+    return out
+}
+
 func matches(_ s: Seen, needle: String, role: String?) -> Int? {
     if let want = role, s.role.lowercased() != want.lowercased() { return nil }
     guard !needle.isEmpty else { return role == nil ? nil : 1000 }
@@ -548,6 +567,9 @@ func matches(_ s: Seen, needle: String, role: String?) -> Int? {
         let score = hay == n ? 0 : hay.hasPrefix(n) ? 1 : hay.contains(n) ? 2 : nil
         if let sc = score, sc < (best ?? 99) { best = sc }
     }
+    // Last resort, and only for text read off the screen.
+    if best == nil, s.role == "AXOCRText", !plain(s.label).isEmpty,
+       confusable(plain(s.label)).contains(confusable(n)) { best = 3 }
     return best
 }
 
@@ -969,7 +991,26 @@ func ocrRead(_ region: CGRect, fast: Bool) -> [Seen] {
     return ocrRead(of: img, scale: scale, region: region, fast: fast)
 }
 
+/// Vision needs a certain number of pixels per glyph before it will read one at all, and
+/// UI text in a small region falls under it. Enlarging the picture is the honest fix —
+/// lowering minimumTextHeight only makes it guess at shapes it still cannot see.
+/// Normalised boxes come back in the same coordinates either way, so nothing downstream
+/// has to know.
+func upscaled(_ img: CGImage, by k: Int) -> CGImage {
+    let w = img.width * k, h = img.height * k
+    guard k > 1, w * h < 40_000_000,
+          let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8,
+                              bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    else { return img }
+    ctx.interpolationQuality = .high
+    ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+    return ctx.makeImage() ?? img
+}
+
 func ocrRead(of img: CGImage, scale: CGFloat, region: CGRect, fast: Bool) -> [Seen] {
+    let img = img.height < 300 ? upscaled(img, by: 3)
+            : img.height < 800 ? upscaled(img, by: 2) : img
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = fast ? .fast : .accurate
     request.usesLanguageCorrection = false      // UI text is not prose; do not "fix" it
