@@ -34,7 +34,25 @@ struct Traits {
     var wpm = 70.0
 }
 
-var traits = Traits()
+/// The same person is not identical on two different days: sleep, coffee, mood. Narrow
+/// enough to stay recognisably them, wide enough that months of runs are not one fixed
+/// signature sitting there to be measured.
+func dayDrift(_ base: Traits, seed: String = "") -> Traits {
+    var h = UInt64(bitPattern: Int64(Date().timeIntervalSince1970 / 86_400))
+    for b in seed.utf8 { h = (h ^ UInt64(b)) &* 0x0000_0100_0000_01b3 }
+    func spread(_ width: Double) -> Double {
+        h ^= h >> 30; h = h &* 0xbf58_476d_1ce4_e5b9; h ^= h >> 27
+        return 1 + width * (Double(h % 10_000) / 10_000 * 2 - 1)
+    }
+    var t = base
+    t.pace *= spread(0.08)
+    t.tremor *= spread(0.12)
+    t.errorScale *= spread(0.15)
+    t.wpm *= spread(0.06)
+    return t
+}
+
+var traits = dayDrift(Traits())
 
 func personaTraits(_ name: String) -> Traits {
     var h: UInt64 = 0xcbf2_9ce4_8422_2325
@@ -43,8 +61,9 @@ func personaTraits(_ name: String) -> Traits {
         h ^= h >> 33; h = h &* 0xff51_afd7_ed55_8ccd; h ^= h >> 29
         return lo + (hi - lo) * Double(h % 10_000) / 10_000
     }
-    return Traits(pace: next(0.82, 1.22), bowBias: next(0.15, 0.85), tremor: next(0.6, 1.5),
-                  errorScale: next(0.5, 1.7), wpm: next(52, 88))
+    return dayDrift(Traits(pace: next(0.82, 1.22), bowBias: next(0.15, 0.85),
+                           tremor: next(0.6, 1.5), errorScale: next(0.5, 1.7),
+                           wpm: next(52, 88)), seed: name)
 }
 
 let startedAt = Date()
@@ -84,26 +103,40 @@ func drift() -> Double {
 struct Session {
     var actions: Int
     var lastAt: Date
+    var lastVerb: String?
 }
 
 func loadSession() -> Session {
     let path = NSHomeDirectory() + "/Library/Caches/human-input/session.json"
     guard let d = FileManager.default.contents(atPath: path),
-          let j = try? JSONSerialization.jsonObject(with: d) as? [String: Double],
-          let n = j["actions"], let at = j["lastAt"] else { return Session(actions: 0, lastAt: Date()) }
+          let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+          let n = j["actions"] as? Double, let at = j["lastAt"] as? Double else {
+        return Session(actions: 0, lastAt: Date(), lastVerb: nil)
+    }
     let last = Date(timeIntervalSince1970: at)
     // A gap of ten minutes means they got up. Start fresh.
-    if Date().timeIntervalSince(last) > 600 { return Session(actions: 0, lastAt: Date()) }
-    return Session(actions: Int(n), lastAt: last)
+    if Date().timeIntervalSince(last) > 600 { return Session(actions: 0, lastAt: Date(), lastVerb: nil) }
+    return Session(actions: Int(n), lastAt: last, lastVerb: j["lastVerb"] as? String)
 }
 
 var session = loadSession()
 
+/// What the caller already spent between the last command and this one. Each command is
+/// its own process, so some of the gap a person would have taken may have passed on its
+/// own — and it may not have passed at all.
+var gapBefore = Date().timeIntervalSince(session.lastAt)
+
+/// A rehearsal, a permission check or the abort flag is not somebody at the machine, and
+/// recording one as work would age the session that has not started yet.
+var touched = false
+
 func saveSession() {
+    guard touched else { return }
     let dir = NSHomeDirectory() + "/Library/Caches/human-input"
     try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    let blob: [String: Double] = ["actions": Double(session.actions),
-                                  "lastAt": Date().timeIntervalSince1970]
+    var blob: [String: Any] = ["actions": Double(session.actions),
+                               "lastAt": Date().timeIntervalSince1970]
+    if let verb = session.lastVerb { blob["lastVerb"] = verb }
     if let raw = try? JSONSerialization.data(withJSONObject: blob) {
         try? raw.write(to: URL(fileURLWithPath: dir + "/session.json"))
     }
@@ -120,27 +153,50 @@ var familiarHaste = 1.0
 
 /// Targets you have hit before need less checking and get hit faster. Repeat visits
 /// getting quicker is one of the strongest signals of a person rather than a script.
-var familiarity: [String: Int] = {
+struct Practice {
+    var visits: Double
+    var lastAt: Double
+}
+
+var familiarity: [String: Practice] = {
     let path = NSHomeDirectory() + "/Library/Caches/human-input/familiarity.json"
     guard let d = FileManager.default.contents(atPath: path),
-          let j = try? JSONSerialization.jsonObject(with: d) as? [String: Int] else { return [:] }
-    return j
+          let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [:] }
+    let now = Date().timeIntervalSince1970
+    var out: [String: Practice] = [:]
+    for (key, value) in j {
+        if let pair = value as? [Double], pair.count == 2 {
+            out[key] = Practice(visits: pair[0], lastAt: pair[1])
+        } else if let bare = value as? Double {
+            out[key] = Practice(visits: bare, lastAt: now)   // the older countless format
+        }
+    }
+    return out
 }()
 var familiarityDirty = false
 
 func familiarKey(_ p: CGPoint) -> String { "\(Int(p.x) / 20),\(Int(p.y) / 20)" }
 
+/// Practice fades. A button hit fifty times last month is not the reflex it was, and a
+/// speed that only ever ratchets up is a counter rather than a skill.
+func practiced(_ p: Practice) -> Double {
+    let days = max(0, (Date().timeIntervalSince1970 - p.lastAt) / 86_400)
+    return p.visits * pow(0.5, days / 14)
+}
+
 func saveFamiliarity() {
     guard familiarityDirty else { return }
     // Bounded, because this is written on every run and nothing ever removes a target.
-    // The rarely-visited entries are the ones that were not teaching it anything.
+    // Dropping by decayed value keeps what is still practised rather than what was once
+    // busy: a target from six months ago is not worth a slot.
     if familiarity.count > 3000 {
-        let keep = familiarity.sorted { $0.value > $1.value }.prefix(2000)
+        let keep = familiarity.sorted { practiced($0.value) > practiced($1.value) }.prefix(2000)
         familiarity = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
     }
     let dir = NSHomeDirectory() + "/Library/Caches/human-input"
     try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    if let raw = try? JSONSerialization.data(withJSONObject: familiarity) {
+    let blob = familiarity.mapValues { [$0.visits, $0.lastAt] }
+    if let raw = try? JSONSerialization.data(withJSONObject: blob) {
         try? raw.write(to: URL(fileURLWithPath: dir + "/familiarity.json"))
     }
 }
@@ -228,6 +284,46 @@ func bezier(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ t: CGF
 /// Reaction gap between two deliberate actions.
 func beat(_ scale: Double = 1) {
     nap(Double.random(in: 0.09...0.34) * scale)
+}
+
+/// What the hands and eyes are busy with. Changing channel costs real time: the hand
+/// leaves the mouse for the keyboard, the eyes leave the pointer for a line of text.
+func channel(_ verb: String) -> String {
+    switch verb {
+    case "move", "click", "drag", "scroll", "gesture": return "pointer"
+    case "type", "key", "text": return "keyboard"
+    case "see", "find", "read", "check", "state", "changed", "waitfor",
+         "where", "front", "dialog", "pixel", "find-image", "snip": return "look"
+    case "focus", "open", "window", "pane": return "app"
+    default: return "other"
+    }
+}
+
+/// Commands that are not a person doing anything: diagnostics, the abort flag, the
+/// script runner itself. No pause belongs in front of them.
+let offstage: Set<String> = ["stop", "go", "unstick", "check", "selftest", "worklog",
+                             "record", "idle", "plan", "run", "help", "--help", "-h"]
+
+/// The gap between two deliberate actions, shaped by what just happened. Every command
+/// is its own process, so without this the seams between them run on the caller's clock:
+/// motion sampled from a real hand, stitched together at machine cadence. Whatever the
+/// caller already spent thinking counts towards it — a person who just paused for nine
+/// seconds does not then pause again.
+func transitionPause(from last: String?, to next: String, since elapsed: Double) {
+    guard !offstage.contains(next), channel(next) != "look" else { return }
+    let to = channel(next)
+    let from = last.map(channel)
+    var want: Double
+    if from == nil { want = Double.random(in: 0.4...1.2) }            // settling in
+    else if from == "look" { want = Double.random(in: 0.5...1.6) }    // taking it in
+    else if from == "app" { want = Double.random(in: 0.6...1.8) }     // waiting on the window
+    else if from != to { want = Double.random(in: 0.35...0.9) }       // hand changes device
+    else if last == next { want = Double.random(in: 0.10...0.35) }    // in flow
+    else { want = Double.random(in: 0.18...0.5) }
+    // Attention is not a metronome. Every so often something needs thinking about, and
+    // that long tail is most of what separates a person's cadence from a schedule.
+    if Double.random(in: 0...1) < 0.07 { want += Double.random(in: 1.5...4.0) }
+    nap(max(0, want * drift() - elapsed))
 }
 
 var trusted: Bool { AXIsProcessTrusted() }
@@ -1130,13 +1226,37 @@ func moveTo(_ target: CGPoint, width: Double = 26) {
     let close = max(width * 0.3, 1.6)
 
     let key = familiarKey(target)
-    let visits = familiarity[key] ?? 0
-    familiarity[key] = visits + 1
-    familiarityDirty = true
-    // Somewhere you go often, you stop checking your aim so carefully.
-    familiarHaste = min(1 + Double(visits) * 0.05, 1.3)
-    let attempts = visits >= 4 ? 1 : visits >= 1 ? 2 : 3
+    let seen = familiarity[key].map(practiced) ?? 0
+    // A rehearsal must not teach it anything, or planning a script would leave the hand
+    // believing it had done the work.
+    if !dry {
+        familiarity[key] = Practice(visits: seen + 1, lastAt: Date().timeIntervalSince1970)
+        familiarityDirty = true
+    }
+    // Somewhere you go often, you stop checking your aim so carefully. Skill is a power
+    // law: the first few visits buy most of the speed and then it flattens off. A
+    // straight line that ratchets to a ceiling is a counter wearing a curve's clothes.
+    familiarHaste = 1 + 0.3 * (1 - exp(-seen / 6))
+    let attempts = seen >= 5 ? 1 : seen >= 1.5 ? 2 : 3
     defer { familiarHaste = 1 }
+
+    // A long reach across an unfamiliar screen is not always one throw at the target.
+    // The hand sets off roughly the right way, the eyes catch up, and the back half is a
+    // fresh aim — so the same trip twice does not trace the same arc. Somewhere you know
+    // well you just go there.
+    let straight = dist(cursor(), target)
+    if straight > 400 && familiarHaste < 1.15 && Double.random(in: 0...1) < 0.15 {
+        let here = cursor()
+        let dx = target.x - here.x, dy = target.y - here.y
+        let len = max(CGFloat(straight), 1)
+        let off = CGFloat(straight * Double.random(in: 0.12...0.3)) * (Bool.random() ? 1 : -1)
+        let along = CGFloat(Double.random(in: 0.35...0.6))
+        // Aimed loosely on purpose: a waypoint nobody is trying to hit is a fast throw.
+        submove(from: here, to: onScreen(CGPoint(x: here.x + dx * along - dy / len * off,
+                                                 y: here.y + dy * along + dx / len * off)),
+                width: 90, primary: true)
+        nap(Double.random(in: 0.04...0.16))
+    }
 
     for attempt in 0..<attempts {
         let here = cursor()
@@ -2246,7 +2366,10 @@ human - drive macOS the way a person does, and read the screen three ways
     --persona <name>                one consistent hand: speed, curve bias, slips
     --device mouse|trackpad
 
-Every action carries its own delays, so a sequence never ticks like a clock.
+Every action carries its own delays, and so does the gap between two of them: what the
+caller already spent thinking counts towards it, and the rest is filled in. Aim, pace and
+slips drift by the day, targets you use often get quicker and go rusty when you stop, so
+the same flow run twice is never the same shape twice.
 """
 
 // Unbuffered, so the plan and the prompt appear before the steps they describe when
@@ -2288,11 +2411,12 @@ func execute(_ cmd: String, _ rest: [String]) {
     let saved = argv
     argv = rest
     defer { argv = saved }
+    if !dry && !offstage.contains(cmd) { touched = true }
     switch cmd {
     case "check", "where", "front", "see", "find", "read", "state", "dialog", "selftest":
         break                                   // reads are not worth logging
     default:
-        session.actions += 1
+        if !dry { session.actions += 1 }
         audit("\(cmd) \(rest.joined(separator: " ")) [front: \(frontmostApp())]")
     }
     if let want = takeValue("--require") { requiredApp = want }
@@ -3148,15 +3272,27 @@ func loadScript(_ path: String) -> String {
     return (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
 }
 
+/// One step of work, with the pause a person would have taken before starting it.
+func performStep(_ cmd: String, _ args: [String], checked: Bool = true) {
+    transitionPause(from: session.lastVerb, to: cmd, since: gapBefore)
+    gapBefore = 0
+    if !offstage.contains(cmd) { session.lastVerb = cmd }
+    if checked { executeChecked(cmd, args) } else { execute(cmd, args) }
+}
+
 /// How long the whole thing would take, measured by rehearsing it rather than guessing.
+/// The rehearsal has to leave no trace, or planning a script would age the session that
+/// then runs it.
 func rehearse(_ steps: [(String, [String])]) -> Double {
-    let wasDry = dry
+    let wasDry = dry, wasGap = gapBefore, wasVerb = session.lastVerb
     dry = true
     dryElapsed = 0
-    for (cmd, args) in steps { execute(cmd, args) }
+    for (cmd, args) in steps { performStep(cmd, args, checked: false) }
     let total = dryElapsed
     dry = wasDry
     dryElapsed = 0
+    gapBefore = wasGap
+    session.lastVerb = wasVerb
     return total
 }
 
@@ -3203,9 +3339,8 @@ if cmd == "plan" {
         } else if verbose {
             FileHandle.standardError.write("  would: \(describe(step.0, step.1))\n".data(using: .utf8)!)
         }
-        executeChecked(step.0, step.1)
+        performStep(step.0, step.1)
         done += 1
-        nap(Double.random(in: 0.12...0.45))       // gap between deliberate actions
     }
 
     if dry {
@@ -3217,5 +3352,5 @@ if cmd == "plan" {
     }
 
 } else {
-    executeChecked(cmd, argv)
+    performStep(cmd, argv)
 }

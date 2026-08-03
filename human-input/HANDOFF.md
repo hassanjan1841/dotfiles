@@ -104,9 +104,12 @@ finger slowest; a pause mixture from writing research (word retrieval ~330 ms, p
 boundary ~735 ms, planning ~2.7 s); error mix from typing corpora (substitution 39 %,
 insertion 33 %, omission 18 %, transposition 11 %).
 
-Behaviour: familiarity (repeat visits faster, persisted), session shape driven by work
-done rather than the clock, `--device trackpad` steadier than mouse, idle in episodes
-(reading / scanning / busy / away) rather than a steady drip.
+Behaviour: familiarity (repeat visits faster, persisted, saturating on a power law and
+halving every fortnight of disuse), the gap between two commands shaped by what just
+happened and net of whatever the caller already spent thinking, traits drifting a few
+percent by the date, session shape driven by work done rather than the clock,
+`--device trackpad` steadier than mouse, idle in episodes (reading / scanning / busy /
+away) rather than a steady drip.
 
 **Measured:** 1400 px crossing in **0.84 s** against Fitts' 0.86 s predicted. Typing
 asked 70 wpm → 68.9 / 70.3 / 72.9 measured. Pointer worst miss 2.2 px over 20 moves.

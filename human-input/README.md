@@ -41,7 +41,7 @@ human stop / human go             set or clear the abort flag
 
 Any command also takes `--dry` to rehearse without touching anything, and
 `--persona <name>` to pin one consistent hand: same speed, same curve bias, same
-error rate every run.
+error rate every run, give or take the few percent a real person varies by the day.
 
 ## Seeing, in three tiers
 
@@ -201,9 +201,22 @@ A tweened curve reads as animation no matter how pretty the easing is.
 
 - **Familiarity.** Targets you have hit before are approached faster and with fewer
   corrections, and it remembers across runs. Measured: 1.03s on the first visit to a
-  target, 0.71s by the sixth.
+  target, 0.71s by the sixth. The gain follows a power law rather than a straight line —
+  the first few visits buy most of the speed — and it fades when you stop, halving every
+  fortnight, so a target left alone for three months is unfamiliar again.
+- **The gap between two commands.** Every command is its own process, so the seams
+  between them would otherwise run on the caller's clock. The pause is shaped by what
+  just happened: quick when you are in flow, longer when the hand moves between mouse
+  and keyboard, longer still after reading the screen or waiting for a window. Whatever
+  the caller already spent thinking counts towards it, so a long think is not followed
+  by a second pause.
+- **Route variation.** A long reach across an unfamiliar screen sometimes sets off
+  roughly the right way and re-aims halfway, so the same trip twice does not trace the
+  same arc. Somewhere you know well, you just go there.
 - **Session shape.** A slow start while warming up, a long steady middle, then a
   gradual slide in both speed and accuracy as it tires.
+- **Day to day.** Pace, tremor, slips and typing speed shift slightly with the date,
+  so one hand is not one fixed signature across months of runs.
 - **Device profile.** `--device trackpad` is steadier and more direct than the default
   mouse, because direct manipulation overshoots less. Measured with familiarity cleared
   and separate targets: 0.89s against 0.95s, about 6%. An earlier claim of 0.71s
