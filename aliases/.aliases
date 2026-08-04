@@ -17,8 +17,9 @@ if command -v fdfind &>/dev/null; then
 fi
 command -v fd &>/dev/null && alias find=fd
 
-# ripgrep replaces grep
-command -v rg &>/dev/null && alias grep=rg || alias grep='grep --color=auto'
+# rg is not a drop-in grep: -E means --encoding, and it skips hidden/gitignored files
+command -v rg &>/dev/null && alias rgrep=rg
+alias grep='grep --color=auto'
 
 # ── Git shortcuts ──────────────────────────────────────────────────────────────
 alias gs='git status'

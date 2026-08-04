@@ -1,0 +1,11 @@
+# Drop scripts/scan-payload.sh into the repo, then add this job to your workflow
+# and make "Supply-chain scan" a REQUIRED status check on main.
+# The selftest runs first: a scanner that cannot prove it detects a known-bad
+# sample must fail CI, not silently report "clean".
+  supply-chain:
+    name: Supply-chain scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/scan-payload.sh --selftest
+      - run: ./scripts/scan-payload.sh

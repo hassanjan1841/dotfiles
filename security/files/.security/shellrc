@@ -1,0 +1,26 @@
+# malscan shell integration — sourced from .zshrc
+# Scan untrusted code BEFORE it gets a chance to execute.
+
+export PATH="$HOME/.security:$PATH"
+
+# Clone, then scan before you ever cd in or install.
+gclone() {
+  command git clone "$@" || return $?
+  local dest
+  dest=$(command ls -td ./*/ 2>/dev/null | head -1)
+  for a in "$@"; do [ -d "$a" ] && dest="$a"; done
+  [ -n "$dest" ] || return 0
+  printf '\n\033[2m── malscan: checking freshly cloned code ──\033[0m\n'
+  "$HOME/.security/malscan" --deep "$dest"
+}
+
+# Refuse to install/build in a tree that has not passed a scan.
+safe-install() {
+  "$HOME/.security/malscan" --deep . || {
+    printf '\033[31mRefusing to install — scan first.\033[0m\n'; return 1; }
+  npm install "$@"
+}
+
+alias scan='"$HOME/.security/malscan"'
+alias scan-all='"$HOME/.security/malscan" --all'
+alias scan-procs='"$HOME/.security/malscan" --procs'

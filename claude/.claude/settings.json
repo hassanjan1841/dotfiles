@@ -60,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"$TOOL_NAME\" = \"AskUserQuestion\" ]; then notify-send 'Claude Code' '⚠️ Input needed!' --icon=dialog-question --urgency=critical && paplay /usr/share/sounds/freedesktop/stereo/complete.oga; fi"
+            "command": "if [ \"$TOOL_NAME\" = \"AskUserQuestion\" ]; then notify-send 'Claude Code' '\u26a0\ufe0f Input needed!' --icon=dialog-question --urgency=critical && paplay /usr/share/sounds/freedesktop/stereo/complete.oga; fi"
           }
         ]
       },
@@ -91,6 +91,14 @@
             "command": "source ~/.secrets 2>/dev/null || true"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "out=$(\"$HOME/.security/malscan\" --quiet \"$CLAUDE_PROJECT_DIR\" 2>&1); rc=$?; [ \"$rc\" = 0 ] || echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"SessionStart\\\",\\\"additionalContext\\\":\\\"SECURITY: malscan flagged this project. Do not run install/build commands until reviewed. Findings: $out\\\"}}\"; exit 0"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -98,7 +106,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "osascript -e 'display notification \"Work completed! ✅\" with title \"Claude Code\"'"
+            "command": "osascript -e 'display notification \"Work completed! \u2705\" with title \"Claude Code\"'"
           },
           {
             "type": "command",
@@ -160,6 +168,7 @@
   "theme": "dark",
   "autoCompactEnabled": false,
   "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true
+  "skipAutoPermissionPrompt": false,
+  "voiceEnabled": true,
+  "inputNeededNotifEnabled": true
 }

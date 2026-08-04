@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Background arm of malscan, driven by launchd.
+#   malscan-agent watch   every few minutes: kill live payload processes  (no-sudo stand-in for a firewall block)
+#   malscan-agent daily   deep scan of $HOME, notify on findings
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+SCAN="$HOME/.security/malscan"
+LOG="$HOME/.security/logs/agent.log"
+mkdir -p "$(dirname "$LOG")"
+
+notify() { # title, message
+  /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Basso\"" >/dev/null 2>&1
+}
+log() { printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG"; }
+
+case "${1:-watch}" in
+  watch)
+    out=$("$SCAN" --kill --quiet 2>&1); rc=$?
+    if [ "$rc" = 1 ]; then
+      log "KILLED payload activity: $out"
+      notify "⚠️ Malware blocked" "malscan killed a payload process. See ~/.security/logs/"
+    elif [ "$rc" = 2 ]; then
+      log "SCANNER BROKEN: $out"
+      notify "malscan is broken" "The guard is not running. Check ~/.security/logs/agent.log"
+    fi
+    ;;
+  daily)
+    out=$("$SCAN" --all 2>&1); rc=$?
+    log "daily scan rc=$rc"
+    if [ "$rc" = 1 ]; then
+      n=$(printf '%s' "$out" | grep -c CRITICAL)
+      log "$out"
+      notify "⚠️ malscan found $n critical item(s)" "Run: scan-all"
+    elif [ "$rc" = 2 ]; then
+      log "SCANNER BROKEN: $out"
+      notify "malscan is broken" "Daily scan did not run."
+    fi
+    ;;
+esac
+exit 0

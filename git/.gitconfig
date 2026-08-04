@@ -9,7 +9,7 @@
 	helper = 
 	helper = !/opt/homebrew/bin/gh auth git-credential
 [credential]
-	helper = store
+	helper = osxkeychain
 [filter "lfs"]
 	required = true
 	clean = git-lfs clean -- %f
@@ -19,3 +19,5 @@
 	path = /Users/hassanjan/.gitconfig-ehtisham
 [credential "https://git.emca.pl"]
 	helper = store --file ~/.git-credentials-emca
+[core]
+	hooksPath = ~/.git-hooks

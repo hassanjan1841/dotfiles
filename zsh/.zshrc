@@ -368,3 +368,6 @@ killdev() {
 
 # opencode
 export PATH=/Users/macbookair/.opencode/bin:$PATH
+
+# malware guard (malscan) — added 2026-08-04
+[ -f "$HOME/.security/shellrc" ] && source "$HOME/.security/shellrc"

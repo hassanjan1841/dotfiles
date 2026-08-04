@@ -1,0 +1,250 @@
+#!/usr/bin/env bash
+# malscan — universal scanner for injected/obfuscated payloads in source trees.
+# Built after the 2026-08 postcss.config.js compromise (hidden-whitespace + blockchain-C2 loader).
+#
+#   malscan [PATH]     scan PATH (default: cwd), skipping node_modules   — fast, hook-safe
+#   malscan --deep     also scan node_modules
+#   malscan --all      deep scan of $HOME
+#   malscan --procs    check for live payload processes / C2 connections
+#   malscan --kill     as --procs, but kill what it finds
+#   malscan --selftest prove the scanner still detects a known-bad sample
+#   malscan --quiet    print only on findings (for hooks)
+#
+# Exit 0 = clean, 1 = findings, 2 = scanner itself is broken (treat as UNKNOWN, not clean).
+
+set -uo pipefail
+
+# A security tool must never silently pass because a dependency is missing.
+# Hooks and LaunchAgents run with a minimal PATH, so resolve tools explicitly.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+SEC_DIR="$HOME/.security"
+QUARANTINE="$SEC_DIR/quarantine"
+LOG="$SEC_DIR/logs/malscan.log"
+mkdir -p "$QUARANTINE" "$(dirname "$LOG")" 2>/dev/null
+
+QUIET=0; DEEP=0; MODE=scan; TARGET=""; KILL=0; SCAN_TOOLING=0
+for a in "$@"; do
+  case "$a" in
+    --quiet)    QUIET=1 ;;
+    --deep)     DEEP=1 ;;
+    --all)      DEEP=1; TARGET="$HOME"; SCAN_TOOLING=1 ;;
+    --procs)    MODE=procs ;;
+    --kill)     MODE=procs; KILL=1 ;;
+    --selftest) MODE=selftest ;;
+    -h|--help)  sed -n '2,15p' "$0"; exit 0 ;;
+    -*) echo "malscan: unknown flag: $a" >&2; exit 2 ;;
+    *)  TARGET="$a" ;;
+  esac
+done
+TARGET="${TARGET:-$PWD}"
+
+RED=$'\033[31m'; YEL=$'\033[33m'; GRN=$'\033[32m'; DIM=$'\033[2m'; RST=$'\033[0m'
+[ -t 1 ] || { RED=""; YEL=""; GRN=""; DIM=""; RST=""; }
+
+FINDINGS=0; SCAN_PARTIAL=0; PARTIAL_COUNT=0
+say()  { [ "$QUIET" = 1 ] || printf '%s\n' "$*"; }
+hit()  { FINDINGS=$((FINDINGS+1)); printf '%s\n' "$*"; }
+logit(){ printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG" 2>/dev/null; }
+die()  { printf '%smalscan BROKEN:%s %s\n' "$RED" "$RST" "$*" >&2; logit "BROKEN: $*"; exit 2; }
+
+# Resolve the real binary by path — `command -v rg` can resolve to a shell
+# function or wrapper shim that is not a working ripgrep.
+RG=""
+for c in /opt/homebrew/bin/rg /usr/local/bin/rg "$HOME/.cargo/bin/rg"; do
+  [ -x "$c" ] && { RG="$c"; break; }
+done
+[ -n "$RG" ] || die "ripgrep (rg) not found. Scan did NOT run — this is NOT a clean result.
+  Fix: brew install ripgrep"
+"$RG" --version >/dev/null 2>&1 || die "ripgrep at $RG is not executable. Scan did NOT run."
+
+# ---------------------------------------------------------------- detection rules
+# The payload hides every string as \uXXXX escapes, so literal IOCs are weak.
+# The durable signals are STRUCTURAL: hidden code after padding, and escape density.
+
+# R1 CRITICAL — executable code hidden after a long whitespace run.
+#    The tail must begin with a NON-space, else `.{199,}` just re-matches the padding
+#    and every space-padded comment banner trips the rule.
+#    It must also reach a runtime token: padding alone flags minified Flow parser
+#    bundles and markdown tables inside .d.ts files. Both observed variants put
+#    `global[...]` / `require(` immediately after the padding, so this stays tight.
+R_HIDDEN='[ \t]{100,}[^ \t*].{0,2000}(require\(|global\[|global\.[a-z]|eval\(|Function\(|child_process|process\.env)'
+# R2 CRITICAL — a module name written as \uXXXX escapes, e.g. require("http").
+#    Bare escape density is NOT usable: emoji-regex, iconv-lite encoding tables, date-fns
+#    locales and eslint's own no-irregular-whitespace rule are all legitimately full of them.
+#    Hiding the *module name* is what no honest package does.
+R_UNIESC='require\(\s*["'"'"'](\\u[0-9a-fA-F]{4}){3,}'
+# R3 CRITICAL — known literals + build tags seen on THIS machine.
+#    /*M260630A*/ and global['e']='NPM' are the npm-dropper build stamps.
+R_IOC='166\.88\.134\.62|a322[eE]5[fF]3[dD]311[dD]3080e6f0121063e9a[dD][cC]2490[eE]f1a|"Sec[-]V"|/0x/(clb|cls)|A11--#|/\*M[0-9]{6}[A-Z]?\*/|global\['"'"'e'"'"'\]=|global\.i=["'"'"'][A-Z0-9]'
+
+# R6 CRITICAL — PolinRider FAMILY INVARIANT (DPRK supply-chain campaign).
+#    The loader stashes require/module on `global` so the obfuscated body can reach
+#    them. This matched ALL THREE samples found here across TWO different variants,
+#    while every published variant-specific IOC matched NONE of them — so this is
+#    the durable signal and the variant markers below are only a bonus.
+R_FAMILY='global\s*\[\s*["'"'"']r["'"'"']\s*\]\s*=\s*require|global\.r\s*=\s*require|global\s*\[\s*["'"'"']m["'"'"']\s*\]\s*=\s*module|global\.m\s*=\s*module'
+
+# R7 CRITICAL — published PolinRider variant markers, C2 infra and drop artifacts.
+#    Literals carry a [x] char class so this file does not match itself.
+R_POLIN='rmcej%otb[%]|Cot%3t=sht[P]|_[$]_1e42|2\[gWfGj;<:-93Z\^C|m6:tTh\^D[)]cBz\?NM\]|default-configuration[.]vercel[.]app|vscode-settings-bootstrap[.]vercel[.]app|vscode-bootstrapper[.]vercel[.]app|vscode-load-config[.]vercel[.]app|TMfKQEd7TJJa5xNZJZ2Lep838vrzrs7mA[P]|0xbe037400670fbf1c32364f762975908dc43eeb38759263e7dfcdabc7638081[1]e|e9b53a7c-2342-4b15-b02d-bd8b8f6a03f[9]|tailwindcss-style-animat[e]'
+# R4 MEDIUM — eval of remotely fetched content.
+R_EVAL='(eval|Function)\s*\(\s*(await\s+)?(fetch|https?\.get)'
+# R5 MEDIUM — install scripts that fetch and execute.
+#    `node -e` is deliberately NOT listed: core-js ships it in a benign postinstall
+#    and appears in nearly every tree, which would bury real hits in noise.
+R_INSTALL='"(pre|post)?install"\s*:\s*"[^"]*(curl|wget|bash -c|eval|base64 -d)'
+
+ign_globs() {
+  # Anchored globs ('Library/**') only match relative to the search root, so they
+  # silently miss when scanning an absolute path. '**/' prefixes match at any depth.
+  printf '%s\n' --glob '!**/.git/**' --glob '!**/Library/**' --glob '!**/.Trash/**' \
+                --glob '!**/.next/cache/**' --glob '!*.map' --glob '!*.min.js' \
+                --glob '!**/*.bundle' --glob '!**/.security/**' \
+                --glob '!**/.npm/_cacache/**' --glob '!**/.git/objects/**'
+  [ "$DEEP" = 1 ] || printf '%s\n' --glob '!**/node_modules/**'
+}
+code_globs() {
+  printf '%s\n' --glob '*.js' --glob '*.mjs' --glob '*.cjs' --glob '*.ts' --glob '*.mts' \
+                --glob '*.cts' --glob '*.tsx' --glob '*.jsx' --glob '*.json' \
+                --glob '*.config.*' --glob '*.py' --glob '*.sh'
+}
+
+# run_rule <outfile> <regex> <root> [extra-globs...]
+# Writes matches to $outfile. Sets SCAN_PARTIAL=1 if some paths were unreadable,
+# and calls die() on a genuine scanner failure. Runs in the MAIN shell — a die()
+# inside a process substitution would only kill the subshell and be swallowed.
+run_rule() {
+  local out="$1" pat="$2" root="$3"; shift 3
+  local -a args=(); local g
+  while IFS= read -r g; do args+=("$g"); done < <(ign_globs)
+  for g in "$@"; do args+=("$g"); done
+  local errf; errf=$(mktemp)
+  # --hidden: nested dotdirs (.vscode, .config, .github) are skipped by default,
+  #   and .vscode/tasks.json is an execute-on-open vector.
+  # --no-ignore-vcs: a .gitignore'd path is exactly where a payload would hide.
+  "$RG" -l --no-config --hidden --no-ignore-vcs -e "$pat" "${args[@]}" -- "$root" > "$out" 2> "$errf"
+  local rc=$?
+  if [ "$rc" -gt 1 ]; then
+    # rg exits 2 for any I/O error, including unreadable files in a broad sweep.
+    # Unreadable paths degrade coverage; anything else means the scan is invalid.
+    if grep -qvE 'Permission denied|Operation not permitted|No such file|Too many open files|Interrupted' "$errf"; then
+      local msg; msg=$(head -2 "$errf"); rm -f "$errf"
+      die "ripgrep failed (exit $rc) scanning $root: $msg"
+    fi
+    SCAN_PARTIAL=1
+    PARTIAL_COUNT=$((PARTIAL_COUNT + $(wc -l < "$errf" | tr -d ' ')))
+  fi
+  rm -f "$errf"
+}
+
+report() {
+  local sev="$1" msg="$2" tag="$3"; shift 3
+  local f
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$sev" in
+      CRITICAL) hit "${RED}CRITICAL${RST}  $msg  $f" ;;
+      *)        hit "${YEL}MEDIUM${RST}    $msg  $f" ;;
+    esac
+    logit "$sev $tag $f"
+    if [ "$sev" = CRITICAL ] && [ -f "$f" ]; then
+      local safe; safe=$(printf '%s' "$f" | sed 's|/|_|g; s|^_||')
+      cp -p "$f" "$QUARANTINE/$(date +%Y%m%d-%H%M%S)-$tag-$safe" 2>/dev/null
+    fi
+  done
+}
+
+scan_tree() {
+  local root="$1" d=""
+  [ -e "$root" ] || die "path not found: $root"
+  [ "$DEEP" = 1 ] && d="(deep) "
+  say "${DIM}scanning $root ${d}...${RST}"
+  local -a CG=(); local g
+  while IFS= read -r g; do CG+=("$g"); done < <(code_globs)
+  local o; o=$(mktemp)
+
+  run_rule "$o" "$R_HIDDEN"  "$root" "${CG[@]}";        report CRITICAL "code hidden after whitespace padding" HIDDEN < "$o"
+  run_rule "$o" "$R_UNIESC"  "$root" "${CG[@]}";        report CRITICAL "obfuscated \\uXXXX payload"           UNIESC < "$o"
+  run_rule "$o" "$R_IOC"     "$root";                   report CRITICAL "known campaign IOC"                   IOC    < "$o"
+  run_rule "$o" "$R_FAMILY"  "$root" "${CG[@]}";        report CRITICAL "PolinRider family invariant"          FAMILY < "$o"
+  run_rule "$o" "$R_POLIN"   "$root";                   report CRITICAL "PolinRider variant marker / C2"       POLIN  < "$o"
+  run_rule "$o" "$R_EVAL"    "$root" "${CG[@]}";        report MEDIUM   "eval() of remote content"             EVAL   < "$o"
+  run_rule "$o" "$R_INSTALL" "$root" --glob 'package.json'; report MEDIUM "install script fetches+executes"    INST   < "$o"
+  # A .vscode/tasks.json with runOn:folderOpen executes the moment the project is
+  # opened — the campaign's "cloning is enough to get infected" vector.
+  run_rule "$o" 'folderOpen' "$root" --glob '**/.vscode/tasks.json'
+  report MEDIUM "VS Code task auto-runs on folder open" TASKS < "$o"
+  # Windows propagation droppers; harmless on macOS but prove a repo is infected.
+  find "$root" \( -name 'temp_auto_push.bat' -o -name 'config.bat' \) -not -path '*/.git/*' 2>/dev/null > "$o"
+  report CRITICAL "PolinRider propagation dropper" DROPPER < "$o"
+  rm -f "$o"
+}
+
+scan_procs() {
+  local found=0 pids conns
+  pids=$(ps -Ao pid,command 2>/dev/null \
+          | grep -Ei "node .*-e .*(166\.88\.134\.62|global\[._t_s.\]|global\[._V.\]|global\.i=)" \
+          | grep -v grep | awk '{print $1}')
+  for p in $pids; do
+    found=1; hit "${RED}CRITICAL${RST}  payload process PID $p"; logit "CRITICAL process $p"
+    if [ "$KILL" = 1 ]; then
+      kill -9 "$p" 2>/dev/null && { echo "          killed $p"; logit "killed $p"; }
+    fi
+  done
+  conns=$(netstat -an 2>/dev/null | grep -E '166\.88\.134\.62' | grep -vE 'TIME_WAIT|CLOSED')
+  if [ -n "$conns" ]; then
+    found=1; hit "${RED}CRITICAL${RST}  live C2 connection:"
+    printf '%s\n' "$conns" | sed 's/^/          /'; logit "CRITICAL c2-connection"
+  fi
+  [ "$found" = 0 ] && say "${GRN}procs clean${RST} — no payload process, no C2 connection"
+  return 0
+}
+
+# Proves the scanner still works. A security tool that can't demonstrate a true
+# positive is indistinguishable from one that is silently broken.
+selftest() {
+  local t; t=$(mktemp -d)
+  printf 'module.exports={};%s global.i="A11--#";const h=require("\\u0068\\u0074\\u0074\\u0070\\u0073\\u0068\\u0074\\u0074\\u0070\\u0073");%s\n' \
+    "$(printf ' %.0s' $(seq 1 300))" "$(printf 'x%.0s' $(seq 1 400))" > "$t/postcss.config.js"
+  printf '/**\n *%s@author Someone\n */\nmodule.exports={};\n' "$(printf ' %.0s' $(seq 1 300))" > "$t/benign.js"
+  printf 'export const a=1;\n' > "$t/clean.ts"
+
+  local out; out=$(DEEP=0 QUIET=0; "$0" "$t" 2>&1); local rc=$?
+  local ok=1
+  grep -q "postcss.config.js" <<<"$out" || { echo "${RED}FAIL${RST}: missed the known-bad sample"; ok=0; }
+  grep -q "benign.js"         <<<"$out" && { echo "${RED}FAIL${RST}: false positive on padded JSDoc"; ok=0; }
+  grep -q "clean.ts"          <<<"$out" && { echo "${RED}FAIL${RST}: false positive on clean file"; ok=0; }
+  [ "$rc" = 1 ]               || { echo "${RED}FAIL${RST}: expected exit 1, got $rc"; ok=0; }
+  rm -rf "$t"
+  if [ "$ok" = 1 ]; then echo "${GRN}selftest PASSED${RST} — detects known-bad, no false positives"; return 0
+  else echo "${RED}selftest FAILED${RST} — do not trust this scanner"; return 2; fi
+}
+
+case "$MODE" in
+  selftest) selftest; exit $? ;;
+  procs)    scan_procs ;;
+  scan)
+    scan_tree "$TARGET"
+    # Global tooling lives OUTSIDE $HOME. npm's own cli.js was infected there on
+    # 2026-08-04 — a $HOME-only sweep would have missed the dropper entirely.
+    if [ "$SCAN_TOOLING" = 1 ]; then
+      for t in /opt/homebrew/lib/node_modules /usr/local/lib/node_modules; do
+        [ -d "$t" ] && scan_tree "$t"
+      done
+    fi
+    scan_procs ;;
+esac
+
+if [ "$SCAN_PARTIAL" = 1 ]; then
+  printf '%sNOTE:%s %d path(s) were unreadable and could NOT be scanned — coverage is partial.\n' \
+    "$YEL" "$RST" "$PARTIAL_COUNT"
+  logit "PARTIAL: $PARTIAL_COUNT unreadable paths under $TARGET"
+fi
+if [ "$FINDINGS" -gt 0 ]; then
+  printf '\n%sMALSCAN: %d finding(s).%s Copies in %s\n' "$RED" "$FINDINGS" "$RST" "$QUARANTINE"
+  logit "scan $TARGET -> $FINDINGS findings"
+  exit 1
+fi
+[ "$MODE" = scan ] && { say "${GRN}malscan: clean${RST} ${DIM}($TARGET)${RST}"; logit "scan $TARGET -> clean"; }
+exit 0
