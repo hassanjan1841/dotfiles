@@ -37,8 +37,8 @@ struct Traits {
 /// The same person is not identical on two different days: sleep, coffee, mood. Narrow
 /// enough to stay recognisably them, wide enough that months of runs are not one fixed
 /// signature sitting there to be measured.
-func dayDrift(_ base: Traits, seed: String = "") -> Traits {
-    var h = UInt64(bitPattern: Int64(Date().timeIntervalSince1970 / 86_400))
+func dayDrift(_ base: Traits, seed: String = "", day: Int = Int(Date().timeIntervalSince1970 / 86_400)) -> Traits {
+    var h = UInt64(bitPattern: Int64(day))
     for b in seed.utf8 { h = (h ^ UInt64(b)) &* 0x0000_0100_0000_01b3 }
     func spread(_ width: Double) -> Double {
         h ^= h >> 30; h = h &* 0xbf58_476d_1ce4_e5b9; h ^= h >> 27
@@ -90,12 +90,14 @@ func audit(_ line: String) {
 
 /// A session has a shape: a slow start while you settle in, a long steady middle, then
 /// a gradual slide as you tire. Returned as a time multiplier, so above 1 is slower.
-func drift() -> Double {
-    let worked = Double(session.actions)
+/// Split from the session it usually reads so the curve itself can be checked.
+func drift(_ worked: Double) -> Double {
     if worked < 8 { return 1.10 - 0.05 * (worked / 8) }        // still warming up
     if worked < 150 { return 1.0 }
     return min(1.0 + (worked - 150) * 0.0006, 1.18)            // tiring
 }
+
+func drift() -> Double { drift(Double(session.actions)) }
 
 /// Work done, not just time passed. Each command is its own process, so the count is
 /// kept on disk and reset when there has been a real gap: an hour of steady clicking
@@ -106,6 +108,15 @@ struct Session {
     var lastVerb: String?
 }
 
+/// Rest recovers, and not in one step. A couple of minutes away is still the same stint,
+/// twenty minutes is half a recovery, a night is a fresh start. A threshold that wipes
+/// the count makes somebody who stretched their legs identical to somebody who has only
+/// just sat down, and puts a cliff in the one curve that should not have one.
+func recovered(_ actions: Int, resting seconds: Double) -> Int {
+    guard seconds > 120 else { return actions }
+    return Int((Double(actions) * pow(0.5, (seconds - 120) / 1200)).rounded())
+}
+
 func loadSession() -> Session {
     let path = NSHomeDirectory() + "/Library/Caches/human-input/session.json"
     guard let d = FileManager.default.contents(atPath: path),
@@ -114,9 +125,11 @@ func loadSession() -> Session {
         return Session(actions: 0, lastAt: Date(), lastVerb: nil)
     }
     let last = Date(timeIntervalSince1970: at)
-    // A gap of ten minutes means they got up. Start fresh.
-    if Date().timeIntervalSince(last) > 600 { return Session(actions: 0, lastAt: Date(), lastVerb: nil) }
-    return Session(actions: Int(n), lastAt: last, lastVerb: j["lastVerb"] as? String)
+    let rested = Date().timeIntervalSince(last)
+    // After a real break you are not mid-flow with whatever you were last doing, so the
+    // verb goes even though the tiredness only fades.
+    return Session(actions: recovered(Int(n), resting: rested), lastAt: last,
+                   lastVerb: rested < 600 ? j["lastVerb"] as? String : nil)
 }
 
 var session = loadSession()
@@ -143,39 +156,22 @@ func saveSession() {
 }
 
 /// Tiredness costs accuracy as well as speed, and it comes from doing things.
-func fatigueErrorScale() -> Double {
-    let worked = Double(session.actions)
-    return worked < 120 ? 1.0 : min(1 + (worked - 120) * 0.0015, 1.45)
+func fatigueErrorScale(_ worked: Double) -> Double {
+    worked < 120 ? 1.0 : min(1 + (worked - 120) * 0.0015, 1.45)
 }
+
+func fatigueErrorScale() -> Double { fatigueErrorScale(Double(session.actions)) }
 
 var device = "mouse"
 var familiarHaste = 1.0
 
-/// Targets you have hit before need less checking and get hit faster. Repeat visits
-/// getting quicker is one of the strongest signals of a person rather than a script.
+/// Things done before, how often and how long ago. The same curve governs a button you
+/// keep clicking and a string you keep typing, because underneath it is the same motor
+/// learning — so it is the same store, twice.
 struct Practice {
     var visits: Double
     var lastAt: Double
 }
-
-var familiarity: [String: Practice] = {
-    let path = NSHomeDirectory() + "/Library/Caches/human-input/familiarity.json"
-    guard let d = FileManager.default.contents(atPath: path),
-          let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [:] }
-    let now = Date().timeIntervalSince1970
-    var out: [String: Practice] = [:]
-    for (key, value) in j {
-        if let pair = value as? [Double], pair.count == 2 {
-            out[key] = Practice(visits: pair[0], lastAt: pair[1])
-        } else if let bare = value as? Double {
-            out[key] = Practice(visits: bare, lastAt: now)   // the older countless format
-        }
-    }
-    return out
-}()
-var familiarityDirty = false
-
-func familiarKey(_ p: CGPoint) -> String { "\(Int(p.x) / 20),\(Int(p.y) / 20)" }
 
 /// Practice fades. A button hit fifty times last month is not the reflex it was, and a
 /// speed that only ever ratchets up is a counter rather than a skill.
@@ -184,21 +180,97 @@ func practiced(_ p: Practice) -> Double {
     return p.visits * pow(0.5, days / 14)
 }
 
-func saveFamiliarity() {
-    guard familiarityDirty else { return }
-    // Bounded, because this is written on every run and nothing ever removes a target.
-    // Dropping by decayed value keeps what is still practised rather than what was once
-    // busy: a target from six months ago is not worth a slot.
-    if familiarity.count > 3000 {
-        let keep = familiarity.sorted { practiced($0.value) > practiced($1.value) }.prefix(2000)
-        familiarity = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
+/// Skill is a power law: the first few repetitions buy most of the speed and then it
+/// flattens off. A straight line that ratchets into a ceiling is a counter wearing a
+/// curve's clothes, and the kink where it clamps is visible in the timings.
+func skillGain(_ seen: Double, ceiling: Double, scale: Double = 6) -> Double {
+    1 + ceiling * (1 - exp(-max(0, seen) / scale))
+}
+
+struct PracticeStore {
+    let file: String
+    let cap: Int
+    var entries: [String: Practice]
+    var dirty = false
+
+    init(_ file: String, cap: Int = 3000) {
+        self.file = file
+        self.cap = cap
+        let path = NSHomeDirectory() + "/Library/Caches/human-input/" + file
+        let raw = FileManager.default.contents(atPath: path)
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+        entries = PracticeStore.parse(raw ?? [:])
     }
-    let dir = NSHomeDirectory() + "/Library/Caches/human-input"
-    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    let blob = familiarity.mapValues { [$0.visits, $0.lastAt] }
-    if let raw = try? JSONSerialization.data(withJSONObject: blob) {
-        try? raw.write(to: URL(fileURLWithPath: dir + "/familiarity.json"))
+
+    /// Both shapes this file has ever had, because a cache that fails to load is a hand
+    /// that forgot everything it knew.
+    static func parse(_ j: [String: Any]) -> [String: Practice] {
+        let now = Date().timeIntervalSince1970
+        var out: [String: Practice] = [:]
+        // Through NSNumber, because a whole number and a fractional one arrive as
+        // different Swift types and a cast straight to Double drops the whole ones.
+        for (key, value) in j {
+            if let pair = value as? [NSNumber], pair.count == 2 {
+                out[key] = Practice(visits: pair[0].doubleValue, lastAt: pair[1].doubleValue)
+            } else if let bare = value as? NSNumber {
+                out[key] = Practice(visits: bare.doubleValue, lastAt: now)   // the older dateless format
+            }
+        }
+        return out
     }
+
+    /// Repetitions to date, decayed to now.
+    func seen(_ key: String) -> Double { entries[key].map(practiced) ?? 0 }
+
+    /// One more repetition, rebased to now so the decay always runs from the last time it
+    /// was really done. A rehearsal teaches it nothing.
+    mutating func record(_ key: String, after seen: Double) {
+        guard !dry else { return }
+        entries[key] = Practice(visits: seen + 1, lastAt: Date().timeIntervalSince1970)
+        dirty = true
+    }
+
+    mutating func save() {
+        guard dirty else { return }
+        // Bounded, because this is written on every run and nothing ever removes an
+        // entry. Dropping by decayed value keeps what is still practised rather than what
+        // was once busy: a target from six months ago is not worth a slot.
+        if entries.count > cap {
+            let keep = entries.sorted { practiced($0.value) > practiced($1.value) }.prefix(cap * 2 / 3)
+            entries = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
+        }
+        let dir = NSHomeDirectory() + "/Library/Caches/human-input"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let blob = entries.mapValues { [$0.visits, $0.lastAt] }
+        if let raw = try? JSONSerialization.data(withJSONObject: blob) {
+            try? raw.write(to: URL(fileURLWithPath: dir + "/" + file))
+        }
+    }
+}
+
+var pointerPractice = PracticeStore("familiarity.json")
+var typingPractice = PracticeStore("typing.json", cap: 600)
+
+func savePractice() {
+    pointerPractice.save()
+    typingPractice.save()
+}
+
+func familiarKey(_ p: CGPoint) -> String { "\(Int(p.x) / 20),\(Int(p.y) / 20)" }
+
+/// A string typed before, recognised without keeping it. The hash is truncated to twelve
+/// bits, so the store holds a bucket one string in four thousand lands in rather than the
+/// text: it cannot be searched for a password somebody already suspects, which is the
+/// same reason the audit log records that typing happened and never what was typed. The
+/// cost is that two unrelated strings occasionally read as practice for each other — a
+/// harmless way to be wrong, and nothing like keeping the words.
+func typingKey(_ text: String) -> String? {
+    // Chunking is a sequence the fingers know as one motion. Two characters is not a
+    // sequence, and single keys are already covered by the digraph timings.
+    guard text.count >= 3 else { return nil }
+    var h: UInt64 = 0xcbf2_9ce4_8422_2325
+    for b in text.utf8 { h = (h ^ UInt64(b)) &* 0x0000_0100_0000_01b3 }
+    return String(h & 0xfff, radix: 16)
 }
 
 func cursor() -> CGPoint {
@@ -234,7 +306,7 @@ func nap(_ seconds: Double) {
     if dry { dryElapsed += max(0, seconds); return }
     if terminateRequested != 0 {
         releaseEverythingHeld()
-        saveFamiliarity()
+        savePractice()
         exit(130)
     }
     panicCheck()
@@ -1226,17 +1298,10 @@ func moveTo(_ target: CGPoint, width: Double = 26) {
     let close = max(width * 0.3, 1.6)
 
     let key = familiarKey(target)
-    let seen = familiarity[key].map(practiced) ?? 0
-    // A rehearsal must not teach it anything, or planning a script would leave the hand
-    // believing it had done the work.
-    if !dry {
-        familiarity[key] = Practice(visits: seen + 1, lastAt: Date().timeIntervalSince1970)
-        familiarityDirty = true
-    }
-    // Somewhere you go often, you stop checking your aim so carefully. Skill is a power
-    // law: the first few visits buy most of the speed and then it flattens off. A
-    // straight line that ratchets to a ceiling is a counter wearing a curve's clothes.
-    familiarHaste = 1 + 0.3 * (1 - exp(-seen / 6))
+    let seen = pointerPractice.seen(key)
+    pointerPractice.record(key, after: seen)
+    // Somewhere you go often, you stop checking your aim so carefully.
+    familiarHaste = skillGain(seen, ceiling: 0.3)
     let attempts = seen >= 5 ? 1 : seen >= 1.5 ? 2 : 3
     defer { familiarHaste = 1 }
 
@@ -1803,16 +1868,26 @@ func typeText(_ text: String, wpm: Double, accuracy: Accuracy) {
             exit(7)
         }
     }
+    // Fingers learn a string the way a hand learns a button. The tenth time you type a
+    // path, a username or a command it comes out as one motion rather than as characters,
+    // and you fumble it less. Speeding up the hand but never the fingers is the kind of
+    // inconsistency that shows up in aggregate.
+    let chunkKey = typingKey(text)
+    let known = chunkKey.map { typingPractice.seen($0) } ?? 0
+    let chunked = skillGain(known, ceiling: 0.35)
+    let sureness = skillGain(known, ceiling: 0.5)
+    if let key = chunkKey { typingPractice.record(key, after: known) }
+
     // 12/wpm is seconds per character at the stated rate. Corrections and the pause
     // mixture add time on top, so the base is pre-shrunk to land on the asked-for
     // net speed, and shrunk further in the modes that stop to fix mistakes.
-    let base = (12.0 / max(wpm, 5)) * (accuracy == .clean ? 0.65 : 0.49) * drift()
+    let base = (12.0 / max(wpm, 5)) * (accuracy == .clean ? 0.65 : 0.49) * drift() / chunked
     let chars = Array(text)
     // Corrections run about 6% of keystrokes, and roughly one error in six survives.
     let code = typingStyle == "code" || (typingStyle == "auto" && looksLikeCode(text))
     codeStyle = code
     let errorRate = accuracy == .clean ? 0.0
-        : 0.055 * traits.errorScale * fatigueErrorScale() * (code ? 1.35 : 1)
+        : 0.055 * traits.errorScale * fatigueErrorScale() * (code ? 1.35 : 1) / sureness
     var prev: Character? = nil
     var i = 0
 
@@ -1975,6 +2050,133 @@ func runIdle(minutes: Double, verbose: Bool, yield: Bool) {
         napUntil(rest)
     }
     log("done")
+}
+
+// ============================================================================
+// Model regression
+//
+// The behaviour model is the whole product, and it is all numbers. A curve that quietly
+// turns back into a straight line throws nothing and breaks no command: it shows up only
+// as runs that read wrong, months later, with no way left to tell when it started. So
+// every curve is asserted here, and the build runs it.
+// ============================================================================
+
+func modelChecks() -> [(name: String, ok: Bool, detail: String)] {
+    var out: [(name: String, ok: Bool, detail: String)] = []
+    func check(_ name: String, _ ok: Bool, _ detail: String = "") { out.append((name, ok, detail)) }
+    func rising(_ xs: [Double]) -> Bool { zip(xs, xs.dropFirst()).allSatisfy { $1 >= $0 - 1e-9 } }
+    func falling(_ xs: [Double]) -> Bool { zip(xs, xs.dropFirst()).allSatisfy { $1 <= $0 + 1e-9 } }
+
+    let gain = stride(from: 0.0, through: 120, by: 0.25).map { skillGain($0, ceiling: 0.3) }
+    check("skill rises, flattens, and stops at its ceiling",
+          abs(gain.first! - 1) < 1e-12 && rising(gain) && gain.last! < 1.3 && gain.last! > 1.2999
+              && falling(zip(gain, gain.dropFirst()).map { $1 - $0 }),
+          String(format: "1.0000 -> %.4f, always diminishing", gain.last!))
+
+    let now = Date().timeIntervalSince1970
+    let fortnight = practiced(Practice(visits: 60, lastAt: now - 14 * 86_400))
+    let quarter = practiced(Practice(visits: 60, lastAt: now - 90 * 86_400))
+    check("practice halves every fortnight and goes rusty",
+          abs(practiced(Practice(visits: 60, lastAt: now)) - 60) < 0.01
+              && abs(fortnight - 30) < 0.01 && quarter < 1
+              && practiced(Practice(visits: 5, lastAt: now + 86_400)) == 5,
+          String(format: "60 -> %.0f at a fortnight -> %.2f at ninety days", fortnight, quarter))
+
+    let shape = stride(from: 0.0, through: 4000, by: 5).map { drift($0) }
+    check("a session warms up, settles, then tires, within bounds",
+          shape.first! > 1.0 && abs(shape.min()! - 1.0) < 1e-9 && shape.max()! <= 1.18 + 1e-9
+              && rising(stride(from: 8.0, through: 4000, by: 5).map { drift($0) }),
+          String(format: "%.3f start, %.3f floor, %.3f cap", shape.first!, shape.min()!, shape.max()!))
+
+    let slips = stride(from: 0.0, through: 4000, by: 5).map { fatigueErrorScale($0) }
+    check("tiredness costs accuracy too, and stops",
+          slips.first! == 1 && rising(slips) && slips.max()! <= 1.45 + 1e-9
+              && fatigueErrorScale(1000) > 1,
+          String(format: "1.00 -> %.2f", slips.max()!))
+
+    check("rest recovers gradually and eventually completely",
+          recovered(200, resting: 0) == 200 && recovered(200, resting: 60) == 200
+              && falling(stride(from: 0.0, through: 8 * 3600, by: 60).map { Double(recovered(200, resting: $0)) })
+              && recovered(200, resting: 1320) == 100 && recovered(200, resting: 8 * 3600) == 0,
+          String(format: "200 -> %d after 22min -> %d overnight",
+                 recovered(200, resting: 1320), recovered(200, resting: 8 * 3600)))
+
+    var lo = Double.infinity, hi = 0.0
+    var distinct = Set<String>()
+    for day in 20_000..<20_400 {
+        let t = dayDrift(Traits(), day: day)
+        lo = min(lo, t.pace); hi = max(hi, t.pace)
+        distinct.insert(String(format: "%.5f", t.pace))
+    }
+    check("traits drift by the day inside a narrow band",
+          lo >= 0.92 - 1e-9 && hi <= 1.08 + 1e-9 && distinct.count > 350
+              && dayDrift(Traits(), seed: "ana", day: 300).pace == dayDrift(Traits(), seed: "ana", day: 300).pace
+              && dayDrift(Traits(), seed: "ana", day: 300).pace != dayDrift(Traits(), seed: "ana", day: 301).pace,
+          String(format: "%.3f..%.3f over 400 days, %d distinct", lo, hi, distinct.count))
+
+    check("short strings do not chunk, and a string keys to itself",
+          typingKey("ab") == nil && typingKey("git status") == typingKey("git status")
+              && typingKey("git status") != typingKey("git commit -a"))
+
+    let migrated = PracticeStore.parse(["old": 4, "new": [9.0, now - 14 * 86_400]])
+    check("every format this cache has had still loads",
+          migrated["old"]?.visits == 4 && migrated["new"]?.visits == 9
+              && abs(practiced(migrated["new"]!) - 4.5) < 0.05
+              && PracticeStore.parse(["x": "nonsense"]).isEmpty,
+          "\(migrated.count) entries, junk dropped")
+
+    // Sampled rather than reasoned about: these are random draws, and the property that
+    // matters is where their means sit relative to each other.
+    func meanGap(_ from: String?, _ to: String, since: Double, _ runs: Int = 4000) -> Double {
+        let wasDry = dry, wasElapsed = dryElapsed
+        dry = true
+        var total = 0.0
+        for _ in 0..<runs {
+            dryElapsed = 0
+            transitionPause(from: from, to: to, since: since)
+            total += dryElapsed
+        }
+        dry = wasDry; dryElapsed = wasElapsed
+        return total / Double(runs)
+    }
+    let flow = meanGap("click", "click", since: 0)
+    let verb = meanGap("click", "scroll", since: 0)
+    let hands = meanGap("click", "type", since: 0)
+    let eyes = meanGap("find", "click", since: 0)
+    check("gaps grow with the cost of the switch",
+          flow < verb && verb < hands && hands < eyes,
+          String(format: "flow %.2f < verb %.2f < hands %.2f < eyes %.2f", flow, verb, hands, eyes))
+    check("a gap the caller already spent is not spent twice",
+          meanGap("find", "click", since: 30) == 0 && meanGap(nil, "click", since: 30) == 0)
+    check("looking at the screen costs no input time",
+          meanGap("click", "find", since: 0) == 0 && meanGap("click", "check", since: 0) == 0)
+
+    if let key = typingKey("the quarterly numbers look right to me") {
+        let held = typingPractice.entries[key]
+        let wasDry = dry, wasElapsed = dryElapsed, wasBuffer = dryBuffer
+        dry = true
+        // Heavily sampled: the pause mixture has a long tail, and a mean over too few
+        // runs makes this assertion flap rather than fail.
+        func timeTyping(_ visits: Double, _ runs: Int = 500) -> Double {
+            typingPractice.entries[key] = visits == 0 ? nil : Practice(visits: visits, lastAt: now)
+            var total = 0.0
+            for _ in 0..<runs {
+                dryElapsed = 0
+                dryBuffer = ""
+                typeText("the quarterly numbers look right to me", wpm: 70, accuracy: .human)
+                total += dryElapsed
+            }
+            return total / Double(runs)
+        }
+        let cold = timeTyping(0), warm = timeTyping(40)
+        typingPractice.entries[key] = held        // the probe leaves no practice behind
+        dry = wasDry; dryElapsed = wasElapsed; dryBuffer = wasBuffer
+        check("a string typed often comes out as one motion",
+              warm < cold * 0.88 && warm > cold * 0.55,
+              String(format: "%.2fs cold -> %.2fs practised", cold, warm))
+    }
+
+    return out
 }
 
 // ============================================================================
@@ -2360,7 +2562,7 @@ human - drive macOS the way a person does, and read the screen three ways
     human stop / human go           set or clear the abort flag
     human unstick                   release anything left held down
     every action is appended to ~/Library/Logs/human-input.log
-    human selftest                  prove pointer, typing, guard and sight still work
+    human selftest                  prove pointer, typing, sight and every model curve
 
   who is typing
     --persona <name>                one consistent hand: speed, curve bias, slips
@@ -2376,7 +2578,7 @@ the same flow run twice is never the same shape twice.
 // the output is piped rather than sitting in a terminal.
 setvbuf(stdout, nil, _IONBF, 0)
 
-atexit { releaseEverythingHeld(); saveFamiliarity(); saveSession() }
+atexit { releaseEverythingHeld(); savePractice(); saveSession() }
 // A signal handler may not allocate or post events, so it only raises a flag and the
 // cleanup happens in normal context, at the next pause.
 for sig in [SIGINT, SIGTERM, SIGHUP] {
@@ -3092,6 +3294,9 @@ func execute(_ cmd: String, _ rest: [String]) {
         check("can name the frontmost app", !front.isEmpty, front)
         let tree = axRoot(nil).map { axTree($0).count } ?? 0
         check("can see the interface", tree > 0, "\(tree) elements in \(front)")
+
+        // The behaviour model, asserted rather than eyeballed.
+        for c in modelChecks() { check(c.name, c.ok, c.detail) }
 
         moveTo(home)
         print(failed == 0 ? "all good" : "\(failed) failed")

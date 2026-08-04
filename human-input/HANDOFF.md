@@ -104,15 +104,43 @@ finger slowest; a pause mixture from writing research (word retrieval ~330 ms, p
 boundary ~735 ms, planning ~2.7 s); error mix from typing corpora (substitution 39 %,
 insertion 33 %, omission 18 %, transposition 11 %).
 
-Behaviour: familiarity (repeat visits faster, persisted, saturating on a power law and
-halving every fortnight of disuse), the gap between two commands shaped by what just
-happened and net of whatever the caller already spent thinking, traits drifting a few
-percent by the date, session shape driven by work done rather than the clock,
-`--device trackpad` steadier than mouse, idle in episodes (reading / scanning / busy /
-away) rather than a steady drip.
+Behaviour: practice — the same saturating power law and fortnightly decay for a button
+you keep clicking and a string you keep typing, both persisted; the gap between two
+commands shaped by what just happened and net of whatever the caller already spent
+thinking; traits drifting a few percent by the date; session shape driven by work done
+rather than the clock, with tiredness recovering on a rest curve rather than at a
+threshold; `--device trackpad` steadier than mouse; idle in episodes (reading / scanning
+/ busy / away) rather than a steady drip.
+
+The typing store keys on a 12-bit hash, so it holds a bucket that one string in four
+thousand lands in rather than the text — the same reason the audit log records that
+typing happened and never what was typed.
+
+Every one of those curves is asserted in `human selftest`, which the build runs. They are
+numbers nothing else would notice going wrong.
 
 **Measured:** 1400 px crossing in **0.84 s** against Fitts' 0.86 s predicted. Typing
 asked 70 wpm → 68.9 / 70.3 / 72.9 measured. Pointer worst miss 2.2 px over 20 moves.
+
+**Fatigue, measured at last** (it was the long-standing untested item). Three runs, each
+re-seeding `session.json` at a chosen action count and clearing `familiarity.json` first,
+because a repeated target gets familiar and speeds up — the same confound that
+invalidated the device comparison in §38:
+
+| run | rested | tired | ratio |
+|---|---|---|---|
+| sweep, 8 levels × 15 | 1.017 | 1.218 | **1.197** |
+| endpoints, random distance, 45 interleaved | 0.964 s | 1.058 s | **1.100** median |
+| endpoints, short hops, 45 interleaved | 0.553 s | 0.679 s | **1.239** median |
+
+Predicted 1.180; the three centre on it. They scatter because the 7 % think pause in the
+between-command gap has a long tail, so a mean over tens of samples is noisy — the mean
+of the random-distance run was 1.282 against its own median of 1.100. Process overhead is
+0.028 s and does not matter. Note that the end-to-end figure is *expected* to sit slightly
+under 1.180 on longer moves: the settle hover and the correction pauses are fixed costs
+that do not scale with tiredness, which works out at about 1.14 for a mid-length reach.
+An early guess that the 1.0 s clamp in `submove` was truncating the signal was **wrong** —
+even a 1600 px reach only takes 0.47 s, nowhere near it.
 
 ---
 
@@ -354,7 +382,6 @@ never by reading the code.** The build was clean each time.
 ## Untested
 
 - Most Electron apps beyond WhatsApp and Chrome
-- The fatigue curve (needs a 15+ minute continuous run)
 - `Human.app` under launchd (needs its own Accessibility grant)
 
 ---
@@ -388,14 +415,17 @@ faster and works in CI). Their call; `CLAUDE.md` should be amended either way.
 
 ## 11. What is left
 
-**Reliability** — screen-region cache keyed to change detection (partly done for OCR).
-**Realism** — pointer follows intent (drift toward the next target); recoverable
-mistakes tied to Fitts rather than a flat rate; reading behaviour coupled to real work.
-**Coverage** — upscaled OCR for small text; fuzzy matching for OCR misreads (`l` vs `1`);
-real-keycode path already exists (`--keys`); Open/Save panels; trackpad pinch/swipe are
-attempted but only indirectly evidenced.
-**Robustness** — signed `.app` with its own permissions; automatic selftest already runs
-on build.
+**Shipped since this list was written** — screen-region cache keyed to change detection;
+pointer follows intent (`--next`); mistakes tied to Fitts rather than a flat rate;
+upscaled OCR for small text; fuzzy matching for OCR misreads (`l` vs `1`); the gap
+between two commands; practice that saturates and decays, for targets and for typed
+strings; traits that drift by the day; fatigue that recovers with rest.
+
+**Reliability** — nothing outstanding that has a known reproduction.
+**Realism** — reading behaviour coupled to real work rather than to the idle command.
+**Coverage** — Open/Save panels; trackpad pinch/swipe are attempted but only indirectly
+evidenced; most Electron apps beyond WhatsApp and Chrome.
+**Robustness** — signed `.app` with its own permissions.
 
 **Deliberately not done:** multi-display; a model inside the binary (the deciding layer
 is `human-do` or the conversation).
@@ -407,7 +437,7 @@ is `human-do` or the conversation).
 ```bash
 cd ~/dotfiles/human-input
 ./build.sh                    # builds and runs the selftest
-human selftest                # six checks
+human selftest                # permissions, aim, typing, sight, and every model curve
 human type "..." --dry --repeat 300   # 300 typing runs in a second, must be exact 300/300
 human run script.human --dry  # rehearse anything, touches nothing
 ```

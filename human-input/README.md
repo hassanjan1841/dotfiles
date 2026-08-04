@@ -35,7 +35,7 @@ human key <name> [--cmd --shift --opt --ctrl]
 human open <AppName> / human wait <seconds>
 human idle [--minutes N] [--no-yield] [--verbose]
 human run <file|-> [--verbose] [--dry]
-human selftest                    prove pointer, typing, guard and sight still work
+human selftest                    prove pointer, typing, sight and every model curve
 human stop / human go             set or clear the abort flag
 ```
 
@@ -213,8 +213,13 @@ A tweened curve reads as animation no matter how pretty the easing is.
 - **Route variation.** A long reach across an unfamiliar screen sometimes sets off
   roughly the right way and re-aims halfway, so the same trip twice does not trace the
   same arc. Somewhere you know well, you just go there.
+- **Typing that learns.** A string you have typed before comes out faster and with fewer
+  fumbles, on the same curve as the pointer — the tenth time you type a path or a command
+  your fingers do it as one motion. It stores a 12-bit hash, so what is kept is a bucket
+  one string in four thousand lands in, never the text.
 - **Session shape.** A slow start while warming up, a long steady middle, then a
-  gradual slide in both speed and accuracy as it tires.
+  gradual slide in both speed and accuracy as it tires. Rest recovers it on a curve —
+  twenty minutes away is half a recovery, a night is a fresh start.
 - **Day to day.** Pace, tremor, slips and typing speed shift slightly with the date,
   so one hand is not one fixed signature across months of runs.
 - **Device profile.** `--device trackpad` is steadier and more direct than the default
