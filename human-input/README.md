@@ -226,6 +226,11 @@ A tweened curve reads as animation no matter how pretty the easing is.
   mouse, because direct manipulation overshoots less. Measured with familiarity cleared
   and separate targets: 0.89s against 0.95s, about 6%. An earlier claim of 0.71s
   against 0.95s was wrong, confounded by the second run reusing a familiar target.
+- **Reading during work, not only when idle.** Having just looked at the screen, the
+  comprehension pause before the next action is spent drifting over what is being read
+  rather than resting on the pixel it last clicked — half the time, never mid-drag, and
+  never for longer than the pause was already going to be. Deliberately small and local:
+  a pointer wandering across an app is a pointer opening hover menus nobody asked for.
 - **Idle in episodes.** Reading, scanning, busy work, and genuinely away from the desk,
   rather than a steady drip of movement. Reading tracks along a real line of text and
   nudges the page, because that is what reading looks like.

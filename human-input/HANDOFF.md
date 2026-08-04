@@ -422,10 +422,18 @@ between two commands; practice that saturates and decays, for targets and for ty
 strings; traits that drift by the day; fatigue that recovers with rest.
 
 **Reliability** — nothing outstanding that has a known reproduction.
-**Realism** — reading behaviour coupled to real work rather than to the idle command.
+**Realism** — `--fallible` is still off by default, so the most human thing the tool does
+is opt-in. Deliberate (a stray click lands on whatever is really there) but worth
+revisiting rather than leaving to inertia.
 **Coverage** — Open/Save panels; trackpad pinch/swipe are attempted but only indirectly
 evidenced; most Electron apps beyond WhatsApp and Chrome.
 **Robustness** — signed `.app` with its own permissions.
+
+Reading is now coupled to real work: a comprehension pause after a look is spent drifting
+over the screen instead of sitting still. It is capped at the pause it was already owed,
+so it never lengthens a run — asserted. The trade-off is that the pointer moves during
+work, which can raise a hover state; kept small and local (±70 px) for that reason, and
+skipped mid-drag.
 
 **Deliberately not done:** multi-display; a model inside the binary (the deciding layer
 is `human-do` or the conversation).

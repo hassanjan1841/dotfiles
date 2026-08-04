@@ -395,7 +395,35 @@ func transitionPause(from last: String?, to next: String, since elapsed: Double)
     // Attention is not a metronome. Every so often something needs thinking about, and
     // that long tail is most of what separates a person's cadence from a schedule.
     if Double.random(in: 0...1) < 0.07 { want += Double.random(in: 1.5...4.0) }
-    nap(max(0, want * drift() - elapsed))
+    let owed = max(0, want * drift() - elapsed)
+    // Reading is something you do during work, not only in the idle command. Having just
+    // looked at the screen, the hand drifts over what is being read instead of resting on
+    // the pixel it last clicked — but only half the time, because a hand often does just
+    // sit there, and never mid-drag.
+    if from == "look", owed > 0.5, buttonHeld == nil, Double.random(in: 0...1) < 0.5 {
+        readingDrift(owed)
+    } else {
+        nap(owed)
+    }
+}
+
+/// Small and local on purpose. This runs during real work, where a pointer wandering
+/// across an app is a pointer opening hover menus nobody asked for; the drift of reading
+/// a line is a few centimetres of desk, not a trip across the screen. Consumes exactly
+/// the time it was given, so a rehearsal still estimates the run correctly.
+func readingDrift(_ seconds: Double) {
+    let began = Date(), start = dryElapsed
+    func spent() -> Double { dry ? dryElapsed - start : Date().timeIntervalSince(began) }
+    // The margin covers the next hop; the pause after it is clamped to what is left, so
+    // the budget is met exactly rather than approximately.
+    while seconds - spent() > 0.35 {
+        let p = cursor()
+        submove(from: p, to: onScreen(CGPoint(x: p.x + CGFloat(Double.random(in: -70...70)),
+                                              y: p.y + CGFloat(Double.random(in: -28...28)))),
+                width: 60, primary: false)
+        nap(min(Double.random(in: 0.12...0.45), max(0, seconds - spent())))
+    }
+    nap(max(0, seconds - spent()))
 }
 
 var trusted: Bool { AXIsProcessTrusted() }
@@ -1290,6 +1318,33 @@ func submove(from start: CGPoint, to end: CGPoint, width: Double, primary: Bool)
     }
 }
 
+/// A long reach across an unfamiliar screen is not always one throw at the target: the
+/// hand sets off roughly the right way, the eyes catch up, and the back half is a fresh
+/// aim. Somewhere you know well, you just go there.
+let detourRate = 0.15
+let detourReach = 400.0
+/// Counted only so the selftest can prove the branch is still wired to something. A
+/// decision nothing acts on passes every check about the decision.
+var detoursTaken = 0
+
+func wandersOnTheWay(from: CGPoint, to: CGPoint, familiar seen: Double) -> Bool {
+    dist(from, to) > detourReach && skillGain(seen, ceiling: 0.3) < 1.15
+        && Double.random(in: 0...1) < detourRate
+}
+
+/// Somewhere off the direct line, between a third and two thirds of the way across, on
+/// either side. Being off the line is the whole point — the same trip twice should not
+/// trace the same arc.
+func detourWaypoint(from: CGPoint, to: CGPoint) -> CGPoint {
+    let straight = dist(from, to)
+    let dx = to.x - from.x, dy = to.y - from.y
+    let len = max(CGFloat(straight), 1)
+    let off = CGFloat(straight * Double.random(in: 0.12...0.3)) * (Bool.random() ? 1 : -1)
+    let along = CGFloat(Double.random(in: 0.35...0.6))
+    return onScreen(CGPoint(x: from.x + dx * along - dy / len * off,
+                            y: from.y + dy * along + dx / len * off))
+}
+
 /// Aimed movement is not one smooth sweep to the exact pixel. It is a fast throw that
 /// lands near the target, then one or two smaller corrections that close the gap, and
 /// the miss grows with the distance thrown. That structure is what reads as a person.
@@ -1305,20 +1360,10 @@ func moveTo(_ target: CGPoint, width: Double = 26) {
     let attempts = seen >= 5 ? 1 : seen >= 1.5 ? 2 : 3
     defer { familiarHaste = 1 }
 
-    // A long reach across an unfamiliar screen is not always one throw at the target.
-    // The hand sets off roughly the right way, the eyes catch up, and the back half is a
-    // fresh aim — so the same trip twice does not trace the same arc. Somewhere you know
-    // well you just go there.
-    let straight = dist(cursor(), target)
-    if straight > 400 && familiarHaste < 1.15 && Double.random(in: 0...1) < 0.15 {
-        let here = cursor()
-        let dx = target.x - here.x, dy = target.y - here.y
-        let len = max(CGFloat(straight), 1)
-        let off = CGFloat(straight * Double.random(in: 0.12...0.3)) * (Bool.random() ? 1 : -1)
-        let along = CGFloat(Double.random(in: 0.35...0.6))
+    if wandersOnTheWay(from: cursor(), to: target, familiar: seen) {
+        detoursTaken += 1
         // Aimed loosely on purpose: a waypoint nobody is trying to hit is a fast throw.
-        submove(from: here, to: onScreen(CGPoint(x: here.x + dx * along - dy / len * off,
-                                                 y: here.y + dy * along + dx / len * off)),
+        submove(from: cursor(), to: detourWaypoint(from: cursor(), to: target),
                 width: 90, primary: true)
         nap(Double.random(in: 0.04...0.16))
     }
@@ -2150,6 +2195,68 @@ func modelChecks() -> [(name: String, ok: Bool, detail: String)] {
           meanGap("find", "click", since: 30) == 0 && meanGap(nil, "click", since: 30) == 0)
     check("looking at the screen costs no input time",
           meanGap("click", "find", since: 0) == 0 && meanGap("click", "check", since: 0) == 0)
+
+    // Reading during work must not lengthen the run: it spends the comprehension pause
+    // differently, it does not spend more of it.
+    let budgets = [0.6, 1.2, 2.5, 4.0]
+    let overrun = budgets.map { budget -> Double in
+        let wasDry = dry, wasElapsed = dryElapsed
+        dry = true
+        var worst = 0.0
+        for _ in 0..<200 {
+            dryElapsed = 0
+            readingDrift(budget)
+            worst = max(worst, abs(dryElapsed - budget))
+        }
+        dry = wasDry; dryElapsed = wasElapsed
+        return worst
+    }
+    check("reading spends the pause it was given, not more",
+          overrun.allSatisfy { $0 < 0.01 },
+          String(format: "worst drift %.4fs over %d budgets", overrun.max()!, budgets.count))
+
+    // This one had never been seen to happen: it needs an unfamiliar target, a long
+    // reach and a 15% roll, and the selftest's own targets go familiar after a few
+    // builds, so it was getting less reachable over time rather than more.
+    let near = CGPoint(x: 100, y: 100), far = CGPoint(x: 1000, y: 700)
+    let fired = (0..<8000).filter { _ in wandersOnTheWay(from: near, to: far, familiar: 0) }.count
+    check("a long unfamiliar reach wanders about one time in seven",
+          abs(Double(fired) / 8000 - detourRate) < 0.02
+              && !(0..<400).contains { _ in wandersOnTheWay(from: near, to: far, familiar: 40) }
+              && !(0..<400).contains { _ in
+                  wandersOnTheWay(from: near, to: CGPoint(x: near.x + 200, y: near.y), familiar: 0) },
+          String(format: "%.3f of long reaches, never when short or familiar", Double(fired) / 8000))
+
+    var offLine = 0.0, sides = Set<Bool>()
+    for _ in 0..<2000 {
+        let via = detourWaypoint(from: near, to: far)
+        // Distance from the point to the straight line, by the cross product.
+        let dx = far.x - near.x, dy = far.y - near.y
+        let cross = (via.x - near.x) * dy - (via.y - near.y) * dx
+        offLine = max(offLine, abs(Double(cross)) / dist(near, far))
+        sides.insert(cross > 0)
+    }
+    check("the waypoint really leaves the straight line, either side",
+          offLine > 0.1 * dist(near, far) && sides.count == 2,
+          String(format: "up to %.0fpx off a %.0fpx line, both sides", offLine, dist(near, far)))
+
+    // And that moveTo acts on the decision. A rehearsal posts no events but runs all of
+    // the logic, so the branch is exercised without touching the screen.
+    let from = cursor()
+    let corner = CGPoint(x: from.x > screen.midX ? screen.minX + 40 : screen.maxX - 40,
+                         y: from.y > screen.midY ? screen.minY + 40 : screen.maxY - 40)
+    let cornerKey = familiarKey(corner)
+    let heldCorner = pointerPractice.entries[cornerKey]
+    pointerPractice.entries[cornerKey] = nil            // it has to read as unfamiliar
+    let wasDry = dry, wasElapsed = dryElapsed, taken = detoursTaken
+    dry = true
+    for _ in 0..<300 { moveTo(corner) }
+    dry = wasDry
+    dryElapsed = wasElapsed
+    pointerPractice.entries[cornerKey] = heldCorner
+    check("moveTo acts on the detour it decided to take",
+          dist(from, corner) > detourReach && detoursTaken - taken > 10,
+          "\(detoursTaken - taken) of 300 rehearsed long reaches")
 
     if let key = typingKey("the quarterly numbers look right to me") {
         let held = typingPractice.entries[key]
