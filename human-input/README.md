@@ -226,6 +226,13 @@ A tweened curve reads as animation no matter how pretty the easing is.
   mouse, because direct manipulation overshoots less. Measured with familiarity cleared
   and separate targets: 0.89s against 0.95s, about 6%. An earlier claim of 0.71s
   against 0.95s was wrong, confounded by the second run reusing a familiar target.
+- **The app switcher is an overlay, not a shortcut.** `human key cmd+tab --repeat 2`
+  holds command down, walks the icons and only lets go once it has found the one it
+  wants — because that is what the overlay is for. The look scales with how far along
+  the row it went (0.31s at one tap, 1.26s at eight), and `--dwell s` sets it outright.
+  Under `--fallible` it sometimes goes one too far and steps back with shift, which is
+  the commonest thing anyone does with it. Nothing dwells on command after cmd+S, so
+  this is keyed to the switcher rather than to holding a modifier.
 - **Reading during work, not only when idle.** Having just looked at the screen, the
   comprehension pause before the next action is spent drifting over what is being read
   rather than resting on the pixel it last clicked — half the time, never mid-drag, and

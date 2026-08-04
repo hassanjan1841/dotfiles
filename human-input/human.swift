@@ -1664,7 +1664,24 @@ func parseChord(_ spec: String) -> (CGKeyCode, CGEventFlags)? {
     return (code, flags)
 }
 
-func pressKey(_ spec: String, extra: CGEventFlags, repeats: Int = 1, holdFor: Double = 0) {
+/// The app switcher is an overlay you look at, not a shortcut you fire. Command stays
+/// down while you walk the icons, and the release only comes once you have found the one
+/// you want — so letting go is a separate act, not the tail of the keystroke. Keyed to
+/// the switcher rather than to holding a modifier, because nobody dwells on command
+/// after cmd+S.
+func isSwitcher(_ code: CGKeyCode, _ flags: CGEventFlags) -> Bool {
+    flags.contains(.maskCommand) && (code == 48 || code == 50)   // tab, or ` for windows
+}
+
+/// Scanning costs more the further along the row you went, then flattens off: the first
+/// icon or two are already under your eye, and past that you are reading.
+func switcherDwell(taps: Int) -> Double {
+    Double.random(in: 0.18...0.45)
+        + min(Double(max(taps, 1) - 1), 6) * Double.random(in: 0.09...0.22)
+}
+
+func pressKey(_ spec: String, extra: CGEventFlags, repeats: Int = 1, holdFor: Double = 0,
+              dwell: Double = -1) {
     requireTrust("pressing keys")
     enforceFocus("pressing keys")
     guard let (code, chordFlags) = parseChord(spec) else {
@@ -1698,10 +1715,23 @@ func pressKey(_ spec: String, extra: CGEventFlags, repeats: Int = 1, holdFor: Do
             keyHeld = nil
         }
     } else {
-        for n in 0..<max(1, repeats) {
+        var taps = max(1, repeats)
+        // Going one too far and stepping back is the commonest thing anyone does with
+        // this overlay, and it is only visible because the overlay stays up to show it.
+        let overshoots = fallible && isSwitcher(code, flags) && taps >= 2
+            && Double.random(in: 0...1) < 0.18
+        if overshoots { taps += 1 }
+        for n in 0..<taps {
             tapKey(code, flags: held)
             // Repeats of the same key are quick but not identical.
-            if n + 1 < repeats { nap(Double.random(in: 0.06...0.16)) }
+            if n + 1 < taps { nap(Double.random(in: 0.06...0.16)) }
+        }
+        if overshoots {
+            nap(Double.random(in: 0.22...0.5))                  // noticing
+            tapKey(code, flags: held.union(.maskShift))         // and stepping back
+        }
+        if isSwitcher(code, flags) {
+            nap(dwell >= 0 ? dwell : switcherDwell(taps: taps))
         }
     }
     releaseModifiers(held)
@@ -2215,6 +2245,22 @@ func modelChecks() -> [(name: String, ok: Bool, detail: String)] {
           overrun.allSatisfy { $0 < 0.01 },
           String(format: "worst drift %.4fs over %d budgets", overrun.max()!, budgets.count))
 
+    let cmd: CGEventFlags = [.maskCommand]
+    check("the switcher is recognised, ordinary chords are not",
+          isSwitcher(48, cmd) && isSwitcher(50, cmd)                 // cmd+tab, cmd+`
+              && isSwitcher(48, [.maskCommand, .maskShift])          // cmd+shift+tab
+              && !isSwitcher(48, [.maskControl])                     // ctrl+tab is not it
+              && !isSwitcher(1, cmd) && !isSwitcher(0, cmd),         // cmd+s, cmd+a
+          "tab and ` under command, nothing else")
+
+    let dwells = (1...8).map { taps in
+        (0..<400).map { _ in switcherDwell(taps: taps) }.reduce(0, +) / 400
+    }
+    check("looking at the switcher costs more the further you walk it",
+          rising(dwells) && dwells.first! > 0.15 && dwells.last! < 2.2
+              && dwells.last! > dwells.first! * 2,
+          String(format: "%.2fs at one tap -> %.2fs at eight", dwells.first!, dwells.last!))
+
     // This one had never been seen to happen: it needs an unfamiliar target, a long
     // reach and a 15% roll, and the selftest's own targets go familiar after a few
     // builds, so it was getting less reachable over time rather than more.
@@ -2649,7 +2695,9 @@ human - drive macOS the way a person does, and read the screen three ways
     human drag <x1> <y1> <x2> <y2> [--precise]
     human scroll <amount> [x y] [--horizontal]     negative scrolls down
     human type "text" [--wpm 70] [--accuracy clean|human|raw] [--keys] [--verify]
-    human key <chord> [--repeat N] [--hold s]      e.g. cmd+a, shift+right
+    human key <chord> [--repeat N] [--hold s] [--dwell s]
+                                    e.g. cmd+a, shift+right; cmd+tab --repeat 2 walks
+                                    the switcher and holds it long enough to look
     human text select all|line|word|to-end | replace "new" | find "needle"
     human gesture pinch <amount> | swipe <amount>      attempted, not all apps listen
     human open <AppName> / human wait <seconds>
@@ -3335,7 +3383,8 @@ func execute(_ cmd: String, _ rest: [String]) {
         argv.removeFirst()
         let repeats = Int(takeValue("--repeat") ?? "") ?? 1
         let holdFor = Double(takeValue("--hold") ?? "") ?? 0
-        pressKey(name, extra: modifierFlags(), repeats: repeats, holdFor: holdFor)
+        let dwell = Double(takeValue("--dwell") ?? "") ?? -1
+        pressKey(name, extra: modifierFlags(), repeats: repeats, holdFor: holdFor, dwell: dwell)
 
     case "open":
         let app = argv.joined(separator: " ")
@@ -3431,7 +3480,7 @@ func describe(_ cmd: String, _ args: [String]) -> String {
     let takesValue: Set<String> = [
         "--require", "--app", "--role", "--wpm", "--accuracy", "--style", "--persona",
         "--device", "--timeout", "--expect", "--expect-timeout", "--retry", "--button",
-        "--region", "--limit", "--minutes", "--repeat", "--hold", "--next"
+        "--region", "--limit", "--minutes", "--repeat", "--hold", "--next", "--dwell"
     ]
     var plain: [String] = []
     var skip = false

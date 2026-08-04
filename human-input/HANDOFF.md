@@ -429,6 +429,8 @@ revisiting rather than leaving to inertia.
 evidenced; most Electron apps beyond WhatsApp and Chrome.
 **Robustness** — signed `.app` with its own permissions.
 
+The app switcher holds command down while it walks the icons and dwells before letting go, scaled by how far it went — keyed to cmd+tab and cmd+` rather than to holding a modifier, since nothing dwells on command after cmd+S. `--dwell s` overrides. Under `--fallible` it overshoots by one and steps back with shift; the correction is net-zero, verified by 12 runs from a fixed MRU all landing on the same app.
+
 Reading is now coupled to real work: a comprehension pause after a look is spent drifting
 over the screen instead of sitting still. It is capped at the pause it was already owed,
 so it never lengthens a run — asserted. The trade-off is that the pointer moves during
