@@ -1,0 +1,213 @@
+#!/usr/bin/env -S python3 -u
+"""Drive an app, check what it does, hand the failures back to whoever is building it.
+
+Unbuffered on purpose: the whole point is watching it go, and a buffered pipe shows
+nothing until it is over.
+
+    solid spec.txt --app "Google Chrome" --pane 36
+
+Runs every case in the spec against a real app using `human` — real clicks, real
+keystrokes, read back through accessibility. Anything that fails is written into a
+Claude Code pane as a plain-words report, and once it has finished working the whole
+spec runs again. That repeats until nothing fails or the rounds run out.
+
+Nothing here knows what it is testing. The spec is the only thing that changes.
+
+Spec format, one case per line:
+
+    name | action; action; ... | expect
+
+  actions   click <label>        find it by its visible label and click it
+            click <x>,<y>        when there is no label to find
+            type <text>
+            key <chord>          cmd+s, return, escape
+            scroll <amount>
+            wait <seconds>
+  expect    text <s>             some element on screen says this
+            absent <s>           nothing on screen says this
+            silence              nothing to check, the actions just have to not fail
+
+Lines starting with # are comments. A `reset` line sets actions run before every case.
+"""
+
+import argparse, re, subprocess, sys, time
+from pathlib import Path
+
+HUMAN = str(Path.home() / "dotfiles/human-input/human")
+
+
+def run(*args, timeout=120):
+    try:
+        p = subprocess.run([HUMAN, *args], capture_output=True, text=True, timeout=timeout)
+        return p.returncode, p.stdout
+    except subprocess.TimeoutExpired:
+        return 124, ""
+
+
+def elements(app):
+    """Everything the app publishes, as (x, y, role, label)."""
+    _, out = run("see", "--app", app, "--all", "--limit", "400")
+    seen = []
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 4:
+            continue
+        xy = parts[0].split(",")
+        if len(xy) != 2 or not xy[0].lstrip("-").isdigit():
+            continue
+        seen.append((int(xy[0]), int(xy[1]), parts[1], parts[3]))
+    return seen
+
+
+def find(app, label, below=0):
+    """A clickable thing by its visible label. `below` skips the browser's own chrome."""
+    hits = [e for e in elements(app) if e[3] == label and e[1] >= below]
+    if not hits:
+        hits = [e for e in elements(app) if label in e[3] and e[1] >= below]
+    return hits[0] if hits else None
+
+
+def do(app, action, below):
+    verb, _, rest = action.strip().partition(" ")
+    rest = rest.strip()
+    if verb == "click":
+        if re.fullmatch(r"-?\d+,-?\d+", rest):
+            x, y = rest.split(",")
+            return run("click", x, y, "--require", app)[0] == 0
+        hit = find(app, rest, below)
+        if not hit:
+            print(f"      no element labelled {rest!r}")
+            return False
+        return run("click", str(hit[0]), str(hit[1]), "--require", app)[0] == 0
+    if verb == "type":
+        return run("type", rest, "--require", app)[0] == 0
+    if verb == "key":
+        return run("key", rest, "--require", app)[0] == 0
+    if verb == "scroll":
+        return run("scroll", rest, "--require", app)[0] == 0
+    if verb == "wait":
+        time.sleep(float(rest))
+        return True
+    print(f"      unknown action {action!r}")
+    return False
+
+
+def check(app, expect, below):
+    kind, _, want = expect.strip().partition(" ")
+    want = want.strip()
+    if kind == "silence":
+        return True, "ran"
+    labels = [e[3] for e in elements(app) if e[1] >= below]
+    hit = any(l == want or want in l for l in labels)
+    if kind == "text":
+        return hit, ("found" if hit else f"nothing on screen says {want!r}")
+    if kind == "absent":
+        return not hit, ("gone" if not hit else f"{want!r} is still there")
+    return False, f"unknown expectation {kind!r}"
+
+
+def parse(path):
+    reset, cases = [], []
+    for raw in Path(path).read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("reset "):
+            reset = [a for a in line[6:].split(";") if a.strip()]
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) != 3:
+            print(f"skipping malformed line: {raw}")
+            continue
+        cases.append((parts[0], [a for a in parts[1].split(";") if a.strip()], parts[2]))
+    return reset, cases
+
+
+def sweep(app, reset, cases, below):
+    failures = []
+    for name, actions, expect in cases:
+        for a in reset:
+            do(app, a, below)
+        ok = all(do(app, a, below) for a in actions)
+        time.sleep(0.4)
+        passed, why = check(app, expect, below) if ok else (False, "an action could not run")
+        print(f"  {'pass' if passed else 'FAIL'}  {name}" + ("" if passed else f"  — {why}"))
+        if not passed:
+            failures.append(f"{name}: did {' then '.join(actions)}, expected {expect}, but {why}")
+    return failures
+
+
+def pane_text(pane):
+    return run("pane", "read", str(pane))[1]
+
+
+def wait_until_idle(pane, quiet=8.0, limit=900):
+    """Whoever is building has stopped when the pane stops changing."""
+    last, since, began = None, time.time(), time.time()
+    while time.time() - began < limit:
+        now = pane_text(pane)
+        if now != last:
+            last, since = now, time.time()
+        elif time.time() - since >= quiet:
+            return True
+        time.sleep(2)
+    return False
+
+
+def report(pane, app, failures):
+    """Hand the failures over in plain words, the way you would tell a person."""
+    body = ("I tested the running app by clicking through it. These failed, fix them: "
+            + " || ".join(failures)
+            + ". Do not change anything that is not implicated by these failures.")
+    run("focus", "WezTerm")
+    subprocess.run(["wezterm", "cli", "activate-pane", "--pane-id", str(pane)],
+                   capture_output=True)
+    run("focus", "WezTerm")
+    rc, _ = run("type", body, "--require", "WezTerm", timeout=600)
+    run("key", "return", "--require", "WezTerm")
+    return rc == 0
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("spec")
+    ap.add_argument("--app", required=True, help="the app to drive and read")
+    ap.add_argument("--pane", type=int, help="WezTerm pane running the thing that builds")
+    ap.add_argument("--rounds", type=int, default=5)
+    ap.add_argument("--below", type=int, default=0,
+                    help="ignore anything above this y — a browser's own toolbar")
+    ap.add_argument("--once", action="store_true", help="test only, never report back")
+    a = ap.parse_args()
+
+    reset, cases = parse(a.spec)
+    if not cases:
+        print("no cases in the spec")
+        return 2
+    print(f"{len(cases)} case(s), driving {a.app}")
+
+    for rnd in range(1, a.rounds + 1):
+        print(f"\n── round {rnd} ─────────────────────────")
+        run("focus", a.app)
+        time.sleep(1)
+        failures = sweep(a.app, reset, cases, a.below)
+        if not failures:
+            print(f"\nall {len(cases)} case(s) pass")
+            return 0
+        print(f"\n{len(failures)} failing")
+        if a.once or not a.pane:
+            return 1
+        if rnd == a.rounds:
+            print("out of rounds — not reporting again")
+            return 1
+        print("handing the failures back…")
+        if not report(a.pane, a.app, failures):
+            print("could not write into the pane")
+            return 1
+        if not wait_until_idle(a.pane):
+            print("it never went quiet")
+            return 1
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
