@@ -32,6 +32,8 @@ human drag <x1> <y1> <x2> <y2> [--precise]
 human scroll <amount> [x y] [--horizontal]
 human type "text" [--wpm 70] [--accuracy clean|human|raw]
 human key <name> [--cmd --shift --opt --ctrl]
+human menu <Title> [Item] [Subitem]   press, walk the rows, release on the one you want
+                                      with only a title, lists what is in that menu
 human open <AppName> / human wait <seconds>
 human idle [--minutes N] [--no-yield] [--verbose]
 human run <file|-> [--verbose] [--dry]
