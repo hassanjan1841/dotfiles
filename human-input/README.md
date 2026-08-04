@@ -226,6 +226,14 @@ A tweened curve reads as animation no matter how pretty the easing is.
   mouse, because direct manipulation overshoots less. Measured with familiarity cleared
   and separate targets: 0.89s against 0.95s, about 6%. An earlier claim of 0.71s
   against 0.95s was wrong, confounded by the second run reusing a familiar target.
+- **Menus are pressed, walked and released.** `human menu View "Show Path Bar"` presses
+  on the title, travels down the list so every row on the way lights up in order, dwells
+  on the target and releases there. Submenus fall out of it: they open on hover, so the
+  dwell that a person needs to read the parent is the same dwell that opens the child.
+  This is not only realism — a normal click opens a menu bar menu on the press and
+  dismisses it on the release, so before this the tool could not use menu bars at all.
+  It refuses rather than guesses when an item is greyed out, is an option-key alternate
+  sharing a row with another, or is a submenu parent with nothing named inside it.
 - **The app switcher is an overlay, not a shortcut.** `human key cmd+tab --repeat 2`
   holds command down, walks the icons and only lets go once it has found the one it
   wants — because that is what the overlay is for. The look scales with how far along

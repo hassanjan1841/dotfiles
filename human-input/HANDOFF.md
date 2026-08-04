@@ -429,6 +429,18 @@ revisiting rather than leaving to inertia.
 evidenced; most Electron apps beyond WhatsApp and Chrome.
 **Robustness** — signed `.app` with its own permissions.
 
+Menu bars did not work at all until `human menu` existed: a menu opens on the press and
+closes on the release, so a click with a 0.055-0.135 s gap opened and dismissed it in one
+go, which is why clicking a menu title appeared to do nothing. `menu` presses on the
+title, walks the rows so each highlights in turn, dwells and releases on the target.
+While a menu is open the app is in a tracking loop and a general `axTree` sweep comes
+back nearly empty (29 elements for Finder), so `openMenuItems` walks to the AXMenu
+explicitly instead. Guards, because releasing on the wrong row picks the wrong thing:
+greyed-out items, option-key alternates that share a row with the item they replace, and
+submenu parents named without a child. Verified end to end on Finder — View > Show Path
+Bar flipped to Hide Path Bar, and View > Group By > Name moved the checkmark, both
+restored afterwards.
+
 The app switcher holds command down while it walks the icons and dwells before letting go, scaled by how far it went — keyed to cmd+tab and cmd+` rather than to holding a modifier, since nothing dwells on command after cmd+S. `--dwell s` overrides. Under `--fallible` it overshoots by one and steps back with shift; the correction is net-zero, verified by 12 runs from a fixed MRU all landing on the same app.
 
 Reading is now coupled to real work: a comprehension pause after a look is spent drifting

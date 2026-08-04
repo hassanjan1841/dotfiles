@@ -1455,6 +1455,145 @@ func click(at target: CGPoint?, button: CGMouseButton = .left, times: Int = 1,
     beat()
 }
 
+// ============================================================================
+// Menus
+//
+// A menu bar menu opens on the press and closes on the release, so a click that goes
+// down and up in a tenth of a second opens it and dismisses it again — which is why
+// clicking a menu title did nothing at all until this existed. Press, travel down the
+// items, release on the one you want: the way the menu was designed to be used, and the
+// only way that works with synthetic events.
+// ============================================================================
+
+/// The bar itself, which is readable at any time.
+func menuBarItems(_ app: String?) -> [Seen] {
+    guard let root = axRoot(app) else { return [] }
+    return axTree(root, limit: 400).filter { $0.role == "AXMenuBarItem" }
+}
+
+/// The items of an open menu. Only meaningful while it is open, and the app is inside a
+/// tracking loop then, so this walks to the menu explicitly rather than sweeping the
+/// tree — a general sweep comes back nearly empty mid-drag.
+func openMenuItems(_ barItem: AXUIElement) -> [Seen] {
+    guard let kids = axValue(barItem, kAXChildrenAttribute as String) as? [AXUIElement] else { return [] }
+    var out: [Seen] = []
+    for menu in kids where axText(menu, kAXRoleAttribute as String) == "AXMenu" {
+        guard let items = axValue(menu, kAXChildrenAttribute as String) as? [AXUIElement] else { continue }
+        for item in items {
+            guard let r = axRect(item), r.height > 0 else { continue }
+            out.append(Seen(role: axText(item, kAXRoleAttribute as String) ?? "AXMenuItem",
+                            subrole: "", label: axLabel(item), rect: r, depth: 0, el: item))
+        }
+    }
+    return out.sorted { $0.rect.minY < $1.rect.minY }
+}
+
+/// Down the open menu to a target, letting every item on the way light up. A pointer
+/// that appears on the item it wants has not been down a menu, it has teleported into
+/// one, and the highlights are the difference.
+func travelMenu(to target: CGRect, through items: [Seen]) {
+    let from = cursor()
+    let x = target.midX + CGFloat(Double.random(in: -0.18...0.18)) * target.width
+    // Only what actually lies between here and there, in the order it is passed.
+    let onTheWay = items.filter { $0.rect.midY > min(from.y, target.midY) + 2
+                              && $0.rect.midY < max(from.y, target.midY) - 2 }
+        .sorted { from.y < target.midY ? $0.rect.midY < $1.rect.midY : $0.rect.midY > $1.rect.midY }
+
+    // Reading down a list, not sweeping past it: a glance at most of them, a beat longer
+    // on a few, and the pointer wanders slightly off the column the way a hand does.
+    for item in onTheWay {
+        let p = CGPoint(x: x + CGFloat(Double.random(in: -6...6)), y: item.rect.midY)
+        postMouse(.leftMouseDragged, onScreen(p), .left)
+        nap(Double.random(in: 0.012...0.045) * traits.pace * drift())
+        if Double.random(in: 0...1) < 0.22 { nap(Double.random(in: 0.05...0.16)) }
+    }
+    postMouse(.leftMouseDragged, onScreen(CGPoint(x: x, y: target.midY)), .left)
+}
+
+/// One menu pick, press to release. Returns false rather than guessing when the menu or
+/// the item cannot be found, because releasing over the wrong row picks the wrong thing.
+func pickMenu(_ path: [String], app: String?) -> Bool {
+    guard let title = path.first else { return false }
+    guard let bar = menuBarItems(app).first(where: { $0.name.lowercased() == title.lowercased() })
+            ?? menuBarItems(app).first(where: { $0.name.lowercased().hasPrefix(title.lowercased()) }),
+          let barEl = bar.el else {
+        FileHandle.standardError.write("human: no menu called '\(title)'\n".data(using: .utf8)!)
+        return false
+    }
+
+    requireTrust("using a menu")
+    enforceFocus("using a menu")
+    moveTo(aimJitter(bar.centre, spread: 4))
+    nap(Double.random(in: 0.06...0.2))
+    postMouse(.leftMouseDown, cursor(), .left)
+    buttonHeld = (.left, cursor())
+    // The menu has to be up before there is anything to read or aim at.
+    nap(Double.random(in: 0.12...0.28))
+
+    var ok = true
+    var items = openMenuItems(barEl)
+    if items.isEmpty {
+        FileHandle.standardError.write("human: '\(title)' opened nothing to pick from\n".data(using: .utf8)!)
+        ok = false
+    }
+
+    for (depth, wanted) in path.dropFirst().enumerated() where ok {
+        guard let hit = items.first(where: { $0.name.lowercased() == wanted.lowercased() })
+                ?? items.first(where: { $0.name.lowercased().contains(wanted.lowercased()) }) else {
+            FileHandle.standardError.write(
+                "human: '\(wanted)' is not in that menu\n".data(using: .utf8)!)
+            ok = false; break
+        }
+        // Greyed out: the release would land on it and do nothing, and nothing is the
+        // one outcome indistinguishable from the command having worked.
+        if let el = hit.el, axValue(el, kAXEnabledAttribute as String) as? Bool == false {
+            FileHandle.standardError.write("human: '\(hit.name)' is greyed out\n".data(using: .utf8)!)
+            ok = false; break
+        }
+        // Alternates share one row with the item they replace and only appear while a
+        // modifier is held. Releasing on that row picks whichever is showing, so naming
+        // the hidden one would quietly pick its neighbour instead.
+        if let first = items.first(where: { $0.rect.midY == hit.rect.midY }), first.name != hit.name {
+            FileHandle.standardError.write(
+                "human: '\(hit.name)' shares a row with '\(first.name)' — it only shows while a modifier is held, so it cannot be picked this way\n"
+                    .data(using: .utf8)!)
+            ok = false; break
+        }
+        let last = depth == path.count - 2
+        // Releasing on a parent opens its submenu and picks nothing, and doing nothing is
+        // the one outcome that looks exactly like having worked.
+        if last, let el = hit.el,
+           (axValue(el, kAXChildrenAttribute as String) as? [AXUIElement])?
+               .contains(where: { axText($0, kAXRoleAttribute as String) == "AXMenu" }) == true {
+            FileHandle.standardError.write(
+                "human: '\(hit.name)' opens a submenu — name the item inside it\n".data(using: .utf8)!)
+            ok = false; break
+        }
+        travelMenu(to: hit.rect, through: items)
+        // Reading the row you are about to commit to. A submenu also needs the dwell:
+        // it opens on hover, and a pointer that never rests never opens one.
+        nap(last ? Double.random(in: 0.1...0.3) : Double.random(in: 0.35...0.7))
+        if !last {
+            guard let el = hit.el else { ok = false; break }
+            items = openMenuItems(el)
+            if items.isEmpty {
+                FileHandle.standardError.write(
+                    "human: '\(hit.name)' has no submenu\n".data(using: .utf8)!)
+                ok = false
+            }
+        }
+    }
+
+    // Released where it is: over the target when the walk worked, and back on the title
+    // when it did not, which is how a person backs out without picking anything.
+    if !ok { travelMenu(to: bar.rect, through: []) ; nap(Double.random(in: 0.08...0.2)) }
+    postMouse(.leftMouseUp, cursor(), .left)
+    buttonHeld = nil
+    if !ok { pressKey("escape", extra: []) }
+    beat()
+    return ok
+}
+
 func drag(from a: CGPoint, to b: CGPoint) {
     requireTrust("dragging")
     enforceFocus("dragging")
@@ -2245,6 +2384,28 @@ func modelChecks() -> [(name: String, ok: Bool, detail: String)] {
           overrun.allSatisfy { $0 < 0.01 },
           String(format: "worst drift %.4fs over %d budgets", overrun.max()!, budgets.count))
 
+    // A menu walked without passing over what lies between is a pointer that teleported
+    // into the list: the highlights firing in order are the whole difference.
+    let rows = (0..<14).map { i in
+        Seen(role: "AXMenuItem", subrole: "", label: "row\(i)",
+             rect: CGRect(x: 200, y: 40 + i * 24, width: 210, height: 24), depth: 0)
+    }
+    var crossed: [Int] = []
+    do {
+        let wasDry = dry
+        dry = true
+        let from = CGPoint(x: 305, y: 40)
+        let target = rows[11].rect
+        crossed = rows.filter { $0.rect.midY > min(from.y, target.midY) + 2
+                             && $0.rect.midY < max(from.y, target.midY) - 2 }
+            .map { Int($0.rect.midY) }
+        dry = wasDry
+    }
+    check("walking a menu passes over every row in between",
+          crossed.count == 11 && crossed == crossed.sorted()
+              && !crossed.contains(Int(rows[11].rect.midY)),
+          "\(crossed.count) rows crossed reaching the twelfth, target not among them")
+
     let cmd: CGEventFlags = [.maskCommand]
     check("the switcher is recognised, ordinary chords are not",
           isSwitcher(48, cmd) && isSwitcher(50, cmd)                 // cmd+tab, cmd+`
@@ -2253,13 +2414,15 @@ func modelChecks() -> [(name: String, ok: Bool, detail: String)] {
               && !isSwitcher(1, cmd) && !isSwitcher(0, cmd),         // cmd+s, cmd+a
           "tab and ` under command, nothing else")
 
+    // Only to seven: the scan deliberately stops growing after six, so eight and seven
+    // share a mean and comparing them is a coin toss rather than a check.
     let dwells = (1...8).map { taps in
-        (0..<400).map { _ in switcherDwell(taps: taps) }.reduce(0, +) / 400
+        (0..<600).map { _ in switcherDwell(taps: taps) }.reduce(0, +) / 600
     }
-    check("looking at the switcher costs more the further you walk it",
-          rising(dwells) && dwells.first! > 0.15 && dwells.last! < 2.2
-              && dwells.last! > dwells.first! * 2,
-          String(format: "%.2fs at one tap -> %.2fs at eight", dwells.first!, dwells.last!))
+    check("looking at the switcher costs more the further you walk it, then stops",
+          rising(Array(dwells.prefix(7))) && dwells[0] > 0.15
+              && dwells[6] > dwells[0] * 2 && abs(dwells[7] - dwells[6]) < 0.05,
+          String(format: "%.2fs at one tap -> %.2fs at seven, flat by eight", dwells[0], dwells[6]))
 
     // This one had never been seen to happen: it needs an unfamiliar target, a long
     // reach and a 15% roll, and the selftest's own targets go familiar after a few
@@ -2695,6 +2858,9 @@ human - drive macOS the way a person does, and read the screen three ways
     human drag <x1> <y1> <x2> <y2> [--precise]
     human scroll <amount> [x y] [--horizontal]     negative scrolls down
     human type "text" [--wpm 70] [--accuracy clean|human|raw] [--keys] [--verify]
+    human menu <Title> [Item] [Subitem] [--app X]
+                                    press, walk down the items, release on the one you
+                                    want; with only a title it lists what is in it
     human key <chord> [--repeat N] [--hold s] [--dwell s]
                                     e.g. cmd+a, shift+right; cmd+tab --repeat 2 walks
                                     the switcher and holds it long enough to look
@@ -3385,6 +3551,33 @@ func execute(_ cmd: String, _ rest: [String]) {
         let holdFor = Double(takeValue("--hold") ?? "") ?? 0
         let dwell = Double(takeValue("--dwell") ?? "") ?? -1
         pressKey(name, extra: modifierFlags(), repeats: repeats, holdFor: holdFor, dwell: dwell)
+
+    case "menu":
+        let app = takeValue("--app")
+        guard !argv.isEmpty else {
+            FileHandle.standardError.write(
+                "human: menu needs a title, e.g. human menu View \"Show Path Bar\"\n".data(using: .utf8)!)
+            exit(2)
+        }
+        // With only a title, report what is in it rather than picking something blind.
+        if argv.count == 1 {
+            guard let m = menuBarItems(app).first(where: { $0.name.lowercased() == argv[0].lowercased() }),
+                  let el = m.el else {
+                for b in menuBarItems(app) { print(b.name) }
+                exit(0)
+            }
+            requireTrust("using a menu")
+            postMouse(.leftMouseDown, m.centre, .left)       // it has to be open to be read
+            buttonHeld = (.left, m.centre)
+            nap(0.3)
+            let items = openMenuItems(el)
+            postMouse(.leftMouseUp, m.centre, .left)
+            buttonHeld = nil
+            pressKey("escape", extra: [])
+            for i in items { print("\(Int(i.rect.midX)),\(Int(i.rect.midY))\t\(i.name)") }
+            exit(items.isEmpty ? 1 : 0)
+        }
+        exit(pickMenu(argv, app: app) ? 0 : 1)
 
     case "open":
         let app = argv.joined(separator: " ")
