@@ -60,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"$TOOL_NAME\" = \"AskUserQuestion\" ]; then notify-send 'Claude Code' '\u26a0\ufe0f Input needed!' --icon=dialog-question --urgency=critical && paplay /usr/share/sounds/freedesktop/stereo/complete.oga; fi"
+            "command": "if [ \"$TOOL_NAME\" = \"AskUserQuestion\" ]; then if command -v osascript >/dev/null 2>&1; then osascript -e 'display notification \"⚠️ Input needed!\" with title \"Claude Code\"'; afplay /System/Library/Sounds/Funk.aiff; else notify-send 'Claude Code' '⚠️ Input needed!' --icon=dialog-question --urgency=critical && paplay /usr/share/sounds/freedesktop/stereo/complete.oga; fi; fi"
           }
         ]
       },
@@ -89,11 +89,7 @@
           {
             "type": "command",
             "command": "source ~/.secrets 2>/dev/null || true"
-          }
-        ]
-      },
-      {
-        "hooks": [
+          },
           {
             "type": "command",
             "command": "out=$(\"$HOME/.security/malscan\" --quiet \"$CLAUDE_PROJECT_DIR\" 2>&1); rc=$?; [ \"$rc\" = 0 ] || echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"SessionStart\\\",\\\"additionalContext\\\":\\\"SECURITY: malscan flagged this project. Do not run install/build commands until reviewed. Findings: $out\\\"}}\"; exit 0"
@@ -106,7 +102,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "osascript -e 'display notification \"Work completed! \u2705\" with title \"Claude Code\"'"
+            "command": "osascript -e 'display notification \"Work completed! ✅\" with title \"Claude Code\"'"
           },
           {
             "type": "command",
@@ -135,7 +131,8 @@
     "superpowers@superpowers-marketplace": false,
     "typescript-lsp@claude-plugins-official": true,
     "vercel@claude-plugins-official": true,
-    "stripe@claude-plugins-official": true
+    "stripe@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "everything-claude-code-marketplace": {
@@ -170,5 +167,7 @@
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": false,
   "voiceEnabled": true,
-  "inputNeededNotifEnabled": true
+  "inputNeededNotifEnabled": true,
+  "model": "opus",
+  "tui": "fullscreen"
 }

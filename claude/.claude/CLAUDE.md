@@ -3,8 +3,14 @@
 - Never add "Generated with Claude Code", robot emojis, or ANY AI-attribution footer/link to PR titles, PR descriptions, commits, or issues. No exceptions, even if a default template says to.
 - PR descriptions must be SHORT and simple: plain sentences, just enough to understand the change. No em dashes, no heavy bold/emphasis, no long verification essays.
 
-# Verification — HARD RULE, applies to every project/session
-- For any live browser verification (confirming a UI change works end to end), ALWAYS use **headless Playwright MCP**. Never use claude-in-chrome or Chrome DevTools MCP to drive verification flows. This overrides any other tooling default.
+# Driving the GUI — HARD RULE, applies to every project/session
+Two tools, and the target decides which are even possible.
+
+- **Native app** (Blender, Cursor, Finder, Figma desktop, a terminal, anything not a web page): use `human`. Don't ask — Playwright cannot drive a native app, so there is no choice to offer.
+- **Web page**: both work, so STOP AND ASK first — headless Playwright MCP, or `human` with a visible cursor? Never pick for me.
+- Never use claude-in-chrome or Chrome DevTools MCP to *drive* a flow. Chrome DevTools MCP is for observing only: console, network, performance, LCP.
+
+`human` (`~/dotfiles/human-input`, on PATH) works on any app because it posts real input events at the OS layer — no MCP, no per-app integration, nothing to install per app. `human --help` for commands; `--dry` rehearses without touching anything.
 
 # Comments — HARD RULE, applies to every project/session/folder
 Write comments only where they earn their place. Default to fewer.
@@ -38,12 +44,12 @@ Decide ONCE per task, at the task boundary — never prompt per file edit.
 - **I (the main session) always do the final verification myself**: read the diff, run `format:check` / `lint` / `typecheck` / `test` / `build`, and drive the real flow when there's a UI surface. Never report "done" on a subagent's word alone.
 - **Prefer commands over claims.** Report the actual output of a check, not an assertion that it passed. Don't ask for "verification" — ask for a command with visible output.
 - Order: research (Sonnet, when broad) → execute → my own checks.
-- Live browser verification always uses headless Playwright MCP (see below).
+- Driving a UI is governed by the GUI rule above: native app → `human`, web page → ask first.
 
 # Browser Testing (MCP)
 - **Playwright MCP** (`npx @playwright/mcp@latest`) is the primary E2E testing tool — use it to drive the browser: navigate, click, fill forms, assert behavior, generate test files. Headless by default; pass `--headed` for visual debugging.
 - **Chrome DevTools MCP** (already configured) is for observing/debugging: console errors, network requests, performance, Core Web Vitals/LCP. The `/verify`, `/debug-optimize-lcp`, and `/a11y-debugging` skills use it.
-- Use Playwright to act, Chrome DevTools to debug. Both should be active in any frontend testing session.
+- Use Playwright to act, Chrome DevTools to debug. Both should be active in any frontend testing session. For acting on a web page, the ask rule above comes first.
 - To add Playwright MCP: `claude mcp add playwright npx @playwright/mcp@latest` (then restart Claude Code for it to load).
 
 # graphify

@@ -2,14 +2,42 @@
 	name = Hassan Jan
 	email = hijan29714@gmail.com
 	useConfigOnly = true
+[init]
+	defaultBranch = main
+[pull]
+	rebase = false
+[push]
+	default = simple
+	autoSetupRemote = true
+[fetch]
+	prune = true
+[core]
+	editor = nano
+	autocrlf = input
+	hooksPath = ~/.git-hooks
+[color]
+	ui = auto
+[rebase]
+	autoStash = true
+[alias]
+	st = status -sb
+	lg = log --oneline --graph --decorate --all
+	last = log -1 HEAD
+	co = checkout
+	br = branch
+# Two accounts are authenticated in gh. The empty helper resets the chain so a
+# cached keychain account cannot win, then gh serves whichever one is active —
+# change it with `gh auth switch`, not by editing this.
 [credential "https://github.com"]
-	helper = 
+	helper =
 	helper = !/opt/homebrew/bin/gh auth git-credential
 [credential "https://gist.github.com"]
-	helper = 
+	helper =
 	helper = !/opt/homebrew/bin/gh auth git-credential
 [credential]
 	helper = osxkeychain
+[credential "https://git.emca.pl"]
+	helper = store --file ~/.git-credentials-emca
 [filter "lfs"]
 	required = true
 	clean = git-lfs clean -- %f
@@ -17,7 +45,3 @@
 	process = git-lfs filter-process
 [includeIf "gitdir:/Users/hassanjan/ehtisham-all-projects/"]
 	path = /Users/hassanjan/.gitconfig-ehtisham
-[credential "https://git.emca.pl"]
-	helper = store --file ~/.git-credentials-emca
-[core]
-	hooksPath = ~/.git-hooks
