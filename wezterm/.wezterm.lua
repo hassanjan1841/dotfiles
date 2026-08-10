@@ -8,6 +8,10 @@ local resurrect = wezterm.plugin.require('https://github.com/MLFlexer/resurrect.
 -- ── Zoxide-powered fuzzy workspace switcher (smart_workspace_switcher) ─────────
 local workspace_switcher = wezterm.plugin.require('https://github.com/MLFlexer/smart_workspace_switcher.wezterm')
 
+-- WezTerm spawns the switcher's `zoxide query` in a shell without Homebrew on PATH,
+-- so a bare 'zoxide' isn't found and Alt+j silently does nothing. Pin the absolute path.
+workspace_switcher.zoxide_path = '/opt/homebrew/bin/zoxide'
+
 -- Name the default/stray workspace 'main' instead of a random throwaway name,
 -- so a window not attached to a named project reads clearly (no "handsome-angle").
 config.default_workspace = 'main'
