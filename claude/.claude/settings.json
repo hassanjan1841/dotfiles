@@ -32,6 +32,7 @@
       "Bash(jq *)"
     ]
   },
+  "model": "claude-opus-4-8",
   "hooks": {
     "PostToolUse": [
       {
@@ -92,7 +93,9 @@
           },
           {
             "type": "command",
-            "command": "out=$(\"$HOME/.security/malscan\" --quiet \"$CLAUDE_PROJECT_DIR\" 2>&1); rc=$?; [ \"$rc\" = 0 ] || echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"SessionStart\\\",\\\"additionalContext\\\":\\\"SECURITY: malscan flagged this project. Do not run install/build commands until reviewed. Findings: $out\\\"}}\"; exit 0"
+            "command": "case \"$CLAUDE_PROJECT_DIR\" in \"\"|\"$HOME\"|\"$HOME/\") exit 0 ;; esac; out=$(\"$HOME/.security/malscan\" --quiet \"$CLAUDE_PROJECT_DIR\" 2>&1); rc=$?; [ \"$rc\" = 0 ] || echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"SessionStart\\\",\\\"additionalContext\\\":\\\"SECURITY: malscan flagged this project. Do not run install/build commands until reviewed. Findings: $out\\\"}}\"; exit 0",
+            "timeout": 20,
+            "statusMessage": "Scanning project for known malware patterns"
           }
         ]
       }
@@ -132,7 +135,8 @@
     "typescript-lsp@claude-plugins-official": true,
     "vercel@claude-plugins-official": true,
     "stripe@claude-plugins-official": true,
-    "swift-lsp@claude-plugins-official": true
+    "swift-lsp@claude-plugins-official": true,
+    "rust-analyzer-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "everything-claude-code-marketplace": {
@@ -156,6 +160,7 @@
   },
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
+  "tui": "fullscreen",
   "voice": {
     "enabled": true,
     "mode": "hold"
@@ -164,10 +169,8 @@
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
   "autoCompactEnabled": false,
+  "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": false,
-  "voiceEnabled": true,
-  "inputNeededNotifEnabled": true,
-  "model": "opus",
-  "tui": "fullscreen"
+  "voiceEnabled": true
 }
