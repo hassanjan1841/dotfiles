@@ -156,6 +156,12 @@
         "source": "github",
         "repo": "thedotmack/claude-mem"
       }
+    },
+    "memsearch-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "zilliztech/memsearch"
+      }
     }
   },
   "alwaysThinkingEnabled": true,
@@ -168,6 +174,7 @@
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
+  "verbose": false,
   "autoCompactEnabled": false,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
