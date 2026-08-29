@@ -105,11 +105,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "osascript -e 'display notification \"Work completed! ✅\" with title \"Claude Code\"'"
+            "command": "[ -n \"$CLAUDE_NO_NOTIFY\" ] || osascript -e 'display notification \"Work completed! ✅\" with title \"Claude Code\"'"
           },
           {
             "type": "command",
-            "command": "afplay /System/Library/Sounds/Glass.aiff"
+            "command": "[ -n \"$CLAUDE_NO_NOTIFY\" ] || afplay /System/Library/Sounds/Glass.aiff"
           }
         ]
       }
