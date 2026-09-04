@@ -7,6 +7,7 @@
 Two tools, and the target decides which are even possible.
 
 - **Native app** (Blender, Cursor, Finder, Figma desktop, a terminal, anything not a web page): use `human`. Don't ask — Playwright cannot drive a native app, so there is no choice to offer.
+- **WezTerm** (opening/switching/driving a terminal session): use **`wezterm cli`** (`spawn`/`send-text`/`get-text`/`list`, addressing panes by id), NOT `human`/keystrokes — macOS composes Option+key into characters so WezTerm's Alt/workspace bindings never fire, and blind keys land in the wrong session. Full recipe: [wezterm-sessions.md](./wezterm-sessions.md).
 - **Web page**: both work, so STOP AND ASK first — headless Playwright MCP, or `human` with a visible cursor? Never pick for me.
 - Never use claude-in-chrome or Chrome DevTools MCP to *drive* a flow. Chrome DevTools MCP is for observing only: console, network, performance, LCP.
 
