@@ -1,4 +1,4 @@
-# Driving WezTerm from Claude Code — use `wezterm cli`, never keystrokes
+# Driving WezTerm from Claude Code, use `wezterm cli`, never keystrokes
 
 The reliable way to open, switch, or drive a terminal session in WezTerm is WezTerm's own
 multiplexer CLI (`wezterm cli`). It addresses panes by numeric ID and talks straight to the
@@ -29,7 +29,7 @@ Simulating keys to switch workspaces or launch a session fails on this Mac + Wez
 wezterm cli list
 
 # Spawn a NEW WINDOW in a named workspace (this version REQUIRES --new-window with --workspace).
-# Prints the new pane id (there may be a leading log line — take the trailing number):
+# Prints the new pane id (there may be a leading log line, take the trailing number):
 wezterm cli spawn --new-window --workspace gcs-work- --cwd /path/to/repo
 
 # Send text to a pane by id. --no-paste types it as if typed, not a bracketed paste.
@@ -65,7 +65,7 @@ the name), where the real Option key works.
 `Alt+j` = zoxide fuzzy switcher · `Alt+1` dev · `Alt+2` crm-whatsapp · `Alt+3` propfix ·
 `Alt+4` gcs-work- · `Alt+5` feature-tracker- · `Alt+6` all-rounder · `Alt+7` afri-invest-hub ·
 `Alt+8` drawio-work · `Alt+9` auto-market · new tab = `Ctrl+Shift+T`. These are for the *human*
-at the keyboard, not for automation — automation uses `wezterm cli` above.
+at the keyboard, not for automation. Automation uses `wezterm cli` above.
 
 ## Rule of thumb
 
