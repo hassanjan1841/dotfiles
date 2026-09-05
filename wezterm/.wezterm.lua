@@ -48,20 +48,52 @@ local function do_save()
   end
 end
 
--- Auto-save all workspaces every 10 seconds. Self-rescheduling timer; pcall keeps
--- the loop alive even if one save hiccups (an error here would otherwise stop it).
+-- Auto-save all workspaces every 30 seconds.
+--
+-- This used to be a self-rescheduling wezterm.time.call_after() chain, which
+-- has two fatal problems on this version of WezTerm:
+--   1. WezTerm evaluates the config TWICE on startup (an early pass, then the
+--      real pass once the GUI attaches). A call_after scheduled by the first
+--      pass belongs to a Lua closure that gets discarded once the second pass
+--      takes over as the active config, so it silently never fires.
+--   2. Even past startup, a call_after scheduled during a *live config reload*
+--      (editing this file while WezTerm is running) never fires either --
+--      verified empirically: a fresh chain started this way just never ticks,
+--      no matter how long you wait.
+-- Net effect with call_after: no autosave, ever, in any WezTerm session.
+--
+-- Fix: piggyback on the 'update-status' event instead of a manual timer --
+-- it's fired natively by WezTerm every config.status_update_interval ms, so
+-- there's no separate timer registration to get orphaned by problem #1 above.
+-- (Problem #2 -- nothing newly registered during a live reload actually takes
+-- effect -- turned out to apply here too, verified empirically. It doesn't
+-- matter in practice: the handler registered at the process's real cold start
+-- keeps firing for the process's whole life regardless of later reloads, which
+-- is all this needs. Just know that if you ever edit this block again, only a
+-- full WezTerm quit+relaunch will make the change live -- a hot reload won't.)
+-- A generation counter still guards against stale handlers from earlier
+-- reloads double-saving (wezterm.on accumulates handlers across reloads
+-- rather than replacing them).
 local SAVE_INTERVAL = 30
-local function periodic_save_all()
-  pcall(do_save)
-  wezterm.time.call_after(SAVE_INTERVAL, periodic_save_all)
-end
--- Guarded: this file is re-evaluated on every config reload, and an unguarded call
--- here starts an extra self-rescheduling chain each time. They never stop, so after a
--- few edits several copies are snapshotting every workspace at once.
-if not wezterm.GLOBAL.save_timer_started then
-  wezterm.GLOBAL.save_timer_started = true
-  wezterm.time.call_after(SAVE_INTERVAL, periodic_save_all)
-end
+wezterm.GLOBAL.save_timer_generation = (wezterm.GLOBAL.save_timer_generation or 0) + 1
+local my_generation = wezterm.GLOBAL.save_timer_generation
+-- Starting this at "now" (not 0) delays the first save by a full SAVE_INTERVAL.
+-- Without that delay, the first update-status tick after a cold start fires the
+-- save (and its stale-workspace cleanup) within ~2s of launch -- before
+-- gui-startup's restore_workspace() calls have finished registering every
+-- restored workspace as live, so cleanup deletes their save files as "stale".
+-- (Hit this for real: 13 of 14 workspace files vanished for ~30s before the
+-- next cycle rewrote them once restoration had actually caught up.)
+local last_save_tick = os.time()
+
+wezterm.on('update-status', function(_window, _pane)
+  if wezterm.GLOBAL.save_timer_generation ~= my_generation then return end
+  local now = os.time()
+  if now - last_save_tick < SAVE_INTERVAL then return end
+  last_save_tick = now
+  local ok, err = pcall(do_save)
+  if not ok then wezterm.log_error('autosave failed: ' .. tostring(err)) end
+end)
 
 -- ── Appearance ────────────────────────────────────────────────────────────────
 config.color_scheme               = 'Tokyo Night'
