@@ -300,10 +300,10 @@
         name: "{{ ansible_user_id }}"
         shell: /usr/bin/zsh
 
-    - name: Back up default shell configs that conflict with stow
+    - name: Back up configs that conflict with stow (shell + claude)
       become: false
       shell: |
-        for f in ~/.bashrc ~/.zshrc; do
+        for f in ~/.bashrc ~/.zshrc ~/.claude/settings.json; do
           if [ -f "$f" ] && [ ! -L "$f" ]; then
             mv "$f" "${f}.bak"
           fi
