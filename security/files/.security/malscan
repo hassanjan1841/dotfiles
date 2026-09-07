@@ -23,11 +23,12 @@ QUARANTINE="$SEC_DIR/quarantine"
 LOG="$SEC_DIR/logs/malscan.log"
 mkdir -p "$QUARANTINE" "$(dirname "$LOG")" 2>/dev/null
 
-QUIET=0; DEEP=0; MODE=scan; TARGET=""; KILL=0; SCAN_TOOLING=0
+QUIET=0; DEEP=0; MODE=scan; TARGET=""; KILL=0; SCAN_TOOLING=0; NOPROCS=0
 for a in "$@"; do
   case "$a" in
     --quiet)    QUIET=1 ;;
     --deep)     DEEP=1 ;;
+    --tree)     NOPROCS=1 ;;
     --all)      DEEP=1; TARGET="$HOME"; SCAN_TOOLING=1 ;;
     --procs)    MODE=procs ;;
     --kill)     MODE=procs; KILL=1 ;;
@@ -76,7 +77,7 @@ R_HIDDEN='[ \t]{100,}[^ \t*].{0,2000}(require\(|global\[|global\.[a-z]|eval\(|Fu
 R_UNIESC='require\(\s*["'"'"'](\\u[0-9a-fA-F]{4}){3,}'
 # R3 CRITICAL — known literals + build tags seen on THIS machine.
 #    /*M260630A*/ and global['e']='NPM' are the npm-dropper build stamps.
-R_IOC='166\.88\.134\.62|a322[eE]5[fF]3[dD]311[dD]3080e6f0121063e9a[dD][cC]2490[eE]f1a|"Sec[-]V"|/0x/(clb|cls)|A11--#|/\*M[0-9]{6}[A-Z]?\*/|global\['"'"'e'"'"'\]=|global\.i=["'"'"'][A-Z0-9]'
+R_IOC='166\.88\.134\.62|193\.247\.144\.38|a322[eE]5[fF]3[dD]311[dD]3080e6f0121063e9a[dD][cC]2490[eE]f1a|"Sec[-]V"|/0x/(clb|cls)|/6x6/[0-9]|/verify[-]human/|q4FZkxX[{]|A1[0-9]-[-*#]|/\*(M|RS)[0-9]{6}[A-Z]?\*/|global\['"'"'e'"'"'\]=|global\.i=["'"'"'][A-Z0-9]'
 
 # R6 CRITICAL — PolinRider FAMILY INVARIANT (DPRK supply-chain campaign).
 #    The loader stashes require/module on `global` so the obfuscated body can reach
@@ -84,6 +85,12 @@ R_IOC='166\.88\.134\.62|a322[eE]5[fF]3[dD]311[dD]3080e6f0121063e9a[dD][cC]2490[e
 #    while every published variant-specific IOC matched NONE of them — so this is
 #    the durable signal and the variant markers below are only a bonus.
 R_FAMILY='global\s*\[\s*["'"'"']r["'"'"']\s*\]\s*=\s*require|global\.r\s*=\s*require|global\s*\[\s*["'"'"']m["'"'"']\s*\]\s*=\s*module|global\.m\s*=\s*module'
+
+# R6b CRITICAL — PYTHON variant family invariant (2026-09 evolution).
+#    The node loader stashes require/module on `global`; the Python loader stashes
+#    its C2/version/payload on the urllib `Request` object and execs it via getattr.
+#    Seen on this machine 2026-09-07 alongside the node loader, same campaign.
+R_FAMILY_PY='Request\.(_V|_target|_sign|_code)\b|exec\(\s*getattr\(\s*Request|global\[["'"'"']_t_[su]["'"'"']\]|global\.(_t_s|_t_u|_H2?)\b'
 
 # R7 CRITICAL — published PolinRider variant markers, C2 infra and drop artifacts.
 #    Literals carry a [x] char class so this file does not match itself.
@@ -168,6 +175,7 @@ scan_tree() {
   run_rule "$o" "$R_UNIESC"  "$root" "${CG[@]}";        report CRITICAL "obfuscated \\uXXXX payload"           UNIESC < "$o"
   run_rule "$o" "$R_IOC"     "$root";                   report CRITICAL "known campaign IOC"                   IOC    < "$o"
   run_rule "$o" "$R_FAMILY"  "$root" "${CG[@]}";        report CRITICAL "PolinRider family invariant"          FAMILY < "$o"
+  run_rule "$o" "$R_FAMILY_PY" "$root" "${CG[@]}";      report CRITICAL "PolinRider python-variant invariant"  FAMILYPY < "$o"
   run_rule "$o" "$R_POLIN"   "$root";                   report CRITICAL "PolinRider variant marker / C2"       POLIN  < "$o"
   run_rule "$o" "$R_EVAL"    "$root" "${CG[@]}";        report MEDIUM   "eval() of remote content"             EVAL   < "$o"
   run_rule "$o" "$R_INSTALL" "$root" --glob 'package.json'; report MEDIUM "install script fetches+executes"    INST   < "$o"
@@ -181,10 +189,40 @@ scan_tree() {
   rm -f "$o"
 }
 
+# Persistence: launchd jobs / cron that relaunch a loader at login or reboot.
+# The 2026-09 "VSCodeUpdater" RAT survived via a KeepAlive LaunchAgent + an
+# @reboot cron line, both running node with a `--token http://<C2>` argument.
+P_PERSIST='node[0-9.]* .*(-e |--token http)|python[0-9.]* .*-c .*(urlopen|Request|exec\()|166\.88\.134\.62|193\.247\.144\.38|/6x6/|/0x/(clb|cls)|VSCodeUpdater|--token http'
+scan_persist() {
+  local d f hits=0
+  for d in "$HOME/Library/LaunchAgents" /Library/LaunchAgents /Library/LaunchDaemons; do
+    [ -d "$d" ] || continue
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      hits=1; hit "${RED}CRITICAL${RST}  persistence job launches a loader  $f"; logit "CRITICAL persist $f"
+      cp -p "$f" "$QUARANTINE/$(date +%Y%m%d-%H%M%S)-PERSIST-$(printf '%s' "$f" | sed 's|/|_|g; s|^_||')" 2>/dev/null
+      if [ "$KILL" = 1 ]; then
+        launchctl unload -w "$f" 2>/dev/null; launchctl bootout "gui/$(id -u)/$(basename "$f" .plist)" 2>/dev/null
+        mv "$f" "$f.malscan-disabled" 2>/dev/null && { echo "          disabled $f"; logit "disabled persist $f"; }
+      fi
+    done < <("$RG" -l --no-config -e "$P_PERSIST" "$d" 2>/dev/null)
+  done
+  # cron: can't be auto-removed (needs Full Disk Access), so only surface it in
+  # manual/daily scans — NOT the 180s --kill watch, or it would notify endlessly.
+  if [ "$KILL" != 1 ] && crontab -l 2>/dev/null | grep -qE "$P_PERSIST"; then
+    hits=1; hit "${RED}CRITICAL${RST}  cron job launches a loader (remove with: crontab -r)"
+    crontab -l 2>/dev/null | grep -E "$P_PERSIST" | sed 's/^/          /'; logit "CRITICAL persist crontab"
+  fi
+  [ "$hits" = 0 ] && say "${GRN}persistence clean${RST} — no loader in launchd/cron"
+  return 0
+}
+
 scan_procs() {
   local found=0 pids conns
+  # Match BOTH loader vectors: node `-e` (global[_t_s]/_V/i) and python `-c`
+  # (Request._target/_code, exec(getattr(Request), /6x6/), plus either C2 IP.
   pids=$(ps -Ao pid,command 2>/dev/null \
-          | grep -Ei "node .*-e .*(166\.88\.134\.62|global\[._t_s.\]|global\[._V.\]|global\.i=)" \
+          | grep -Ei "(node .*-e |python[0-9.]* .*-c ).*(166\.88\.134\.62|193\.247\.144\.38|global\[._t_[su].\]|global\[._V.\]|global\.i=|Request\._(target|code|sign)|exec\(getattr\(Request|/6x6/|/0x/(clb|cls))" \
           | grep -v grep | awk '{print $1}')
   for p in $pids; do
     found=1; hit "${RED}CRITICAL${RST}  payload process PID $p"; logit "CRITICAL process $p"
@@ -192,12 +230,13 @@ scan_procs() {
       kill -9 "$p" 2>/dev/null && { echo "          killed $p"; logit "killed $p"; }
     fi
   done
-  conns=$(netstat -an 2>/dev/null | grep -E '166\.88\.134\.62' | grep -vE 'TIME_WAIT|CLOSED')
+  conns=$(netstat -an 2>/dev/null | grep -E '166\.88\.134\.62|193\.247\.144\.38' | grep -vE 'TIME_WAIT|CLOSED')
   if [ -n "$conns" ]; then
     found=1; hit "${RED}CRITICAL${RST}  live C2 connection:"
     printf '%s\n' "$conns" | sed 's/^/          /'; logit "CRITICAL c2-connection"
   fi
   [ "$found" = 0 ] && say "${GRN}procs clean${RST} — no payload process, no C2 connection"
+  scan_persist
   return 0
 }
 
@@ -233,7 +272,9 @@ case "$MODE" in
         [ -d "$t" ] && scan_tree "$t"
       done
     fi
-    scan_procs ;;
+    # --tree scans the source tree only (used by install-guard); the process /
+    # persistence check is machine state, not a property of the package.
+    [ "$NOPROCS" = 1 ] || scan_procs ;;
 esac
 
 if [ "$SCAN_PARTIAL" = 1 ]; then

@@ -24,3 +24,6 @@ safe-install() {
 alias scan='"$HOME/.security/malscan"'
 alias scan-all='"$HOME/.security/malscan" --all'
 alias scan-procs='"$HOME/.security/malscan" --procs'
+
+# proactive install guard (auto-blocks known-bad, silent otherwise)
+[ -f "$HOME/.security/install-guard.sh" ] && source "$HOME/.security/install-guard.sh"

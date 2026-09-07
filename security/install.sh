@@ -26,12 +26,12 @@ fi
 
 step "2/7  scanner -> ~/.security"
 mkdir -p "$HOME/.security/quarantine" "$HOME/.security/logs" "$HOME/.security/backup"
-for f in malscan malscan-agent shellrc; do
+for f in malscan malscan-agent shellrc install-guard.sh; do
   cp "$SRC/.security/$f" "$HOME/.security/$f"
   chmod +x "$HOME/.security/$f"
 done
 chmod 700 "$HOME/.security/quarantine"
-ok "malscan, malscan-agent, shellrc"
+ok "malscan, malscan-agent, shellrc, install-guard.sh"
 
 step "3/7  global git hooks (every repo, existing and future)"
 mkdir -p "$HOME/.git-hooks"

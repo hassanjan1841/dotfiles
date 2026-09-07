@@ -81,3 +81,25 @@ outbound firewall, SSH key passphrases, GitHub 2FA and branch protection.
 
 An outbound firewall is the single highest-value addition — it would have
 prompted the moment `node` dialled an unknown IP.
+
+## 2026-09-07 — second incident, campaign evolved
+
+A new wave hit this machine. Same campaign, new indicators, and it partly
+evaded the v1 scanner. Fixed in this commit.
+
+What was found and neutralized:
+- A "VSCodeUpdater" RAT: obfuscated node script beaconing to `193.247.144[.]38:4000`
+  with a `--token`, persisted via a KeepAlive LaunchAgent **and** an `@reboot` cron.
+  It was remotely deleting Google Chrome repeatedly.
+- A node `-e` loader and, new, a **Python `-c` loader** (`Request._target` /
+  `exec(getattr(Request,'_code'))`, endpoint `/6x6/`) to the same C2.
+- Live `npm` and `vercel` global CLIs re-infected (patient-zero re-trigger).
+
+Scanner changes:
+- New IOCs: `193.247.144[.]38`, `/6x6/`, `verify-human`, XOR key prefix, `A1x-` build tags.
+- New family invariant `R_FAMILY_PY` for the Python loader (the v1 node-only
+  `global.r=require` invariant did not match it).
+- `--procs`/`--kill` now match python `-c` loaders and both C2 IPs (v1 was node-only,
+  so `watch` never killed the python variant).
+- New persistence scan: launchd + cron jobs that relaunch a loader; `--kill`
+  disables offending LaunchAgents. Cron still needs `crontab -r` (Full Disk Access).
