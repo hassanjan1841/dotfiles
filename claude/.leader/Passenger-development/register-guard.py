@@ -64,13 +64,24 @@ def is_prompt(entry):
     return isinstance(content, list) and bool(content) and content[0].get("type") != "tool_result"
 
 
-def passenger_git(cmd):
-    """A git/gh command counts as Passenger work unless it clearly targets another folder."""
-    dirs = TARGET_DIR.findall(cmd)
-    return not dirs or any("passenger" in d.lower() for d in dirs)
+def passenger_git(cmd, cwd):
+    """True when the git/gh command runs inside the Passenger repo: the last cd or git -C
+    before it, else the session's folder, must have the Passenger repo as its origin."""
+    m = WORK_BASH.search(cmd)
+    dirs = TARGET_DIR.findall(cmd[:m.start()] if m else cmd)
+    where = os.path.expanduser(dirs[-1]) if dirs else (cwd or lib.REPO_DIR)
+    if not os.path.isabs(where):
+        where = os.path.join(cwd or lib.REPO_DIR, where)
+    slug = lib.repo_slug().lower()
+    try:
+        url = lib.subprocess.run(["git", "-C", where, "remote", "get-url", "origin"],
+                                 capture_output=True, text=True, timeout=10).stdout.strip().lower()
+    except (OSError, lib.subprocess.TimeoutExpired):
+        return True  # cannot tell: treat as Passenger work so it is never missed
+    return bool(slug) and slug in url
 
 
-def work_in_reply(transcript):
+def work_in_reply(transcript, cwd=""):
     """(soft_at, soft_what, hard_at, hard_what) for this reply's tool calls."""
     try:
         with open(transcript) as f:
@@ -97,7 +108,7 @@ def work_in_reply(transcript):
             elif name == "Bash":
                 cmd = real_commands(inp.get("command", ""))
                 if WORK_BASH.search(cmd):
-                    if passenger_git(cmd) and at >= hard:
+                    if passenger_git(cmd, cwd) and at >= hard:
                         hard, hard_what = at, "a Passenger commit, push or PR"
                     elif at >= soft:
                         soft, soft_what = at, "a commit or push outside Passenger"
@@ -113,7 +124,7 @@ def reasons_for(data):
         raise RuntimeError("test failure")
     reasons = []
     reg_at = lib.mtime(lib.REG)
-    soft, soft_what, hard, hard_what = work_in_reply(data.get("transcript_path", ""))
+    soft, soft_what, hard, hard_what = work_in_reply(data.get("transcript_path", ""), data.get("cwd", ""))
     for name in ("A-status.txt", "B-status.txt", "C-status.txt"):
         t = lib.mtime(f"{lib.BRIEFS}/{name}")
         if t > hard:

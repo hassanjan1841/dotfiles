@@ -32,6 +32,8 @@ check() { out=$(echo "{\"transcript_path\":\"$S/t.jsonl\",\"stop_hook_active\":$
   if [[ "$1" == block ]]; then [[ "$out" == *'"decision": "block"'* ]] && r=PASS || r=FAIL; else [[ -z "$out" ]] && r=PASS || r=FAIL; fi
   [[ $r == FAIL && -n $out ]] && echo "      got: ${out:0:220}"; result $r "$4"; }
 echo 412 413 573 > leader/worker-panes
+git init -q $S && git -C $S remote add origin https://github.com/Externiture/Passenger-development.git
+DOT=$S/dot/claude/.leader/Passenger-development; mkdir -p $DOT; git init -q $S/dot && git -C $S/dot remote add origin https://github.com/someone/dotfiles.git
 
 echo "== guard: who and when"
 good; mk $LATE Read '{"file_path":"/x"}';  check allow 3 false "1 read-only reply"
@@ -55,6 +57,9 @@ echo "== guard: skip notes"
 echo "not register work" > leader/register.ack; check allow 3 false "9 skip note clears a small edit"
 mk $LATE Bash '{"command":"cd ~/dotfiles && git push"}'; check allow 3 false "9b non-Passenger push is small, skip note clears it"
 mk $LATE Bash '{"command":"git commit -m x"}'; check block 3 false "9c skip note can NOT clear a Passenger commit"
+mk $LATE Bash "{\"command\":\"cd $DOT && python3 x.py; cd $S/dot && git commit -m x\"}"; check allow 3 false "9d dotfiles commit in a folder named Passenger-development: small, skip note clears it"
+mk $LATE Bash "{\"command\":\"cd $S/dot && echo; cd $S && git push\"}"; check block 3 false "9e last cd decides: Passenger push still counts"
+mk $LATE Bash "{\"command\":\"git -C $S/dot commit -m x\"}"; check allow 3 false "9f git -C another repo: small"
 rm leader/register.ack
 mk $EARLY Read '{}'; touch briefs/C-status.txt; check block 3 false "10 worker status change"
 echo "skip" > leader/register.ack; check block 3 false "10b skip note can NOT clear a worker status change"
