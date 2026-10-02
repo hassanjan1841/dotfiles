@@ -16,3 +16,6 @@ taskwarrior/.timewarrior/data/*
 # human-input: build artefacts, the source is what is tracked
 human-input/human
 human-input/Human.app/
+
+# Python bytecode
+__pycache__/
