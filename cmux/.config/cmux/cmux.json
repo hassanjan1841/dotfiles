@@ -6,7 +6,12 @@
     "warnBeforeClosingWindow": true,
     "warnBeforeClosingTab": true,
     "warnBeforeClosingTabXButton": true,
-    "confirmQuit": "always"
+    "confirmQuit": "always",
+    "accentColor": "#7aa2f7"
+  },
+  "workspaceColors": {
+    "selectionColor": "#20406f",
+    "indicatorStyle": "leftRail"
   },
   "sidebar": {
     "showBranchDirectory": false,
@@ -22,9 +27,9 @@
   },
   "workspaceGroups": {
     "byCwd": {
-      "~/ehtisham-all-projects/next-shadcn-dashboard-starter-main": { "color": "#7aa2f7", "icon": "building.columns.fill" },
-      "~/Passenger-*": { "color": "#ff9e64", "icon": "shippingbox.fill" },
-      "~/ehtisham-all-projects/CUSTOMERS*": { "color": "#9ece6a", "icon": "person.2.fill" }
+      "/Users/hassanjan/ehtisham-all-projects/next-shadcn-dashboard-starter-main": { "color": "#7aa2f7", "icon": "building.columns.fill" },
+      "/Users/hassanjan/Passenger-*": { "color": "#ff9e64", "icon": "shippingbox.fill" },
+      "/Users/hassanjan/ehtisham-all-projects/CUSTOMERS*": { "color": "#9ece6a", "icon": "person.2.fill" }
     }
   },
   "automation": {

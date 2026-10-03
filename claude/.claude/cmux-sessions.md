@@ -86,6 +86,9 @@ from the sidebar or `Cmd+P`.
 - Per-workspace name, project label and color: `cmux workspace-action --action
   rename|set-description|set-color --workspace <ref> ...`. Colors used: GCS `#7aa2f7`,
   Passenger `#ff9e64`, Customers Direct `#9ece6a`.
+- Selected row: fill `#20406f` with accent `#7aa2f7` (`workspaceColors.selectionColor`,
+  `app.accentColor`). Measured on screen 2026-10-03: title 10.4:1, subtitle 7.4:1, both WCAG
+  AAA. cmux's default bright blue fill measured 3.2:1 and 3.0:1, which fails AA (4.5:1).
 - Closing: cmux asks before closing a tab, workspace or window and before quitting, but a
   workspace with nothing running (an idle shell) closes without asking unless it is pinned.
 - Shortcuts: `Cmd+N` workspace, `Cmd+T` tab, `Cmd+D` / `Cmd+Shift+D` split, `Cmd+P` go to
