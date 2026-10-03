@@ -10,7 +10,15 @@
     "wrapWorkspaceTitles": true,
     "showAgentActivity": true,
     "showPorts": true,
-    "showPullRequests": false
+    "showPullRequests": false,
+    "compactAgentStatus": true
+  },
+  "workspaceGroups": {
+    "byCwd": {
+      "~/ehtisham-all-projects/next-shadcn-dashboard-starter-main": { "color": "#7aa2f7", "icon": "building.columns.fill" },
+      "~/Passenger-*": { "color": "#ff9e64", "icon": "shippingbox.fill" },
+      "~/ehtisham-all-projects/CUSTOMERS*": { "color": "#9ece6a", "icon": "person.2.fill" }
+    }
   },
   "automation": {
     "workspaceAutoNaming": true
