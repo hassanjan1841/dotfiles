@@ -66,7 +66,11 @@ from the sidebar or `Cmd+P`.
 - Theme, font, padding, cursor, blur: edit `~/dotfiles/ghostty/.config/ghostty/config`, then
   `cmux reload-config` (no restart). Check it with
   `/Applications/cmux.app/Contents/Resources/bin/ghostty +validate-config`.
-- cmux-only settings (sidebar, notifications, automation) live in `~/.config/cmux/cmux.json`;
-  `cmux config doctor` shows the paths. Back up that file before editing it.
+- cmux-only settings (sidebar, notifications, automation) live in `~/.config/cmux/cmux.json`,
+  stowed from `~/dotfiles/cmux/`; edits apply live. The sidebar hides paths, branches, PR rows,
+  logs and SSH, shows the agent's latest notification in 2 lines, and AI-names new workspaces.
+- Per-workspace name, project label and color: `cmux workspace-action --action
+  rename|set-description|set-color --workspace <ref> ...`. Colors used: GCS `#7aa2f7`,
+  Passenger `#ff9e64`, Customers Direct `#9ece6a`.
 - Shortcuts: `Cmd+N` workspace, `Cmd+T` tab, `Cmd+D` / `Cmd+Shift+D` split, `Cmd+P` go to
   workspace, `Cmd+Shift+U` jump to the latest agent waiting on you, `Cmd+Shift+L` browser.

@@ -17,6 +17,7 @@ Personal dotfiles for Ubuntu and macOS, managed with [GNU Stow](https://www.gnu.
 | `taskwarrior` | `~/.task/` + `~/.timewarrior/` config |
 | `wezterm` | `~/.wezterm.lua` (fallback terminal) |
 | `ghostty` | `~/.config/ghostty/config` (theme/font for cmux) |
+| `cmux` | `~/.config/cmux/cmux.json` (sidebar: no paths/branches/PRs, plain names) |
 | `zed` | `~/.config/zed/settings.json` + `themes/` |
 | `claude` | `~/.claude/settings.json` + `CLAUDE.md` |
 | `autostart` | `~/.config/autostart/startup.desktop` |

@@ -397,6 +397,12 @@
       shell: "cd {{ dotfiles_dir }} && stow -v --no-folding --restow ghostty"
       ignore_errors: true
 
+    - name: Stow cmux sidebar config (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      shell: "cd {{ dotfiles_dir }} && stow -v --no-folding --restow cmux"
+      ignore_errors: true
+
     # ── startup.sh + GNOME autostart (Ubuntu only) ────────────────────────────
     - name: Stow startup script (Ubuntu)
       when: ansible_os_family == "Debian"
