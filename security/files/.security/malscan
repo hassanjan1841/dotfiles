@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# malscan — universal scanner for injected/obfuscated payloads in source trees.
+# malscan: universal scanner for injected/obfuscated payloads in source trees.
 # Built after the 2026-08 postcss.config.js compromise (hidden-whitespace + blockchain-C2 loader).
 #
-#   malscan [PATH]     scan PATH (default: cwd), skipping node_modules   — fast, hook-safe
+#   malscan [PATH]     scan PATH (default: cwd), skipping node_modules  : fast, hook-safe
 #   malscan --deep     also scan node_modules
 #   malscan --all      deep scan of $HOME
 #   malscan --procs    check for live payload processes / C2 connections
@@ -49,13 +49,13 @@ hit()  { FINDINGS=$((FINDINGS+1)); printf '%s\n' "$*"; }
 logit(){ printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG" 2>/dev/null; }
 die()  { printf '%smalscan BROKEN:%s %s\n' "$RED" "$RST" "$*" >&2; logit "BROKEN: $*"; exit 2; }
 
-# Resolve the real binary by path — `command -v rg` can resolve to a shell
+# Resolve the real binary by path: `command -v rg` can resolve to a shell
 # function or wrapper shim that is not a working ripgrep.
 RG=""
 for c in /opt/homebrew/bin/rg /usr/local/bin/rg "$HOME/.cargo/bin/rg"; do
   [ -x "$c" ] && { RG="$c"; break; }
 done
-[ -n "$RG" ] || die "ripgrep (rg) not found. Scan did NOT run — this is NOT a clean result.
+[ -n "$RG" ] || die "ripgrep (rg) not found. Scan did NOT run: this is NOT a clean result.
   Fix: brew install ripgrep"
 "$RG" --version >/dev/null 2>&1 || die "ripgrep at $RG is not executable. Scan did NOT run."
 
@@ -63,44 +63,48 @@ done
 # The payload hides every string as \uXXXX escapes, so literal IOCs are weak.
 # The durable signals are STRUCTURAL: hidden code after padding, and escape density.
 
-# R1 CRITICAL — executable code hidden after a long whitespace run.
+# R1 CRITICAL: executable code hidden after a long whitespace run.
 #    The tail must begin with a NON-space, else `.{199,}` just re-matches the padding
 #    and every space-padded comment banner trips the rule.
 #    It must also reach a runtime token: padding alone flags minified Flow parser
 #    bundles and markdown tables inside .d.ts files. Both observed variants put
 #    `global[...]` / `require(` immediately after the padding, so this stays tight.
 R_HIDDEN='[ \t]{100,}[^ \t*].{0,2000}(require\(|global\[|global\.[a-z]|eval\(|Function\(|child_process|process\.env)'
-# R2 CRITICAL — a module name written as \uXXXX escapes, e.g. require("http").
+# R2 CRITICAL: a module name written as \uXXXX escapes, e.g. require("http").
 #    Bare escape density is NOT usable: emoji-regex, iconv-lite encoding tables, date-fns
 #    locales and eslint's own no-irregular-whitespace rule are all legitimately full of them.
 #    Hiding the *module name* is what no honest package does.
 R_UNIESC='require\(\s*["'"'"'](\\u[0-9a-fA-F]{4}){3,}'
-# R3 CRITICAL — known literals + build tags seen on THIS machine.
+# R3 CRITICAL: known literals + build tags seen on THIS machine.
 #    /*M260630A*/ and global['e']='NPM' are the npm-dropper build stamps.
 R_IOC='166\.88\.134\.62|193\.247\.144\.38|a322[eE]5[fF]3[dD]311[dD]3080e6f0121063e9a[dD][cC]2490[eE]f1a|"Sec[-]V"|/0x/(clb|cls)|/6x6/[0-9]|/verify[-]human/|q4FZkxX[{]|A1[0-9]-[-*#]|/\*(M|RS)[0-9]{6}[A-Z]?\*/|global\['"'"'e'"'"'\]=|global\.i=["'"'"'][A-Z0-9]'
 
-# R6 CRITICAL — PolinRider FAMILY INVARIANT (DPRK supply-chain campaign).
+# R6 CRITICAL: PolinRider FAMILY INVARIANT (DPRK supply-chain campaign).
 #    The loader stashes require/module on `global` so the obfuscated body can reach
 #    them. This matched ALL THREE samples found here across TWO different variants,
-#    while every published variant-specific IOC matched NONE of them — so this is
+#    while every published variant-specific IOC matched NONE of them: so this is
 #    the durable signal and the variant markers below are only a bonus.
 R_FAMILY='global\s*\[\s*["'"'"']r["'"'"']\s*\]\s*=\s*require|global\.r\s*=\s*require|global\s*\[\s*["'"'"']m["'"'"']\s*\]\s*=\s*module|global\.m\s*=\s*module'
 
-# R6b CRITICAL — PYTHON variant family invariant (2026-09 evolution).
+# R6b CRITICAL: PYTHON variant family invariant (2026-09 evolution).
 #    The node loader stashes require/module on `global`; the Python loader stashes
 #    its C2/version/payload on the urllib `Request` object and execs it via getattr.
 #    Seen on this machine 2026-09-07 alongside the node loader, same campaign.
 R_FAMILY_PY='Request\.(_V|_target|_sign|_code)\b|exec\(\s*getattr\(\s*Request|global\[["'"'"']_t_[su]["'"'"']\]|global\.(_t_s|_t_u|_H2?)\b'
 
-# R7 CRITICAL — published PolinRider variant markers, C2 infra and drop artifacts.
+# R7 CRITICAL: published PolinRider variant markers, C2 infra and drop artifacts.
 #    Literals carry a [x] char class so this file does not match itself.
 R_POLIN='rmcej%otb[%]|Cot%3t=sht[P]|_[$]_1e42|2\[gWfGj;<:-93Z\^C|m6:tTh\^D[)]cBz\?NM\]|default-configuration[.]vercel[.]app|vscode-settings-bootstrap[.]vercel[.]app|vscode-bootstrapper[.]vercel[.]app|vscode-load-config[.]vercel[.]app|TMfKQEd7TJJa5xNZJZ2Lep838vrzrs7mA[P]|0xbe037400670fbf1c32364f762975908dc43eeb38759263e7dfcdabc7638081[1]e|e9b53a7c-2342-4b15-b02d-bd8b8f6a03f[9]|tailwindcss-style-animat[e]'
-# R4 MEDIUM — eval of remotely fetched content.
+# R4 MEDIUM: eval of remotely fetched content.
 R_EVAL='(eval|Function)\s*\(\s*(await\s+)?(fetch|https?\.get)'
-# R5 MEDIUM — install scripts that fetch and execute.
+# R5 MEDIUM: install scripts that fetch and execute.
 #    `node -e` is deliberately NOT listed: core-js ships it in a benign postinstall
 #    and appears in nearly every tree, which would bury real hits in noise.
 R_INSTALL='"(pre|post)?install"\s*:\s*"[^"]*(curl|wget|bash -c|eval|base64 -d)'
+# R8 CRITICAL: node pointed at a font/image file from an editor task.
+R_TASK_DISGUISE='node[^"]*[.](eot|woff2?|ttf|otf|png|jpe?g|gif|ico|svg|webp)\b'
+# R9 CRITICAL: module-loading code inside a font file.
+R_FONT_JS='require\s*\(|child_process|process[.]env|eval\s*\(|Function\s*\('
 
 ign_globs() {
   # Anchored globs ('Library/**') only match relative to the search root, so they
@@ -119,7 +123,7 @@ code_globs() {
 
 # run_rule <outfile> <regex> <root> [extra-globs...]
 # Writes matches to $outfile. Sets SCAN_PARTIAL=1 if some paths were unreadable,
-# and calls die() on a genuine scanner failure. Runs in the MAIN shell — a die()
+# and calls die() on a genuine scanner failure. Runs in the MAIN shell: a die()
 # inside a process substitution would only kill the subshell and be swallowed.
 run_rule() {
   local out="$1" pat="$2" root="$3"; shift 3
@@ -180,9 +184,18 @@ scan_tree() {
   run_rule "$o" "$R_EVAL"    "$root" "${CG[@]}";        report MEDIUM   "eval() of remote content"             EVAL   < "$o"
   run_rule "$o" "$R_INSTALL" "$root" --glob 'package.json'; report MEDIUM "install script fetches+executes"    INST   < "$o"
   # A .vscode/tasks.json with runOn:folderOpen executes the moment the project is
-  # opened — the campaign's "cloning is enough to get infected" vector.
+  # opened: the campaign's "cloning is enough to get infected" vector.
   run_rule "$o" 'folderOpen' "$root" --glob '**/.vscode/tasks.json'
   report MEDIUM "VS Code task auto-runs on folder open" TASKS < "$o"
+  # 2026-09-29 variant: a hidden folderOpen task runs `node ./public/fonts/fa-solid-600.eot`,
+  # a script disguised as a font. No real task runs node on a font or image.
+  run_rule "$o" "$R_TASK_DISGUISE" "$root" --glob '**/.vscode/tasks.json' --glob '**/.vscode/launch.json'
+  report CRITICAL "VS Code task runs a script disguised as a font/image" TASKFONT < "$o"
+  # Real fonts are binary (rg stops at the first NUL); a text font that requires modules is a payload.
+  run_rule "$o" "$R_FONT_JS" "$root" --glob '*.eot' --glob '*.woff' --glob '*.woff2' --glob '*.ttf' --glob '*.otf'
+  report CRITICAL "JavaScript hidden in a font file" FONTJS < "$o"
+  run_rule "$o" 'allowAutomaticTasks"\s*:\s*(true|"on")' "$root" --glob '**/.vscode/settings.json'
+  report MEDIUM "workspace switches on auto-run tasks" AUTOTASK < "$o"
   # Windows propagation droppers; harmless on macOS but prove a repo is infected.
   find "$root" \( -name 'temp_auto_push.bat' -o -name 'config.bat' \) -not -path '*/.git/*' 2>/dev/null > "$o"
   report CRITICAL "PolinRider propagation dropper" DROPPER < "$o"
@@ -208,12 +221,12 @@ scan_persist() {
     done < <("$RG" -l --no-config -e "$P_PERSIST" "$d" 2>/dev/null)
   done
   # cron: can't be auto-removed (needs Full Disk Access), so only surface it in
-  # manual/daily scans — NOT the 180s --kill watch, or it would notify endlessly.
+  # manual/daily scans: NOT the 180s --kill watch, or it would notify endlessly.
   if [ "$KILL" != 1 ] && crontab -l 2>/dev/null | grep -qE "$P_PERSIST"; then
     hits=1; hit "${RED}CRITICAL${RST}  cron job launches a loader (remove with: crontab -r)"
     crontab -l 2>/dev/null | grep -E "$P_PERSIST" | sed 's/^/          /'; logit "CRITICAL persist crontab"
   fi
-  [ "$hits" = 0 ] && say "${GRN}persistence clean${RST} — no loader in launchd/cron"
+  [ "$hits" = 0 ] && say "${GRN}persistence clean${RST}: no loader in launchd/cron"
   return 0
 }
 
@@ -235,7 +248,7 @@ scan_procs() {
     found=1; hit "${RED}CRITICAL${RST}  live C2 connection:"
     printf '%s\n' "$conns" | sed 's/^/          /'; logit "CRITICAL c2-connection"
   fi
-  [ "$found" = 0 ] && say "${GRN}procs clean${RST} — no payload process, no C2 connection"
+  [ "$found" = 0 ] && say "${GRN}procs clean${RST}: no payload process, no C2 connection"
   scan_persist
   return 0
 }
@@ -248,16 +261,23 @@ selftest() {
     "$(printf ' %.0s' $(seq 1 300))" "$(printf 'x%.0s' $(seq 1 400))" > "$t/postcss.config.js"
   printf '/**\n *%s@author Someone\n */\nmodule.exports={};\n' "$(printf ' %.0s' $(seq 1 300))" > "$t/benign.js"
   printf 'export const a=1;\n' > "$t/clean.ts"
+  mkdir -p "$t/.vscode" "$t/fonts"
+  printf '{"tasks":[{"label":"x","type":"shell","command":"node ./fonts/fa.eo%s","runOptions":{"runOn":"folderOpen"}}]}\n' t > "$t/.vscode/tasks.json"
+  printf 'const c=require("child_%s");\n' process > "$t/fonts/fa.eot"
+  printf 'wOF2\000\001\000\000 require( not code, real binary font\n' > "$t/fonts/real.woff2"
 
   local out; out=$(DEEP=0 QUIET=0; "$0" "$t" 2>&1); local rc=$?
   local ok=1
   grep -q "postcss.config.js" <<<"$out" || { echo "${RED}FAIL${RST}: missed the known-bad sample"; ok=0; }
   grep -q "benign.js"         <<<"$out" && { echo "${RED}FAIL${RST}: false positive on padded JSDoc"; ok=0; }
   grep -q "clean.ts"          <<<"$out" && { echo "${RED}FAIL${RST}: false positive on clean file"; ok=0; }
+  grep -q "disguised as a font" <<<"$out" || { echo "${RED}FAIL${RST}: missed the font-disguised VS Code task"; ok=0; }
+  grep -q "fonts/fa.eot"        <<<"$out" || { echo "${RED}FAIL${RST}: missed JavaScript hidden in a font"; ok=0; }
+  grep -q "real.woff2"          <<<"$out" && { echo "${RED}FAIL${RST}: false positive on a binary font"; ok=0; }
   [ "$rc" = 1 ]               || { echo "${RED}FAIL${RST}: expected exit 1, got $rc"; ok=0; }
   rm -rf "$t"
-  if [ "$ok" = 1 ]; then echo "${GRN}selftest PASSED${RST} — detects known-bad, no false positives"; return 0
-  else echo "${RED}selftest FAILED${RST} — do not trust this scanner"; return 2; fi
+  if [ "$ok" = 1 ]; then echo "${GRN}selftest PASSED${RST}: detects known-bad, no false positives"; return 0
+  else echo "${RED}selftest FAILED${RST}: do not trust this scanner"; return 2; fi
 }
 
 case "$MODE" in
@@ -266,7 +286,7 @@ case "$MODE" in
   scan)
     scan_tree "$TARGET"
     # Global tooling lives OUTSIDE $HOME. npm's own cli.js was infected there on
-    # 2026-08-04 — a $HOME-only sweep would have missed the dropper entirely.
+    # 2026-08-04: a $HOME-only sweep would have missed the dropper entirely.
     if [ "$SCAN_TOOLING" = 1 ]; then
       for t in /opt/homebrew/lib/node_modules /usr/local/lib/node_modules; do
         [ -d "$t" ] && scan_tree "$t"
@@ -278,7 +298,7 @@ case "$MODE" in
 esac
 
 if [ "$SCAN_PARTIAL" = 1 ]; then
-  printf '%sNOTE:%s %d path(s) were unreadable and could NOT be scanned — coverage is partial.\n' \
+  printf '%sNOTE:%s %d path(s) were unreadable and could NOT be scanned: coverage is partial.\n' \
     "$YEL" "$RST" "$PARTIAL_COUNT"
   logit "PARTIAL: $PARTIAL_COUNT unreadable paths under $TARGET"
 fi

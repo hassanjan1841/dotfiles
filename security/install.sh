@@ -3,7 +3,7 @@
 #
 #   bash ~/dotfiles/security/install.sh
 #
-# Idempotent — safe to re-run. Verifies itself at the end and refuses to claim
+# Idempotent: safe to re-run. Verifies itself at the end and refuses to claim
 # success if the scanner cannot prove it detects a known-bad sample.
 
 set -euo pipefail
@@ -21,7 +21,7 @@ if command -v brew >/dev/null 2>&1; then
   if [ -x /opt/homebrew/bin/rg ] || [ -x /usr/local/bin/rg ]; then ok "already installed"
   else brew install ripgrep >/dev/null && ok "installed"; fi
 else
-  warn "Homebrew not found — install ripgrep manually or the guard will not run"
+  warn "Homebrew not found: install ripgrep manually or the guard will not run"
 fi
 
 step "2/7  scanner -> ~/.security"
@@ -86,7 +86,7 @@ mk_plist com.malscan.daily daily '<key>StartCalendarInterval</key><dict><key>Hou
 LOADED="$(launchctl list 2>/dev/null || true)"
 case "$LOADED" in
   *com.malscan.watch*) ok "watch (180s) + daily (13:00) loaded" ;;
-  *) warn "agents did not load — check: launchctl list | grep malscan" ;;
+  *) warn "agents did not load: check: launchctl list | grep malscan" ;;
 esac
 
 step "6/7  hardening"
@@ -99,11 +99,39 @@ else
   ok "credential.helper = $(git config --global credential.helper 2>/dev/null || echo unset)"
 fi
 
+# A cloned repo's .vscode/tasks.json can run code the moment the folder opens.
+# Turn auto-run off for every VS Code-family editor, installed now or later, and
+# make each new folder ask for trust (untrusted folders never run tasks).
+for app in Code Cursor Windsurf VSCodium; do
+  f="$HOME/Library/Application Support/$app/User/settings.json"
+  mkdir -p "$(dirname "$f")"
+  if python3 - "$f" <<'PY'
+import json, os, sys
+p = sys.argv[1]
+s = {}
+if os.path.exists(p) and os.path.getsize(p) > 0:
+    try:
+        s = json.load(open(p))
+    except ValueError:
+        sys.exit(3)  # JSONC with comments: leave it for a human
+s.update({
+    "task.allowAutomaticTasks": "off",
+    "security.workspace.trust.enabled": True,
+    "security.workspace.trust.startupPrompt": "always",
+    "security.workspace.trust.emptyWindow": False,
+})
+json.dump(s, open(p, "w"), indent=2)
+PY
+  then ok "$app: auto-run tasks off, folder trust prompt on"
+  else warn "$app settings.json has comments; add \"task.allowAutomaticTasks\": \"off\" by hand"
+  fi
+done
+
 step "7/7  verify"
 if "$HOME/.security/malscan" --selftest; then
   ok "guard installed and proven working"
 else
-  echo "  INSTALL FAILED — scanner cannot detect a known-bad sample. Do not rely on it."
+  echo "  INSTALL FAILED: scanner cannot detect a known-bad sample. Do not rely on it."
   exit 2
 fi
 
