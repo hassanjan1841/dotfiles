@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code statusLine command — Horizon theme palette (pastel/airy variant)
+# Claude Code statusLine command, Horizon theme palette (pastel/airy variant)
 # Static colors for structural elements:
 #   git branch= pale peach    #FDD4BB
 #   model     = soft pink     #F4A8D0
@@ -17,14 +17,25 @@ dirty=$(git -C "$(echo "$input" | jq -r '.cwd // empty')" --no-optional-locks \
         status --porcelain 2>/dev/null | head -1)
 
 # --- Claude Code context ---
-model=$(echo "$input" | jq -r '.model.display_name // empty')
+# Short model name: drop any trailing parenthetical, e.g. "Opus 5.5 (1M context)" becomes "Opus 5.5"
+model=$(echo "$input" | jq -r '.model.display_name // empty' | sed -E 's/[[:space:]]*\([^)]*\)[[:space:]]*$//')
+
+# Effort level: stdin JSON first, then global settings.json, then env var
+effort=$(echo "$input" | jq -r '.effort.level // empty')
+if [ -z "$effort" ]; then
+  effort=$(jq -r '.effortLevel // empty' "$HOME/.claude/settings.json" 2>/dev/null)
+fi
+if [ -z "$effort" ]; then
+  effort="$CLAUDE_CODE_EFFORT_LEVEL"
+fi
+
 used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
 five_hour_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
 seven_day_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
 
-# --- ANSI color helpers (truecolor) — static pastel Horizon palette ---
-peach=$'\033[38;2;253;212;187m'    # #FDD4BB — git branch (pale peach)
-pink=$'\033[38;2;244;168;208m'     # #F4A8D0 — model (soft pink)
+# --- ANSI color helpers (truecolor), static pastel Horizon palette ---
+peach=$'\033[38;2;253;212;187m'    # #FDD4BB, git branch (pale peach)
+pink=$'\033[38;2;244;168;208m'     # #F4A8D0, model (soft pink)
 reset=$'\033[0m'
 
 # --- Gradient color function ---
@@ -66,24 +77,28 @@ if [ -n "$branch" ]; then
   fi
 fi
 
-# model name (pink/magenta), if available
+# model name (pink/magenta), with effort level appended if known
 if [ -n "$model" ]; then
-  printf " ${pink}%s${reset}" "$model"
+  if [ -n "$effort" ]; then
+    printf " ${pink}%s·%s${reset}" "$model" "$effort"
+  else
+    printf " ${pink}%s${reset}" "$model"
+  fi
 fi
 
-# context usage — gradient color based on ctx% value
+# context usage, gradient color based on ctx% value
 if [ -n "$used_pct" ]; then
   clr=$(gradient_color "$used_pct")
   printf " %sctx:$(printf '%.0f' "$used_pct")%%%s" "$clr" "$reset"
 fi
 
-# 5-hour rate limit — gradient color based on 5h% value
+# 5-hour rate limit, gradient color based on 5h% value
 if [ -n "$five_hour_pct" ]; then
   clr=$(gradient_color "$five_hour_pct")
   printf " %s5h:$(printf '%.0f' "$five_hour_pct")%%%s" "$clr" "$reset"
 fi
 
-# 7-day rate limit — gradient color based on 7d% value
+# 7-day rate limit, gradient color based on 7d% value
 if [ -n "$seven_day_pct" ]; then
   clr=$(gradient_color "$seven_day_pct")
   printf " %s7d:$(printf '%.0f' "$seven_day_pct")%%%s" "$clr" "$reset"

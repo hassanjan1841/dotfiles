@@ -371,3 +371,6 @@ export PATH=/Users/macbookair/.opencode/bin:$PATH
 
 # malware guard (malscan) — added 2026-08-04
 [ -f "$HOME/.security/shellrc" ] && source "$HOME/.security/shellrc"
+
+# Keep Claude Code sessions resumable even when the shell was launched from another Claude session
+export CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1

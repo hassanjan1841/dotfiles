@@ -45,6 +45,11 @@ update:
 sync:
     #!/usr/bin/env bash
     source "$HOME/.secrets" 2>/dev/null || true
+    # Claude Code can replace the settings.json symlink with a plain file when it saves; pull it back in.
+    f="$HOME/.claude/settings.json"
+    if [ -f "$f" ] && [ ! -L "$f" ]; then
+        cp "$f" {{dotfiles}}/claude/.claude/settings.json && rm "$f" && (cd {{dotfiles}} && stow --no-folding --restow claude)
+    fi
     cd {{dotfiles}} && git add -A
     cd {{dotfiles}} && git diff --cached --quiet || git commit -m "sync: $(date '+%Y-%m-%d %H:%M:%S')"
     if cd {{dotfiles}} && git push; then
