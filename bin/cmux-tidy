@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Project headers (groups) with plain-named tasks under them, one color per project.
+# Run it from a cmux tab; safe to rerun. Edit PROJECTS and RULES for new work.
+set -u
+[ -z "${CMUX_WORKSPACE_ID:-}" ] && { echo "Run this from a cmux tab." >&2; exit 1; }
+
+BLUE='#7aa2f7'; ORANGE='#ff9e64'; GREEN='#9ece6a'
+
+GCS=/Users/hassanjan/ehtisham-all-projects/next-shadcn-dashboard-starter-main
+# project | folder for its header
+PROJECTS=(
+  "GCS Portal|$GCS"
+  "Passenger|/Users/hassanjan/Passenger-development"
+  "Customers Direct|/Users/hassanjan/ehtisham-all-projects/CUSTOMERS"
+)
+
+# current title prefix | new title | project | color
+RULES=(
+  "gcs: finance|Finance role + stock count|GCS Portal|$BLUE"
+  "~/ehtisham-all-projects/next|GCS terminal|GCS Portal|$BLUE"
+  "ext: BOM export|BOM export|Passenger|$ORANGE"
+  "ext: chat configurator|Chat configurator|Passenger|$ORANGE"
+  "ext: dev|Passenger dev|Passenger|$ORANGE"
+  "ext: TM warning|TM warning|Passenger|$ORANGE"
+  "customers|Customers session|Customers Direct|$GREEN"
+)
+
+LIST=$(CMUX_QUIET=1 cmux workspace list --json 2>/dev/null || CMUX_QUIET=1 cmux --json workspace list 2>/dev/null)
+PAIRS=$(printf '%s' "$LIST" | python3 -c '
+import json,sys
+try: data=json.load(sys.stdin)
+except Exception: sys.exit(1)
+def walk(o):
+    if isinstance(o,dict):
+        t=next((o[k] for k in ("title","name","customTitle","custom_title") if isinstance(o.get(k),str)),None)
+        i=next((o[k] for k in ("ref","id","handle","workspace_ref") if isinstance(o.get(k),str)),None)
+        if t and i: print(f"{i}\t{t}")
+        for v in o.values(): walk(v)
+    elif isinstance(o,list):
+        for v in o: walk(v)
+walk(data)')
+if [ -z "$PAIRS" ]; then
+  echo "Could not read the workspace list. Raw output:" >&2
+  printf '%s\n' "$LIST" >&2
+  exit 1
+fi
+
+# Idempotency keys make a rerun reuse the same header instead of adding a second one.
+for row in "${PROJECTS[@]}"; do
+  IFS='|' read -r pname pdir <<<"$row"
+  CMUX_QUIET=1 cmux workspace-group create --name "$pname" --cwd "$pdir" --idempotency-key "tidy-$pname" >/dev/null
+done
+GROUPS_JSON=$(CMUX_QUIET=1 cmux workspace-group list --json)
+group_ref() {
+  printf '%s' "$GROUPS_JSON" | python3 -c '
+import json,sys
+want=sys.argv[1]
+def walk(o):
+    if isinstance(o,dict):
+        n=next((o[k] for k in ("name","title") if isinstance(o.get(k),str)),None)
+        i=next((o[k] for k in ("ref","id","handle","group_ref") if isinstance(o.get(k),str)),None)
+        if n==want and i: print(i); sys.exit(0)
+        for v in o.values(): walk(v)
+    elif isinstance(o,list):
+        for v in o: walk(v)
+walk(json.load(sys.stdin))' "$1"
+}
+
+while IFS=$'\t' read -r ref title; do
+  for rule in "${RULES[@]}"; do
+    IFS='|' read -r prefix new label color <<<"$rule"
+    case "$title" in
+      "$prefix"*)
+        CMUX_QUIET=1 cmux workspace-action --action rename --workspace "$ref" --title "$new" >/dev/null
+        CMUX_QUIET=1 cmux workspace-group add --group "$(group_ref "$label")" --workspace "$ref" >/dev/null
+        CMUX_QUIET=1 cmux workspace-action --action set-color --workspace "$ref" --color "$color" >/dev/null
+        echo "OK    $title -> $new ($label)"
+        break ;;
+    esac
+  done
+done <<<"$PAIRS"

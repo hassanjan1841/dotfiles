@@ -8,7 +8,7 @@
 ## Terminal: cmux on macOS, WezTerm as fallback
 - cmux (`brew install --cask cmux`) is the main terminal for Claude Code work: vertical workspace tabs, agent notifications, built-in browser pane
 - cmux look comes from `~/dotfiles/ghostty/.config/ghostty/config` (stowed to `~/.config/ghostty/config`); `cmux reload-config` applies edits live
-- Driving cmux from Claude: `~/.claude/cmux-sessions.md`
+- Driving cmux from Claude: `~/.claude/cmux-sessions.md`; sidebar project headers and colors: run `cmux-tidy` in a cmux tab
 - WezTerm below stays installed as the fallback and for the Ubuntu setup
 
 ## WezTerm
