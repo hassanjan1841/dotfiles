@@ -110,7 +110,7 @@
       args:
         creates: "{{ user_home }}/.local/bin/zoxide"
 
-    # ── just (Ubuntu) — not in apt, install from GitHub releases ────────────
+    # ── just (Ubuntu), not in apt, install from GitHub releases ────────────
     - name: Install just (Ubuntu)
       when: ansible_os_family == "Debian"
       become: true
@@ -382,6 +382,19 @@
     - name: Stow WezTerm config
       become: false
       shell: "cd {{ dotfiles_dir }} && stow -v --restow wezterm"
+      ignore_errors: true
+
+    # cmux is the main terminal on macOS; it reads the Ghostty config.
+    - name: Install cmux via Homebrew cask (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      community.general.homebrew_cask:
+        name: cmux
+        state: present
+
+    - name: Stow Ghostty config (read by cmux)
+      become: false
+      shell: "cd {{ dotfiles_dir }} && stow -v --no-folding --restow ghostty"
       ignore_errors: true
 
     # ── startup.sh + GNOME autostart (Ubuntu only) ────────────────────────────

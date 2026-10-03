@@ -1,0 +1,72 @@
+# Driving cmux from Claude Code: use the `cmux` CLI, never keystrokes
+
+cmux (`/Applications/cmux.app`, CLI at `/opt/homebrew/bin/cmux`) is the main terminal on macOS
+since 2026-10-03. It is built on libghostty, so its look comes from `~/.config/ghostty/config`
+(stowed from `~/dotfiles/ghostty/`). WezTerm stays installed as the fallback; its recipe is
+[wezterm-sessions.md](./wezterm-sessions.md).
+
+## Access: only from inside cmux
+
+The socket runs in the default `cmuxOnly` mode: only processes started inside cmux can connect.
+A Claude session started in WezTerm or another app gets
+`Access denied - only processes started inside cmux can connect`. So start Claude from a cmux
+tab when it needs to drive cmux. Do not loosen `automation.socketControlMode` to get around it;
+the other modes let any local process type into these terminals.
+
+Launching is the one thing that works from outside: `cmux <path>` opens a directory in a new
+workspace (and starts cmux if needed).
+
+## Find your target
+
+A window holds workspaces; a workspace holds split panes; a pane holds surfaces (terminal or
+browser tabs). Refs look like `workspace:2`, `surface:4`.
+
+```bash
+cmux identify --json        # the caller's own window/workspace/surface
+cmux tree --all --json      # everything, with refs
+```
+
+## The commands
+
+```bash
+# New workspace (does not steal focus by default) running a command:
+cmux new-workspace --name gcs-work --cwd "$REPO" --command claude
+
+# New split in a workspace; browser panes take --url:
+cmux new-pane --workspace workspace:2 --direction right --command 'bun run dev'
+cmux new-pane --workspace workspace:2 --type browser --direction down --url http://localhost:3000
+
+# Read before sending, and again after, to check the result:
+cmux read-screen --surface surface:4 --lines 40
+
+# Send text (\n or \r submits) and keys:
+cmux send --surface surface:4 "your prompt here"
+cmux send-key --surface surface:4 enter
+cmux send-key --surface surface:4 ctrl+c
+```
+
+`cmux guide` prints the full agent guide; `cmux <command> --help` for flags.
+
+## Recipe: open a new Claude Code session in its own workspace
+
+```bash
+REPO=/Users/hassanjan/ehtisham-all-projects/next-shadcn-dashboard-starter-main
+cmux new-workspace --name gcs-work --cwd "$REPO" --command claude
+cmux tree --all --json                       # find the new surface ref
+cmux read-screen --surface surface:N --lines 20   # wait until the input box shows
+cmux send --surface surface:N "your first prompt here"
+cmux send-key --surface surface:N enter
+```
+
+It creates a new workspace, so it never disturbs an existing session. The human switches to it
+from the sidebar or `Cmd+P`.
+
+## Look and feel
+
+- Theme, font, padding, cursor, blur: edit `~/dotfiles/ghostty/.config/ghostty/config`, then
+  `cmux reload-config` (no restart). Check it with
+  `/Applications/cmux.app/Contents/Resources/bin/ghostty +validate-config`.
+- cmux-only settings (sidebar, notifications, automation) live in `~/.config/cmux/cmux.json`;
+  `cmux config doctor` shows the paths. Back up that file before editing it.
+- Shortcuts: `Cmd+N` workspace, `Cmd+T` tab, `Cmd+D` / `Cmd+Shift+D` split, `Cmd+P` go to
+  workspace, `Cmd+Shift+U` jump to the latest agent waiting on you, `Cmd+Shift+L` browser.

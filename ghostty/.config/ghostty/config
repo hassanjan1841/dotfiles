@@ -1,0 +1,26 @@
+# Ghostty config, also read by cmux. Ported from ~/dotfiles/wezterm/.wezterm.lua.
+
+theme = TokyoNight Night
+font-family = JetBrainsMono Nerd Font
+font-size = 13
+adjust-cell-height = 12%
+
+window-padding-x = 16
+window-padding-y = 12,10
+window-padding-balance = true
+
+# Solid by default: glass washes out text over a bright wallpaper.
+background-opacity = 1.0
+background-blur = 0
+
+cursor-style = bar
+cursor-style-blink = true
+shell-integration-features = no-cursor
+
+split-divider-color = #7aa2f7
+unfocused-split-opacity = 0.85
+
+macos-option-as-alt = left
+copy-on-select = clipboard
+mouse-hide-while-typing = true
+scrollback-limit = 20000000

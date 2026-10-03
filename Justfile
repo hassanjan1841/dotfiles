@@ -12,7 +12,7 @@ default:
     @just --list
 
 # Run the full Ansible playbook (will prompt for sudo password once)
-# If called from bootstrap.sh, sudo is already cached — use --become instead
+# If called from bootstrap.sh, sudo is already cached, so use --become instead
 install:
     #!/usr/bin/env bash
     if sudo -n true 2>/dev/null; then
@@ -63,6 +63,7 @@ link:
     stow -v --restow --target="{{env_var('HOME')}}/.config/zed"        --dir={{dotfiles}} zed
     stow -v --restow --target="{{env_var('HOME')}}/.config/autostart"  --dir={{dotfiles}} autostart
     cd {{dotfiles}} && stow -v --restow wezterm
+    cd {{dotfiles}} && stow -v --no-folding --restow ghostty
     cd {{dotfiles}} && stow -v --restow startup
 
 # Preview what Ansible would change without applying anything
@@ -73,7 +74,7 @@ dry-run:
 status:
     #!/usr/bin/env bash
     echo "── Dotfiles git status ──────────────────────────"
-    cd {{dotfiles}} && git status -s && echo "Branch: $(git branch --show-current) | $(git log -1 --format='Last commit: %ar — %s')"
+    cd {{dotfiles}} && git status -s && echo "Branch: $(git branch --show-current) | $(git log -1 --format='Last commit: %ar, %s')"
     echo ""
     echo "── Last sync ────────────────────────────────────"
     cd {{dotfiles}} && git log -1 --format="%ci  %s"

@@ -15,7 +15,8 @@ Personal dotfiles for Ubuntu and macOS, managed with [GNU Stow](https://www.gnu.
 | `p10k` | `.p10k.zsh` (Powerlevel10k prompt config) |
 | `aliases` | `~/.aliases` (git, nav, dev, dotfiles shortcuts) |
 | `taskwarrior` | `~/.task/` + `~/.timewarrior/` config |
-| `wezterm` | `~/.wezterm.lua` |
+| `wezterm` | `~/.wezterm.lua` (fallback terminal) |
+| `ghostty` | `~/.config/ghostty/config` (theme/font for cmux) |
 | `zed` | `~/.config/zed/settings.json` + `themes/` |
 | `claude` | `~/.claude/settings.json` + `CLAUDE.md` |
 | `autostart` | `~/.config/autostart/startup.desktop` |
@@ -25,7 +26,7 @@ Personal dotfiles for Ubuntu and macOS, managed with [GNU Stow](https://www.gnu.
 
 ### One-liner (recommended)
 
-Paste this into a fresh terminal — prompts for sudo **once**, handles everything automatically:
+Paste this into a fresh terminal: prompts for sudo **once**, handles everything automatically:
 
 **Ubuntu:**
 ```bash
@@ -46,7 +47,7 @@ git clone https://github.com/hassanjan1841/dotfiles.git ~/dotfiles
 just install
 ```
 
-### Step 2 — Add your secrets
+### Step 2: Add your secrets
 
 ```bash
 nano ~/.secrets
@@ -54,7 +55,7 @@ nano ~/.secrets
 #      export RESTIC_PASSWORD="your-backup-password"
 ```
 
-### Step 3 — Install Zed themes
+### Step 3: Install Zed themes
 
 Open Zed → `Ctrl+Shift+P` → `zed: install extension` → search for your theme.
 Any custom theme JSON files saved to `~/.config/zed/themes/` are auto-synced via dotfiles.
@@ -73,7 +74,7 @@ Any custom theme JSON files saved to `~/.config/zed/themes/` are auto-synced via
 
 ## Changing the project path
 
-Edit one line in `~/.devrc` — startup.sh, wezterm.lua, and just backup all pick it up:
+Edit one line in `~/.devrc`: startup.sh, wezterm.lua, and just backup all pick it up:
 
 ```bash
 PROJECT_PATH="$HOME/your-project"
@@ -83,8 +84,8 @@ PROJECT_PATH="$HOME/your-project"
 
 `startup.sh` runs at login (GNOME autostart, 8s delay) and asks:
 
-- **Dev Mode** — Chrome (Profile 9, restore session) + WezTerm (`npm run dev-server` left pane, `claude` right pane)
-- **Chill Mode** — Chrome only
+- **Dev Mode**: Chrome (Profile 9, restore session) + WezTerm (`npm run dev-server` left pane, `claude` right pane)
+- **Chill Mode**: Chrome only
 
 Logs at `~/.local/share/startup.log`. On macOS use `startup-mac.sh` (System Settings → Login Items).
 
@@ -95,7 +96,7 @@ GitHub Actions runs the Ansible playbook in `--check` (dry run) mode on every pu
 ## Installed tools (via Ansible)
 
 - **Shell:** zsh, Oh My Zsh, Powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting
-- **Terminal:** WezTerm, just
+- **Terminal:** cmux (macOS, main), WezTerm (fallback), just
 - **Node:** NVM, Node LTS, npm global tools (claude, vercel, typescript, pnpm, biome, opencode)
 - **JS runtime:** Bun
 - **Python:** uv, aider-chat

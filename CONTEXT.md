@@ -5,11 +5,17 @@
 - Managed with GNU Stow + Ansible (`setup.yml`). Bootstrap: `bash <(curl -fsSL https://raw.githubusercontent.com/hassanjan1841/dotfiles/main/bootstrap.sh)`
 - Justfile commands: `just install` (full setup), `just link` (re-stow symlinks), `just sync` (commit+push), `just update` (pull+re-run ansible)
 
-## Terminal: WezTerm only
+## Terminal: cmux on macOS, WezTerm as fallback
+- cmux (`brew install --cask cmux`) is the main terminal for Claude Code work: vertical workspace tabs, agent notifications, built-in browser pane
+- cmux look comes from `~/dotfiles/ghostty/.config/ghostty/config` (stowed to `~/.config/ghostty/config`); `cmux reload-config` applies edits live
+- Driving cmux from Claude: `~/.claude/cmux-sessions.md`
+- WezTerm below stays installed as the fallback and for the Ubuntu setup
+
+## WezTerm
 - Config: `~/dotfiles/wezterm/.wezterm.lua` (symlinked to `~/.wezterm.lua`)
 - On startup: opens `dev` workspace, left pane = `npm run dev-server`, right pane = `claude`, Chrome (Profile 9) opens separately
 - Startup script: `~/startup.sh` → symlink to `~/dotfiles/startup/startup.sh` (GNOME autostart via `~/.config/autostart/`)
-- No tmux/tmuxinator/ptyxis — WezTerm handles splits/tabs/workspaces natively
+- No tmux/tmuxinator/ptyxis: WezTerm handles splits/tabs/workspaces natively
 
 ## Key WezTerm bindings
 - `Ctrl+Shift+R` → resize mode (arrow keys) → Esc
@@ -20,10 +26,10 @@
 - `Ctrl+Shift+N/P` cycle workspaces, `Ctrl+Shift+$` workspace picker
 - `Ctrl+Shift+S` save session, `Ctrl+Shift+O` restore session (fuzzy picker)
 - On startup: `dev` workspace auto-opens + all other saved workspaces are auto-restored
-- **Workspace names must not contain spaces** — resurrect's awk parser breaks on spaces; use hyphens (e.g. `my-project` not `my project`)
+- **Workspace names must not contain spaces**: resurrect's awk parser breaks on spaces; use hyphens (e.g. `my-project` not `my project`)
 
-## Rules — always do this after any change
-1. All dotfile changes go in `~/dotfiles/` (stowed packages) — `startup.sh` is at `~/dotfiles/startup/startup.sh`
+## Rules: always do this after any change
+1. All dotfile changes go in `~/dotfiles/` (stowed packages): `startup.sh` is at `~/dotfiles/startup/startup.sh`
 2. After every change: `cd ~/dotfiles && git add -A && git commit -m "..." && git push`
 3. No Co-Author line in commits
 
@@ -33,5 +39,6 @@
 
 ## If something breaks
 - WezTerm not splitting: check `~/.wezterm.lua` exists (run `just link`)
+- cmux theme missing: check `~/.config/ghostty/config` exists (run `just link`), then `cmux reload-config`
 - Startup not running: check `~/.config/autostart/startup.desktop` exists
 - Ansible changes: edit `~/dotfiles/setup.yml`, run `just install`

@@ -1,5 +1,7 @@
 # Driving WezTerm from Claude Code, use `wezterm cli`, never keystrokes
 
+> WezTerm is the fallback terminal since 2026-10-03. The main one is cmux: see [cmux-sessions.md](./cmux-sessions.md).
+
 The reliable way to open, switch, or drive a terminal session in WezTerm is WezTerm's own
 multiplexer CLI (`wezterm cli`). It addresses panes by numeric ID and talks straight to the
 mux, so it does not care what is focused, what workspace is shown, or what modal dialog is up.
