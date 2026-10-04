@@ -33,7 +33,6 @@
             "Bash(claude plugin validate *)",
             "Bash(claude plugin test *)",
             "Edit(~/.claude/dev-mods/**)",
-            "Write(~/.claude/dev-mods/**)",
             "Edit(~/.claude/verify-gate.json)",
             "Edit(~/.claude/worker-board.json)"
         ],
