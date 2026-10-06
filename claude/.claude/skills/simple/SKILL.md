@@ -16,4 +16,4 @@ Rewrite the text the user names. If they name none, rewrite your last draft mess
 - Aim for half the original length or less.
 
 ## Output
-The rewritten message in one markdown blockquote, nothing else in the blockquote. No preamble. If something important had to be cut, say so in one line under it.
+The rewritten message as plain text, ready to paste. Never use a markdown blockquote (`>`), because it shows a white line down the left side that Hassan does not want; no code block either. No preamble. If something important had to be cut, say so in one line under it, separated by a blank line.

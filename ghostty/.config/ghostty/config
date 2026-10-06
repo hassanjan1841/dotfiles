@@ -2,7 +2,7 @@
 
 theme = TokyoNight Night
 font-family = JetBrainsMono Nerd Font
-font-size = 13
+font-size = 20
 adjust-cell-height = 12%
 
 window-padding-x = 16

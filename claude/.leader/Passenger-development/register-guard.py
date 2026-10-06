@@ -15,6 +15,7 @@ import datetime as dt
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 
@@ -38,14 +39,23 @@ def real_commands(cmd):
     return QUOTED.sub("''", HEREDOC.sub("", cmd))
 
 
-def is_worker():
+def is_worker(cwd=""):
     if os.environ.get("PASSENGER_ROLE") == "worker":
         return True
     try:
         panes = open(f"{lib.LEADER}/worker-panes").read().split()
     except OSError:
         panes = []
-    return os.environ.get("WEZTERM_PANE", "") in panes
+    if any(os.environ.get(k, "") in panes for k in ("WEZTERM_PANE", "CMUX_SURFACE_ID")):
+        return True
+    # Workers build in a linked worktree of the leader's repo; WEZTERM_PANE does not exist under cmux.
+    here = os.path.realpath(cwd or os.getcwd())
+    repo = os.path.realpath(lib.REPO_DIR)
+    if here == repo or here.startswith(repo + os.sep):
+        return False
+    git = lambda *a: subprocess.run(["git", "-C", here, *a], capture_output=True, text=True).stdout.strip()
+    common = git("rev-parse", "--path-format=absolute", "--git-common-dir")
+    return bool(common) and os.path.realpath(common) == os.path.join(repo, ".git")
 
 
 def ts(entry, fallback=0.0):
@@ -159,7 +169,7 @@ def main():
         data = json.loads(raw)
     except ValueError:
         data = {}
-    if is_worker():
+    if is_worker(data.get("cwd", "")):
         return
     if data.get("stop_hook_active"):
         lib.log("allow: already blocked once this reply")
