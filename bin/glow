@@ -1,0 +1,23 @@
+#!/bin/zsh
+# glow: screen-edge glow while Claude drives the GUI. Off unless enabled.
+#   glow on | off      enable or disable the glow for future GUI control
+#   glow status        show whether it is enabled
+#   glow ping          light the border for a few seconds (only if enabled); called by the human wrapper
+#   glow test          light it for 6 seconds regardless, to see it
+dir=~/.config/glow
+bin=${0:A:h:h}/glow/glow-overlay
+mkdir -p $dir
+
+start() {
+  touch $dir/ping
+  pgrep -qf "$bin" || ( nohup $bin >/dev/null 2>&1 & )
+}
+
+case ${1:-status} in
+  on)     touch $dir/enabled; echo "glow: on (the screen edge glows while Claude controls the mouse or keyboard)" ;;
+  off)    rm -f $dir/enabled; pkill -f "$bin"; echo "glow: off" ;;
+  status) [[ -f $dir/enabled ]] && echo "glow: on" || echo "glow: off" ;;
+  ping)   [[ -f $dir/enabled ]] && start; exit 0 ;;
+  test)   start; for i in 1 2 3; do sleep 2; touch $dir/ping; done; echo "glow: test done" ;;
+  *)      echo "usage: glow on|off|status|ping|test"; exit 1 ;;
+esac

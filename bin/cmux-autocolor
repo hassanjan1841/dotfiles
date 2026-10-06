@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""Give a cmux workspace its project's color and group, from your project folder rules.
+
+  cmux-autocolor                       the caller's workspace and folder (run from .zshrc)
+  cmux-autocolor --workspace R --cwd D [--worker]
+  cmux-autocolor --all                 sweep every workspace
+
+Rules come from ~/.config/cmux/projects.local.json (personal, see projects.example.json),
+plus any workspaceGroups.byCwd in ~/.config/cmux/cmux.json.
+Manual choices win: a workspace or header that already has a color, icon or group keeps it.
+"""
+import argparse, fnmatch, json, os, subprocess, sys, time
+
+CONFIG = os.path.expanduser("~/.config/cmux/cmux.json")
+PROJECTS = os.path.expanduser("~/.config/cmux/projects.local.json")
+
+
+def cmux(*args):
+    env = dict(os.environ, CMUX_QUIET="1")
+    out = subprocess.run(["cmux", *args], capture_output=True, text=True, env=env)
+    if out.returncode:
+        raise RuntimeError(out.stderr.strip() or out.stdout.strip())
+    return out.stdout
+
+
+def load(path):
+    # cmux.json may be JSONC; a file we cannot parse just contributes no rules.
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def rules():
+    byCwd = {k: dict(v) for k, v in load(CONFIG).get("workspaceGroups", {}).get("byCwd", {}).items()}
+    for name, p in load(PROJECTS).get("projects", {}).items():
+        for pat in p.get("match") or [p["folder"]]:
+            byCwd[pat] = {"name": name, "folder": p.get("folder"), "color": p.get("color"), "icon": p.get("icon")}
+    return byCwd
+
+
+def match(path, byCwd):
+    # Same rule cmux uses for group headers: globs via fnmatch, other keys as prefixes, longest wins.
+    best = None
+    for key in byCwd:
+        pat = os.path.expanduser(key)
+        if any(c in pat for c in "*?"):
+            hit = fnmatch.fnmatch(path, pat) or fnmatch.fnmatch(path, pat.rstrip("/") + "/*")
+        else:
+            hit = path == pat or path.startswith(pat.rstrip("/") + "/")
+        if hit and (best is None or len(key) > len(best)):
+            best = key
+    return best
+
+
+def state():
+    ws = json.loads(cmux("workspace", "list", "--json"))["workspaces"]
+    groups = json.loads(cmux("workspace-group", "list", "--json"))["groups"]
+    return ws, groups
+
+
+def project(rule):
+    # Rules of one project share a name; cmux.json rules have none, so the same color and icon do.
+    return rule.get("name") or (rule.get("color"), rule.get("icon"))
+
+
+def style(g, rule):
+    # cmux colors headers from byCwd in cmux.json only, so personal rules set the header directly.
+    if rule.get("color") and not g.get("custom_color"):
+        cmux("workspace-group", "set-color", g["ref"], "--hex", rule["color"])
+    if rule.get("icon") and not g.get("icon_symbol"):
+        cmux("workspace-group", "set-icon", g["ref"], "--symbol", rule["icon"])
+
+
+def group_for(key, cwd, byCwd, ws, groups):
+    rule = byCwd[key]
+    cwd_of = {w["ref"]: w["current_directory"] for w in ws}
+    for g in groups:
+        k = match(cwd_of.get(g["anchor_workspace_ref"], ""), byCwd)
+        if k and project(byCwd[k]) == project(rule):
+            style(g, rule)
+            return g["ref"]
+    # No header yet. Same idempotency key as cmux-tidy, so both reuse one header; renaming it later is safe.
+    name = rule.get("name") or os.path.basename(key.rstrip("/*?-")) or key
+    folder = os.path.expanduser(rule.get("folder") or cwd)
+    g = json.loads(cmux("workspace-group", "create", "--name", name, "--cwd", folder,
+                        "--idempotency-key", f"tidy-{name}", "--json"))["group"]
+    style(g, rule)
+    return g["ref"]
+
+
+def apply(w, cwd, byCwd, ws, groups, worker=False):
+    key = match(cwd, byCwd)
+    anchors = {g["anchor_workspace_ref"] for g in groups}
+    if w["ref"] in anchors:
+        return
+    done = []
+    if key and not w.get("custom_color"):
+        cmux("workspace-action", "--action", "set-color", "--workspace", w["ref"], "--color", byCwd[key]["color"])
+        done.append("color")
+    grouped = any(w["ref"] in g["member_workspace_refs"] for g in groups)
+    if key and not grouped:
+        cmux("workspace-group", "add", "--group", group_for(key, cwd, byCwd, ws, groups), "--workspace", w["ref"])
+        done.append("group")
+    if worker:
+        cmux("workspace-action", "--action", "set-description", "--workspace", w["ref"], "--description", "🛠 **Worker**")
+        done.append("worker")
+    if done:
+        print(f"{w['ref']} {w['title'][:40]}: {', '.join(done)}")
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--workspace")
+    p.add_argument("--cwd")
+    p.add_argument("--worker", action="store_true")
+    p.add_argument("--all", action="store_true")
+    a = p.parse_args()
+    target = a.workspace or os.environ.get("CMUX_WORKSPACE_ID")
+    if not (a.all or target):
+        sys.exit("Run inside cmux, or pass --workspace or --all.")
+    byCwd = rules()
+    ws, groups = state()
+    if a.all:
+        cwd_of = {w["ref"]: w["current_directory"] for w in ws}
+        for g in groups:
+            key = match(cwd_of.get(g["anchor_workspace_ref"], ""), byCwd)
+            if key:
+                style(g, byCwd[key])
+        ws, groups = state()
+        for w in ws:
+            apply(w, w["current_directory"], byCwd, ws, groups)
+            ws, groups = state()
+        return
+    w = next((w for w in ws if target in (w["ref"], w["id"])), None)
+    # A new workspace's shell can start before cmux lists the workspace.
+    for _ in range(10):
+        if w:
+            break
+        time.sleep(0.5)
+        ws, groups = state()
+        w = next((w for w in ws if target in (w["ref"], w["id"])), None)
+    if w:
+        apply(w, os.path.realpath(a.cwd or os.getcwd()), byCwd, ws, groups, a.worker)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,19 @@
+#!/bin/zsh
+# Claude Code Stop hook. cmux keeps a finished turn on "Running" whenever the Stop payload has
+# stop_hook_active, background_tasks or session_crons set (a blocking stop hook, a background shell,
+# an artifact watch). Once the turn is over, re-send a plain stop so the sidebar settles on Idle.
+[[ -n $CMUX_SURFACE_ID && -n $CMUX_CLAUDE_PID ]] || { cat >/dev/null; exit 0 }
+payload=$(cat)
+[[ $payload == *'"stop_hook_active":true'* || $payload == *'"status":"running"'* || $payload == *'"session_crons":[{'* ]] || exit 0
+cli=(${CMUX_CLAUDE_HOOK_CMUX_BIN:-cmux})
+[[ -n $CMUX_SOCKET_PATH ]] && cli+=(--socket $CMUX_SOCKET_PATH)
+{
+  # Arrive after cmux's own Stop hook, which runs in parallel with this one.
+  sleep 2
+  print -r -- "$payload" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+d.update(stop_hook_active=False, background_tasks=[], session_crons=[])
+print(json.dumps(d))' | CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC=0.5 $cli hooks enqueue claude stop
+} &>/dev/null &!
+exit 0

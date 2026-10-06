@@ -384,23 +384,16 @@
       shell: "cd {{ dotfiles_dir }} && stow -v --restow wezterm"
       ignore_errors: true
 
-    # cmux is the main terminal on macOS; it reads the Ghostty config.
-    - name: Install cmux via Homebrew cask (macOS)
-      when: ansible_os_family == "Darwin"
-      become: false
-      community.general.homebrew_cask:
-        name: cmux
-        state: present
-
     - name: Stow Ghostty config (read by cmux)
       become: false
       shell: "cd {{ dotfiles_dir }} && stow -v --no-folding --restow ghostty"
       ignore_errors: true
 
-    - name: Stow cmux sidebar config (macOS)
+    # cmux is the main terminal on macOS; the recipe installs it and everything around it (docs/cmux.md).
+    - name: Set up cmux (macOS)
       when: ansible_os_family == "Darwin"
       become: false
-      shell: "cd {{ dotfiles_dir }} && stow -v --no-folding --restow cmux"
+      shell: "just --justfile {{ dotfiles_dir }}/Justfile cmux"
       ignore_errors: true
 
     # ── startup.sh + GNOME autostart (Ubuntu only) ────────────────────────────

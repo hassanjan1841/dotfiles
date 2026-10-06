@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "My App": {
+      "folder": "~/code/my-app",
+      "match": ["~/code/my-app", "~/code/my-app-*"],
+      "color": "#7aa2f7",
+      "icon": "building.columns.fill",
+      "rename": {
+        "~/code/my-app": "My App terminal"
+      }
+    },
+    "Client Site": {
+      "folder": "~/code/client-site",
+      "color": "#9ece6a",
+      "icon": "person.2.fill"
+    }
+  }
+}

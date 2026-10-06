@@ -1,29 +1,24 @@
 #!/usr/bin/env bash
 # Project headers (groups) with plain-named tasks under them, one color per project.
-# Run it from a cmux tab; safe to rerun. Edit PROJECTS and RULES for new work.
-set -u
+# Run it from a cmux tab; safe to rerun. Projects and renames come from ~/.config/cmux/projects.local.json.
 [ -z "${CMUX_WORKSPACE_ID:-}" ] && { echo "Run this from a cmux tab." >&2; exit 1; }
+CONFIG=~/.config/cmux/projects.local.json
+[ -f "$CONFIG" ] || { echo "No $CONFIG yet. Run: just cmux" >&2; exit 1; }
 
-BLUE='#7aa2f7'; ORANGE='#ff9e64'; GREEN='#9ece6a'
-
-GCS=/Users/hassanjan/ehtisham-all-projects/next-shadcn-dashboard-starter-main
-# project | folder for its header
-PROJECTS=(
-  "GCS Portal|$GCS"
-  "Passenger|/Users/hassanjan/Passenger-development"
-  "Customers Direct|/Users/hassanjan/ehtisham-all-projects/CUSTOMERS"
-)
-
-# current title prefix | new title | project | color
-RULES=(
-  "gcs: finance|Finance role + stock count|GCS Portal|$BLUE"
-  "~/ehtisham-all-projects/next|GCS terminal|GCS Portal|$BLUE"
-  "ext: BOM export|BOM export|Passenger|$ORANGE"
-  "ext: chat configurator|Chat configurator|Passenger|$ORANGE"
-  "ext: dev|Passenger dev|Passenger|$ORANGE"
-  "ext: TM warning|TM warning|Passenger|$ORANGE"
-  "customers|Customers session|Customers Direct|$GREEN"
-)
+# PROJECTS: name|header folder|color|icon    RULES: title prefix|new title|project|color
+PROJECTS=(); RULES=()
+while IFS= read -r line; do
+  case "$line" in
+    P\|*) PROJECTS+=("${line#P|}") ;;
+    R\|*) RULES+=("${line#R|}") ;;
+  esac
+done < <(python3 -c '
+import json, os, sys
+for name, p in json.load(open(sys.argv[1])).get("projects", {}).items():
+    print("P|%s|%s|%s|%s" % (name, os.path.expanduser(p["folder"]), p.get("color", ""), p.get("icon", "")))
+    for old, new in p.get("rename", {}).items():
+        print("R|%s|%s|%s|%s" % (old, new, name, p.get("color", "")))' "$CONFIG")
+[ ${#PROJECTS[@]} -gt 0 ] || { echo "No projects in $CONFIG" >&2; exit 1; }
 
 LIST=$(CMUX_QUIET=1 cmux workspace list --json 2>/dev/null || CMUX_QUIET=1 cmux --json workspace list 2>/dev/null)
 PAIRS=$(printf '%s' "$LIST" | python3 -c '
@@ -47,7 +42,7 @@ fi
 
 # Idempotency keys make a rerun reuse the same header instead of adding a second one.
 for row in "${PROJECTS[@]}"; do
-  IFS='|' read -r pname pdir <<<"$row"
+  IFS='|' read -r pname pdir _ <<<"$row"
   CMUX_QUIET=1 cmux workspace-group create --name "$pname" --cwd "$pdir" --idempotency-key "tidy-$pname" >/dev/null
 done
 GROUPS_JSON=$(CMUX_QUIET=1 cmux workspace-group list --json)
@@ -65,6 +60,13 @@ def walk(o):
         for v in o: walk(v)
 walk(json.load(sys.stdin))' "$1"
 }
+
+for row in "${PROJECTS[@]}"; do
+  IFS='|' read -r pname _ pcolor picon <<<"$row"
+  gref=$(group_ref "$pname")
+  [ -n "$pcolor" ] && CMUX_QUIET=1 cmux workspace-group set-color "$gref" --hex "$pcolor" >/dev/null
+  [ -n "$picon" ] && CMUX_QUIET=1 cmux workspace-group set-icon "$gref" --symbol "$picon" >/dev/null
+done
 
 while IFS=$'\t' read -r ref title; do
   for rule in "${RULES[@]}"; do

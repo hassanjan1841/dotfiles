@@ -17,7 +17,7 @@ Personal dotfiles for Ubuntu and macOS, managed with [GNU Stow](https://www.gnu.
 | `taskwarrior` | `~/.task/` + `~/.timewarrior/` config |
 | `wezterm` | `~/.wezterm.lua` (fallback terminal) |
 | `ghostty` | `~/.config/ghostty/config` (theme/font for cmux) |
-| `cmux` | `~/.config/cmux/cmux.json` (sidebar: no paths/branches/PRs, plain names) |
+| `cmux` | `~/.config/cmux/cmux.json` (sidebar look) + `projects.example.json`; setup in [docs/cmux.md](docs/cmux.md) |
 | `zed` | `~/.config/zed/settings.json` + `themes/` |
 | `claude` | `~/.claude/settings.json` + `CLAUDE.md` |
 | `autostart` | `~/.config/autostart/startup.desktop` |
@@ -93,6 +93,10 @@ Logs at `~/.local/share/startup.log`. On macOS use `startup-mac.sh` (System Sett
 ## CI
 
 GitHub Actions runs the Ansible playbook in `--check` (dry run) mode on every push to `main`, on both `ubuntu-latest` and `macos-latest`.
+
+## cmux (macOS terminal)
+
+`just cmux` sets up cmux, the Ghostty look, project colors and groups, the screen glow, the `human` GUI tool and the Claude Stop hook. It is safe to rerun. Details and macOS permissions: [docs/cmux.md](docs/cmux.md).
 
 ## Installed tools (via Ansible)
 

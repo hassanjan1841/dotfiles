@@ -19,3 +19,9 @@ human-input/Human.app/
 
 # Python bytecode
 __pycache__/
+
+# glow: build artefact, built by `just cmux`
+glow/glow-overlay
+
+# cmux: personal project rules live in ~/.config/cmux/projects.local.json, never in the repo
+cmux/.config/cmux/projects.local.json

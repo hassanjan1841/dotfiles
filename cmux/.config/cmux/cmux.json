@@ -10,27 +10,20 @@
     "accentColor": "#7aa2f7"
   },
   "workspaceColors": {
-    "selectionColor": "#20406f",
+    "selectionColor": "#426cbf",
     "indicatorStyle": "leftRail"
   },
   "sidebar": {
     "showBranchDirectory": false,
     "showLog": false,
     "showSSH": false,
-    "showNotificationMessage": true,
+    "showNotificationMessage": false,
     "notificationMessageLineLimit": 2,
     "wrapWorkspaceTitles": true,
     "showAgentActivity": true,
     "showPorts": true,
     "showPullRequests": false,
     "compactAgentStatus": true
-  },
-  "workspaceGroups": {
-    "byCwd": {
-      "/Users/hassanjan/ehtisham-all-projects/next-shadcn-dashboard-starter-main": { "color": "#7aa2f7", "icon": "building.columns.fill" },
-      "/Users/hassanjan/Passenger-*": { "color": "#ff9e64", "icon": "shippingbox.fill" },
-      "/Users/hassanjan/ehtisham-all-projects/CUSTOMERS*": { "color": "#9ece6a", "icon": "person.2.fill" }
-    }
   },
   "automation": {
     "workspaceAutoNaming": true

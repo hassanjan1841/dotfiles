@@ -59,7 +59,22 @@ cmux send-key --surface surface:4 ctrl+c
 `cmux guide` prints the full agent guide; `cmux <command> --help` for flags. Verified in use on
 2026-10-03: `workspace create --command`, `workspace-action rename|set-color`, `workspace-group
 create|add`. `cmux-tidy` (in `~/dotfiles/bin`, on PATH) applies the project headers, plain names
-and colors in one go; edit its PROJECTS and RULES lists for new work, it is safe to rerun.
+and colors in one go from `~/.config/cmux/projects.local.json` (each project's `rename` map); it is
+safe to rerun.
+
+Colors and groups are automatic now: `cmux-autocolor` (in `~/dotfiles/bin`) runs from `.zshrc` when a
+cmux shell starts and gives the workspace its project's color and group, and colors the group
+header. The one project list is `~/.config/cmux/projects.local.json` (personal, not in git; see
+`cmux/.config/cmux/projects.example.json`): each project has a `folder`, optional `match` globs (a repo
+plus its worktree folders), `color` and `icon`. A new project needs one entry there. Manual colors,
+icons and groups are never overridden. `cmux-autocolor --all` sweeps every workspace; `--worker` adds the
+"Worker" line (the parallel-leader `tview.sh` does this for each worker).
+
+Sidebar status: cmux keeps a finished Claude turn on "Running" when the Stop payload has
+`stop_hook_active`, `background_tasks` or `session_crons` set (a blocking Stop hook, a background
+shell, an artifact watch). The global Stop hook `cmux-stop-settle` (in `~/dotfiles/bin`) re-sends a
+plain stop 2 seconds later so it settles on Idle. cmux's own event log, useful for debugging status:
+`~/Library/Application Support/cmux/agent-journal-com.cmuxterm.app.sqlite3` (`pending_work` column).
 
 ## Recipe: open a new Claude Code session in its own workspace
 

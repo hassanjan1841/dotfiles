@@ -374,3 +374,8 @@ export PATH=/Users/macbookair/.opencode/bin:$PATH
 
 # Keep Claude Code sessions resumable even when the shell was launched from another Claude session
 export CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1
+
+# New cmux workspaces take their project's color and group from ~/.config/cmux/projects.local.json (tmux panes belong to a worker, skip them)
+if [[ -o interactive && -n $CMUX_WORKSPACE_ID && -z $TMUX ]] && (( $+commands[cmux-autocolor] )); then
+  cmux-autocolor &>/dev/null &!
+fi

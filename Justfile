@@ -72,6 +72,43 @@ link:
     cd {{dotfiles}} && stow -v --no-folding --restow cmux
     cd {{dotfiles}} && stow -v --restow startup
 
+# Set up cmux on macOS: app, Ghostty look, sidebar, project colors, glow, human and the Claude Stop hook (safe to rerun)
+cmux:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{dotfiles}}
+    [ "$(uname -s)" = Darwin ] || { echo "cmux is macOS only."; exit 1; }
+    xcode-select -p >/dev/null 2>&1 || { echo "Xcode Command Line Tools are missing. Run: xcode-select --install, then rerun: just cmux"; exit 1; }
+    command -v brew >/dev/null || { echo "Homebrew is missing. Install it from https://brew.sh, then rerun: just cmux"; exit 1; }
+    command -v stow >/dev/null || brew install stow
+    [ -d /Applications/cmux.app ] || brew install --cask cmux
+    # cmux writes a template cmux.json on first launch; move real files aside so stow can link ours.
+    for f in ~/.config/ghostty/config ~/.config/cmux/cmux.json; do
+        if [ -e "$f" ] && [ ! -L "$f" ]; then mv "$f" "$f.bak-$(date +%Y%m%d-%H%M%S)"; echo "Backed up $f"; fi
+    done
+    stow -v --no-folding --restow ghostty cmux
+    [ -f ~/.config/cmux/projects.local.json ] || { cp cmux/.config/cmux/projects.example.json ~/.config/cmux/projects.local.json; echo "Created ~/.config/cmux/projects.local.json, add your projects there"; }
+    chmod +x bin/cmux-autocolor bin/cmux-tidy bin/cmux-stop-settle bin/glow bin/human human-input/build.sh
+    [ glow/glow-overlay -nt glow/glow.swift ] || swiftc -O glow/glow.swift -o glow/glow-overlay
+    [ human-input/human -nt human-input/human.swift ] || human-input/build.sh --no-test
+    python3 - <<'PY'
+    import json, os
+    path = os.path.expanduser("~/.claude/settings.json")
+    cmd = "$HOME/dotfiles/bin/cmux-stop-settle"
+    s = json.load(open(path)) if os.path.exists(path) else {}
+    stop = s.setdefault("hooks", {}).setdefault("Stop", [])
+    if any("cmux-stop-settle" in h.get("command", "") for e in stop for h in e.get("hooks", [])):
+        print("Claude Stop hook: already set")
+    else:
+        stop.append({"hooks": [{"type": "command", "command": cmd, "timeout": 10}]})
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(s, f, indent=2)
+            f.write("\n")
+        print("Claude Stop hook: added to ~/.claude/settings.json")
+    PY
+    echo "cmux is set up. Next: grant human its macOS permissions, then run: human check (see docs/cmux.md)"
+
 # Preview what Ansible would change without applying anything
 dry-run:
     ansible-playbook {{dotfiles}}/setup.yml --check --diff -i localhost, --connection local

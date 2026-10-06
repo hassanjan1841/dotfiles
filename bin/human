@@ -1,1 +1,4 @@
-/Users/macbookair/dotfiles/human-input/human
+#!/bin/zsh
+# Lights the screen-edge glow (when `glow on`) for every action, then runs the real human.
+glow ping
+exec ${0:A:h:h}/human-input/human "$@"
