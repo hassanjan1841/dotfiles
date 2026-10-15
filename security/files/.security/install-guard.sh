@@ -1,4 +1,4 @@
-# install-guard — quiet, auto-blocking wrappers for the ways internet code runs.
+# install-guard: quiet, auto-blocking wrappers for the ways internet code runs.
 # Sourced from shellrc. Philosophy: SILENT when clean, BLOCK on a confirmed
 # malicious signature. No "allow/block" nagging (that is what makes LuLu painful);
 # it only ever speaks when malscan finds something known-bad.
@@ -23,21 +23,37 @@ _ig_guard() { # <label> <path>
   return 1
 }
 
-# npm: pass everything straight through; scan only after a fetch subcommand.
-npm() {
-  command npm "$@"; local rc=$?
-  [ "$rc" = 0 ] || return $rc
-  case "${1:-}" in
-    install|i|add|ci|update|up)          _ig_guard "npm $1" "${PWD}/node_modules" || return 1 ;;
-    exec|create|dlx|x)                   _ig_guard "npm $1" "$HOME/.npm/_npx"      || return 1 ;;
-  esac
+# Scan only the npx cache packages this run wrote to (any file newer than the marker), so a run
+# that fetched nothing costs nothing, and anything new is still scanned in full.
+_ig_guard_new_npx() { # <label> <marker>
+  local cache="$HOME/.npm/_npx" dir rc=0
+  [ -d "$cache" ] || return 0
+  for dir in $(find "$cache" -newer "$2" -type f 2>/dev/null | sed "s|^$cache/\([^/]*\)/.*|$cache/\1|" | sort -u); do
+    _ig_guard "$1" "$dir" || rc=1
+  done
   return $rc
 }
 
-# npx runs remote code immediately — scan the npx cache right after it fetches.
+# npm: pass everything straight through; scan only after a fetch subcommand.
+npm() {
+  local marker; marker=$(mktemp)
+  command npm "$@"; local rc=$?
+  if [ "$rc" = 0 ]; then
+    case "${1:-}" in
+      install|i|add|ci|update|up)          _ig_guard "npm $1" "${PWD}/node_modules" || rc=1 ;;
+      exec|create|dlx|x)                   _ig_guard_new_npx "npm $1" "$marker"    || rc=1 ;;
+    esac
+  fi
+  rm -f "$marker"
+  return $rc
+}
+
+# npx runs remote code immediately: scan what it fetched this time, right after.
 npx() {
+  local marker; marker=$(mktemp)
   command npx "$@"; local rc=$?
-  _ig_guard "npx" "$HOME/.npm/_npx" || return 1
+  _ig_guard_new_npx "npx" "$marker" || rc=1
+  rm -f "$marker"
   return $rc
 }
 
