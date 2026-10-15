@@ -118,9 +118,16 @@ def main():
     ap.add_argument("--alerts", type=int)
     args = ap.parse_args()
     if args.alerts:
-        seen = set()
+        seen, idle_before = set(), set()
         while True:
-            for r in collect(args):
+            rows = collect(args)
+            for r in rows:
+                # A worker is briefly idle between two steps: only call it stuck after two idle polls in a row.
+                stuck = "idle but tracker says RUNNING"
+                if stuck in r["flags"] and r["title"] not in idle_before:
+                    r["flags"].remove(stuck)
+            idle_before = {r["title"] for r in rows if r["state"] == "idle"}
+            for r in rows:
                 for f in r["flags"]:
                     k = (r["title"], f)
                     if k not in seen:
