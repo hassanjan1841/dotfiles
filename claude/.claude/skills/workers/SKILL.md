@@ -33,5 +33,8 @@ Flags and what to do:
 ## Rules this replaces nothing of
 The global CLAUDE.md worker rules still apply: confirm a worker started after every message, keep a background watch, verify results yourself, report at once with pictures. These scripts are how you do that reliably.
 
+## Every job gets its own tracker row
+A follow-up or fix to finished work gets a NEW row (for example K20b), never a log line under a DONE row: the board only flags REVIEW rows, so a job without its own row finishes silently.
+
 ## Close a worker
 When its PR is merged and the board shows dirty 0 and +0: close its cmux workspace, then `git worktree remove` its folder (save any uncommitted work as a patch in the project's research folder first).
