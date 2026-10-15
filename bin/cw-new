@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# cw-new: start a Claude worker in its own git worktree and cmux workspace, the same way every time.
+#
+#   cw-new --name "K20 Small parts" --dir ~/Passenger-ds-K20 --branch chore/k20-small-parts \
+#          --repo ~/Passenger-ds-B [--base origin/staging] [--app passenger-app] [--port 3107] \
+#          [--env-from ~/Passenger-ds-B/passenger-app/.env.local] [--baseline-from DIR --baseline-to DIR] \
+#          [--model claude-fable-5-1] [--brief ~/Passenger-worker-briefs/K20.md]
+#
+# Steps: worktree (new or reused if clean), .env.local with its own APP_PORT/APP_URL/VISUAL_DIR, test
+# baseline copy, npm ci, cmux workspace in the project's group and colour (cmux-autocolor), /remote-control,
+# then the brief. Each send is checked on screen, because cmux can drop or queue keys under load.
+set -euo pipefail
+
+name= dir= branch= repo= base=origin/staging app= port= envfrom= blfrom= blto= model= brief=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --name) name=$2;; --dir) dir=$2;; --branch) branch=$2;; --repo) repo=$2;; --base) base=$2;;
+    --app) app=$2;; --port) port=$2;; --env-from) envfrom=$2;; --baseline-from) blfrom=$2;;
+    --baseline-to) blto=$2;; --model) model=$2;; --brief) brief=$2;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0;;
+    *) echo "cw-new: unknown option $1" >&2; exit 2;;
+  esac
+  shift 2
+done
+for v in name dir branch repo; do [ -n "${!v}" ] || { echo "cw-new: --$v is required" >&2; exit 2; }; done
+export CMUX_QUIET=1
+
+# cmux answers slowly when the machine is busy: retry instead of failing or double-sending.
+c() { local out i; for i in 1 2 3 4 5; do out=$(perl -e 'alarm 50; exec @ARGV' cmux "$@" 2>&1) && ! grep -q "timed out" <<<"$out" && { printf '%s\n' "$out"; return 0; }; sleep 6; done; printf '%s\n' "$out" >&2; return 1; }
+screen() { c read-screen --surface "$1" || true; }
+pause() { perl -e "select(undef,undef,undef,$1)"; }
+
+echo "1/7 worktree"
+git -C "$repo" fetch -q origin
+if [ -d "$dir" ]; then
+  [ -z "$(git -C "$dir" status --porcelain)" ] || { echo "cw-new: $dir has uncommitted work, stopping" >&2; exit 1; }
+  git -C "$dir" switch -q -c "$branch" "$base"
+else
+  git -C "$repo" worktree add -q "$dir" -b "$branch" "$base"
+fi
+appdir=$dir${app:+/$app}
+
+if [ -n "$envfrom" ]; then
+  echo "2/7 env"
+  [ -n "$port" ] || { port=3101; while lsof -nP -iTCP:$port -sTCP:LISTEN >/dev/null 2>&1 || grep -rqs "^APP_PORT=$port$" "$(dirname "$dir")"/*/"$app"/.env.local; do port=$((port+1)); done; }
+  sed -E -e "s|^APP_PORT=.*|APP_PORT=$port|" -e "s|^APP_URL=.*|APP_URL=http://localhost:$port|" \
+      ${blto:+-e "s|^VISUAL_DIR=.*|VISUAL_DIR=$blto|"} "$envfrom" > "$appdir/.env.local"
+fi
+if [ -n "$blfrom" ] && [ -n "$blto" ] && [ ! -e "$blto" ]; then echo "3/7 baseline"; cp -R "$blfrom" "$blto"; fi
+if [ -f "$appdir/package-lock.json" ]; then echo "4/7 npm ci"; (cd "$appdir" && npm ci --no-audit --no-fund >/dev/null); fi
+
+echo "5/7 workspace"
+ref=$(c new-workspace --name "$name" --cwd "$dir" --command "claude${model:+ --model $model}" --focus false | grep -oE 'workspace:[0-9]+' | head -1)
+[ -n "$ref" ] || { echo "cw-new: no workspace ref from cmux" >&2; exit 1; }
+command -v cmux-autocolor >/dev/null && cmux-autocolor --workspace "$ref" --cwd "$dir" --worker >/dev/null 2>&1 || true
+pause 8
+surface=$(c tree | awk -v r="$ref" '$0 ~ "workspace "r" " {f=1; next} f && /workspace:/ {f=0} f && match($0,/surface:[0-9]+/) {print substr($0,RSTART,RLENGTH); exit}')
+[ -n "$surface" ] || { echo "cw-new: no surface for $ref" >&2; exit 1; }
+
+send_and_check() { # text, pattern that proves it landed
+  local i
+  for i in 1 2 3; do
+    c send --surface "$surface" "$1" >/dev/null; pause 1.5; c send-key --surface "$surface" enter >/dev/null; pause 10
+    screen "$surface" | grep -qE "$2" && return 0
+  done
+  echo "cw-new: could not confirm on $surface: $1" >&2; return 1
+}
+
+echo "6/7 remote control"
+send_and_check "/remote-control" "remote-control is active"
+if [ -n "$brief" ]; then
+  echo "7/7 brief"
+  send_and_check "Read $brief in full and follow it exactly. Do not push." "⏺|esc to interrupt|…"
+fi
+echo "OK $name: $ref $surface dir=$dir branch=$branch port=${port:-none}"

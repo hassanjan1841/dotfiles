@@ -8,6 +8,10 @@
 - Use a comma, period, colon, semicolon, or parentheses instead. Prefer short plain sentences.
 - When editing any file, never introduce a dash, and strip any long dash you find while you are in there.
 
+# Messages I will copy and send, HARD RULE, applies to every project/session
+- Any text I will paste somewhere (DM, comment, email, WhatsApp, Slack) goes in a plain ```text code block, never a `>` blockquote. The blockquote's left line gets copied with it and breaks the paste.
+- This overrides any default that says to put drafts in a blockquote.
+
 # Driving the GUI, HARD RULE, applies to every project/session
 Two tools, and the target decides which are even possible.
 
@@ -48,10 +52,28 @@ Decide ONCE per task, at the task boundary, never prompt per file edit.
 - **Research** fans out to **Sonnet subagents** (Agent tool, `model: "sonnet"`) when the question spans many files, directories, or naming conventions. This is what subagents are for, keep using them here.
 - **Execution** stays in this session unless the change is large and genuinely parallelizable (see the routing rule above).
 - **Never spawn a subagent to verify or double-check work.** Verification belongs in the main loop. If a second opinion is genuinely warranted on a high-stakes change, spawn ONE reviewer and give it only the diff and the requirement, never the executor's reasoning, or it inherits the same blind spot.
-- **I (the main session) always do the final verification myself**: read the diff, run `format:check` / `lint` / `typecheck` / `test` / `build`, and drive the real flow when there's a UI surface. Never report "done" on a subagent's word alone.
+- **I (the main session) always do the final verification myself**: read the diff, run the project's checks (its own check command when it has one, see Fast checks below; else `format:check` / `lint` / `typecheck` / unit tests / `build`), and drive the real flow when there's a UI surface. Never report "done" on a subagent's word alone.
 - **Prefer commands over claims.** Report the actual output of a check, not an assertion that it passed. Don't ask for "verification", ask for a command with visible output.
 - Order: research (Sonnet, when broad) → execute → my own checks.
 - Driving a UI is governed by the GUI rule above: native app → `human`, web page → ask first.
+
+# Fast checks, HARD RULE, applies to every project/session (agreed 2026-10-13)
+Checking must never take hours. Target: about 25s after an edit, under 2 min before a PR.
+- Use the project's own check command if it has one (Passenger: `npm run check:quick` after each edit, `npm run check:full` once before a PR; see `passenger-app/TESTING.md`).
+- Run local tools through `npm run <script>` or `node_modules/.bin/<tool>`, never `npx`: my install guard scans after every `npx` call.
+- Never `npm test` while editing in Passenger: it also runs the whole browser suite. Use `npm run test:unit`.
+- While building: only the checks for what changed (related unit tests, that part's browser tests). One full check before the PR, not repeated identical rounds; a fix re-runs only the checks it can affect, plus one full check at the end.
+- Show the user pictures of a UI change before the full check, so look problems are caught first.
+- Fix a flaky test the first time it fails; never re-run until green.
+- Run at most 2 or 3 working sessions at once on this Mac, and close idle test browsers: overload made checks 5 to 50 times slower.
+
+# Working with worker sessions, HARD RULE, applies to every project/session (agreed 2026-10-14)
+When I hand work to another Claude session (a cmux worker or a subagent):
+- After sending a message to a worker, read its screen again and confirm it is working. A message sitting unsent in its input box does not count; press Enter again until it starts. Never say a worker "is doing X" before seeing it start.
+- In the same turn, start a background watch (Bash run_in_background until-loop) that ends when the worker finishes: its tracker row turns REVIEW or DONE, its output file appears, or its PR opens.
+- When the watch fires, check the result myself (look at the picture, run the checks) and report to Hassan at once, sending pictures with SendUserFile. Never wait for him to ask "how is it going".
+- Show, don't tell: for any look decision, give him one picture (today beside proposed, zoomed so the difference is visible, step by step for flows) before asking him to choose.
+- Use the `workers` skill: start every worker with `cw-new` (worktree, port, colour, remote control, brief, all confirmed) and watch them with `cw-board` (`--watch` pane for Hassan, `--alerts` background watch for me). Never hand-roll these steps.
 
 # Browser Testing (MCP)
 - **Playwright MCP** (`npx @playwright/mcp@latest`) is the primary E2E testing tool, use it to drive the browser: navigate, click, fill forms, assert behavior, generate test files. Headless by default; pass `--headed` for visual debugging.

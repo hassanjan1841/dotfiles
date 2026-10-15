@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""cw-board: one table of every Claude worker in a project, and flags for anything that needs the leader.
+
+  cw-board --match '~/Passenger-*' [--base origin/staging] [--tracker FILE] [--app passenger-app]
+  cw-board ... --watch 60        redraw every 60 seconds (run it in a cmux pane)
+  cw-board ... --alerts 60       print only NEW flags, one line each (for a leader's background watch)
+
+A worker is a cmux workspace whose folder matches --match. The tracker row is found by the first word of the
+workspace title (for example "K16") in a markdown table: | K16 | ... | STATUS | ...
+"""
+import argparse, fnmatch, json, os, re, subprocess, sys, time
+
+SPIN = re.compile(r"(esc to interrupt|ctrl\+b to run in background|[✻✶✽✢·*] \w[^\n]*… \(|Running \d+ shell)")
+
+
+def run(cmd, cwd=None, timeout=50):
+    try:
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout,
+                           env=dict(os.environ, CMUX_QUIET="1"))
+        return p.stdout if p.returncode == 0 else ""
+    except subprocess.TimeoutExpired:
+        return ""
+
+
+def cmux(*a):
+    for _ in range(4):
+        out = run(["cmux", *a])
+        if out and "timed out" not in out:
+            return out
+        time.sleep(5)
+    return ""
+
+
+def surface_of(ref):
+    tree, found = cmux("tree").splitlines(), False
+    for line in tree:
+        if f"workspace {ref} " in line:
+            found = True
+            continue
+        if found and "workspace:" in line:
+            return None
+        m = found and re.search(r"surface:\d+", line)
+        if m:
+            return m.group(0)
+    return None
+
+
+def tracker_status(path, key):
+    if not path or not key or not os.path.exists(path):
+        return ""
+    for line in open(path, encoding="utf-8"):
+        cells = [c.strip() for c in line.split("|")]
+        if len(cells) > 4 and cells[1] == key:
+            for c in cells:
+                if c in ("TODO", "RUNNING", "REVIEW", "WAITING", "BLOCKED", "DONE"):
+                    return c
+    return ""
+
+
+def worker(w, args):
+    cwd, title = w.get("current_directory") or "", w.get("custom_title") or w.get("title") or ""
+    git = lambda *a: run(["git", "-C", cwd, *a]).strip()
+    branch = git("rev-parse", "--abbrev-ref", "HEAD")
+    dirty = len([l for l in git("status", "--porcelain").splitlines() if l])
+    ahead = git("rev-list", "--count", f"{args.base}..HEAD") or "?"
+    behind = git("rev-list", "--count", f"HEAD..{args.base}") or "?"
+    env = os.path.join(cwd, args.app or "", ".env.local")
+    port = next((l.split("=", 1)[1].strip() for l in open(env) if l.startswith("APP_PORT=")), "") if os.path.exists(env) else ""
+    up = bool(port) and bool(run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"]))
+    surf = surface_of(w["ref"])
+    text = cmux("read-screen", "--surface", surf) if surf else ""
+    lines = [l for l in text.splitlines() if l.strip()]
+    working = any(SPIN.search(l) and " done " not in l for l in lines[-30:])
+    prompt = next((l for l in reversed(lines) if l.lstrip().startswith("❯")), "")
+    unsent = prompt.strip().lstrip("❯").strip()
+    key = title.split()[0] if title else ""
+    status = tracker_status(args.tracker, key)
+    flags = []
+    if not working and status == "REVIEW":
+        flags.append("ready for review")
+    if not working and status == "RUNNING":
+        flags.append("idle but tracker says RUNNING")
+    if not working and unsent:
+        flags.append(f"text in input box: {unsent[:40]}")
+    if port and not up:
+        flags.append(f"dev server :{port} down")
+    return dict(ref=w["ref"], surface=surf or "?", title=title, state="working" if working else "idle",
+                status=status or "-", branch=branch, dirty=dirty, ahead=ahead, behind=behind,
+                port=f":{port}{'' if up else ' down'}" if port else "-", flags=flags)
+
+
+def collect(args):
+    data = json.loads(cmux("list-workspaces", "--json") or "[]")
+    ws = data if isinstance(data, list) else data.get("workspaces", [])
+    pat = os.path.expanduser(args.match)
+    return [worker(w, args) for w in ws if fnmatch.fnmatch(w.get("current_directory") or "", pat)]
+
+
+def table(rows):
+    load = os.getloadavg()[0]
+    out = [time.strftime("%H:%M:%S") + f"  load {load:.0f}" + ("  HIGH: run fewer checks" if load > 30 else "")]
+    for r in rows:
+        out.append(f"{r['title'][:28]:28} {r['state']:7} {r['status']:7} {r['branch'][:38]:38} "
+                   f"dirty {r['dirty']:<3} +{r['ahead']}/-{r['behind']:<4} {r['port']:10} {r['ref']} {r['surface']}")
+        out += [f"    ! {f}" for f in r["flags"]]
+    return "\n".join(out)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--match", required=True)
+    ap.add_argument("--base", default="origin/staging")
+    ap.add_argument("--tracker")
+    ap.add_argument("--app")
+    ap.add_argument("--watch", type=int)
+    ap.add_argument("--alerts", type=int)
+    args = ap.parse_args()
+    if args.alerts:
+        seen = set()
+        while True:
+            for r in collect(args):
+                for f in r["flags"]:
+                    k = (r["title"], f)
+                    if k not in seen:
+                        print(f"{time.strftime('%H:%M')} {r['title']} ({r['surface']}): {f}", flush=True)
+                        seen.add(k)
+            time.sleep(args.alerts)
+    while True:
+        rows = collect(args)
+        if args.watch:
+            print("\033[2J\033[H", end="")
+        print(table(rows), flush=True)
+        if not args.watch:
+            return
+        time.sleep(args.watch)
+
+
+if __name__ == "__main__":
+    main()
