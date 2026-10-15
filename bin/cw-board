@@ -71,6 +71,9 @@ def worker(w, args):
     text = cmux("read-screen", "--surface", surf) if surf else ""
     lines = [l for l in text.splitlines() if l.strip()]
     working = any(SPIN.search(l) and " done " not in l for l in lines[-30:])
+    # cmux can time out under load: an unread screen is unknown, never idle, so it raises no flag.
+    if not lines:
+        return dict(ref=w["ref"], surface=surf or "?", title=title, state="unknown", status=tracker_status(args.tracker, title.split()[0] if title else ""), branch=branch, dirty=dirty, ahead=ahead, behind=behind, port=f":{port}" if port else "-", flags=[])
     prompt = next((l for l in reversed(lines) if l.lstrip().startswith("❯")), "")
     unsent = prompt.strip().lstrip("❯").strip()
     key = title.split()[0] if title else ""
