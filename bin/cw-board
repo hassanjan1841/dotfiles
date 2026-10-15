@@ -80,7 +80,8 @@ def worker(w, args):
         flags.append("ready for review")
     if not working and status == "RUNNING":
         flags.append("idle but tracker says RUNNING")
-    if not working and unsent:
+    # A finished worker often shows a dim suggested reply nobody typed; only active rows can have a real unsent message.
+    if not working and unsent and status != "DONE":
         flags.append(f"text in input box: {unsent[:40]}")
     if port and not up:
         flags.append(f"dev server :{port} down")
