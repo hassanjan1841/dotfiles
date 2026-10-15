@@ -93,7 +93,9 @@ def collect(args):
     data = json.loads(cmux("list-workspaces", "--json") or "[]")
     ws = data if isinstance(data, list) else data.get("workspaces", [])
     pat = os.path.expanduser(args.match)
-    return [worker(w, args) for w in ws if fnmatch.fnmatch(w.get("current_directory") or "", pat)]
+    me = os.environ.get("CMUX_WORKSPACE_ID")
+    # The leader running the board is not one of its workers: its own input box is the human typing.
+    return [worker(w, args) for w in ws if fnmatch.fnmatch(w.get("current_directory") or "", pat) and w.get("id") != me]
 
 
 def table(rows):
