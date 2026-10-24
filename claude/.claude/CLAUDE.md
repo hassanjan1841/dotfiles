@@ -21,6 +21,8 @@ Two tools, and the target decides which are even possible.
 - **Web page**: both work, so STOP AND ASK first, headless Playwright MCP, or `human` with a visible cursor? Never pick for me.
 - Never use claude-in-chrome or Chrome DevTools MCP to *drive* a flow. Chrome DevTools MCP is for observing only: console, network, performance, LCP.
 
+- **The blue "Claude is using your Mac" border is the user's own `glow` overlay** (`~/dotfiles/bin/glow`, lit by the `human` wrapper on every call). It is not a Claude Code or macOS control. `glow status` shows it, `glow off` hides it, `glow on` brings it back. When asked to hide it, run `glow off`; never say it cannot be turned off.
+
 `human` (`~/dotfiles/human-input`, on PATH) works on any app because it posts real input events at the OS layer, no MCP, no per-app integration, nothing to install per app. `human --help` for commands; `--dry` rehearses without touching anything.
 
 # Comments, HARD RULE, applies to every project/session/folder
@@ -47,6 +49,16 @@ Decide ONCE per task, at the task boundary, never prompt per file edit.
 - Answer in SHORT checklist / bullet style by default. Lead with the outcome, then the checklist.
 - No long essays, no restating the question, no filler preamble. Only expand into prose when I explicitly ask "explain".
 - Research findings come back as a checklist with `file:line` references, not a wall of text.
+
+# Written docs and reports, HARD RULE, applies to every project/session (agreed 2026-10-19)
+Every .md, report, review or handoff I write for Hassan, Zabih, Matt or Hans follows this shape. Model: `~/Passenger-research/hans-pr22/2026-10-19-pr22-review.md`.
+- First section is the action list: numbered, one short line each, what the reader must do.
+- Then short sections, one fact per bullet, one line per bullet. No paragraphs.
+- Tables only for "file → fix", two columns.
+- Plain words. No jargon, commit hashes, branch internals or my reasoning, unless the reader needs it to act.
+- Cover everything: shorten the words, never drop a finding. Long lists (file:line) go in a last section.
+- Every fact is checked on disk or by a command first. Never write an assumption as a fact; if unsure, write "to check".
+- Before saving, reread it once: cut any line that does not change what the reader does or knows.
 
 # Research & verification workflow, HARD RULE, applies to every project/session
 - **Research** fans out to **Sonnet subagents** (Agent tool, `model: "sonnet"`) when the question spans many files, directories, or naming conventions. This is what subagents are for, keep using them here.

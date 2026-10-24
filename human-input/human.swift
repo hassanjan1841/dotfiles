@@ -2885,6 +2885,10 @@ human - drive macOS the way a person does, and read the screen three ways
     every action is appended to ~/Library/Logs/human-input.log
     human selftest                  prove pointer, typing, sight and every model curve
 
+  screen glow (set by the bin/human wrapper, not by this binary)
+    glow on | off | status          blue border and "Claude is using your Mac" label
+                                    while human acts; run `glow off` to hide it
+
   who is typing
     --persona <name>                one consistent hand: speed, curve bias, slips
     --device mouse|trackpad
