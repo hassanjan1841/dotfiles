@@ -31,7 +31,8 @@ screen() { c read-screen --surface "$1" || true; }
 pause() { perl -e "select(undef,undef,undef,$1)"; }
 
 echo "1/7 worktree"
-git -C "$repo" fetch -q origin
+# Offline or not signed in: carry on with the local refs instead of stopping.
+git -C "$repo" fetch -q origin 2>/dev/null || echo "cw-new: fetch failed, using local refs"
 if [ -d "$dir" ]; then
   [ -z "$(git -C "$dir" status --porcelain)" ] || { echo "cw-new: $dir has uncommitted work, stopping" >&2; exit 1; }
   git -C "$dir" switch -q -c "$branch" "$base"
