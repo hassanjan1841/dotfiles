@@ -37,11 +37,12 @@
       "Bash(claude plugin test *)",
       "Edit(~/.claude/dev-mods/**)",
       "Edit(~/.claude/verify-gate.json)",
-      "Edit(~/.claude/worker-board.json)"
+      "Edit(~/.claude/worker-board.json)",
+      "Bash(node /Users/hassanjan/Passenger-research/release/scripts/*)"
     ],
     "ask": []
   },
-  "model": "opus[1m]",
+  "model": "opus",
   "hooks": {
     "PostToolUse": [
       {
@@ -219,6 +220,9 @@
   "effortLevel": "high",
   "modelSettings": {
     "claude-opus-5-5": {
+      "effortLevel": "high"
+    },
+    "claude-sonnet-5-5": {
       "effortLevel": "high"
     }
   },
