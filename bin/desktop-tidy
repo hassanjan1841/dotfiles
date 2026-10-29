@@ -1,0 +1,112 @@
+#!/bin/bash
+# Keeps ~/Desktop empty: moves everything into ~/Documents/Desktop-Archive/<Type>/. Never deletes.
+#   desktop-tidy            sort now (the background job runs this)
+#   desktop-tidy install    set up hidden icons + background job (safe to re-run, e.g. on a new Mac)
+#   desktop-tidy uninstall  remove the background job and show icons again (archive is kept)
+#   desktop-tidy status     show whether it is set up and the last moves
+
+DESK="$HOME/Desktop"
+ARCH="$HOME/Documents/Desktop-Archive"
+LOG="$ARCH/.tidy.log"
+LABEL="com.hassan.desktop-tidy"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+# macOS privacy blocks a plain launchd script from reading ~/Desktop; a tiny app can be granted access.
+APP="$HOME/Applications/DesktopTidy.app"
+SELF="$HOME/dotfiles/bin/desktop-tidy"
+DOMAIN="gui/$(id -u)"
+
+install() {
+  set -e
+  mkdir -p "$ARCH" "$HOME/Applications" "$HOME/Library/LaunchAgents"
+  rm -rf "$APP"
+  osacompile -o "$APP" -e "do shell script \"/bin/bash '$SELF'\""
+  /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$APP/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Delete :CFBundleIdentifier" "$APP/Contents/Info.plist" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string com.hassan.desktoptidy" "$APP/Contents/Info.plist"
+  codesign --force --deep -s - "$APP" 2>/dev/null
+  cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key><array><string>$APP/Contents/MacOS/applet</string></array>
+  <key>WatchPaths</key><array><string>$DESK</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>StandardErrorPath</key><string>$ARCH/.tidy.err</string>
+</dict>
+</plist>
+EOF
+  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+  launchctl bootstrap "$DOMAIN" "$PLIST"
+  defaults write com.apple.finder CreateDesktop -bool false
+  killall Finder
+  echo "Installed. If macOS asks to allow DesktopTidy to access the Desktop, click Allow."
+}
+
+uninstall() {
+  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null
+  rm -f "$PLIST"
+  rm -rf "$APP"
+  defaults write com.apple.finder CreateDesktop -bool true
+  killall Finder
+  echo "Removed. Desktop icons are back. Archive kept at $ARCH"
+}
+
+status() {
+  launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 && echo "background job: on" || echo "background job: OFF"
+  echo "icons hidden: $([ "$(defaults read com.apple.finder CreateDesktop 2>/dev/null)" = 0 ] && echo yes || echo no)"
+  echo "last moves:"; tail -5 "$LOG" 2>/dev/null
+}
+
+case "$1" in
+  install) install; exit ;;
+  uninstall) uninstall; exit ;;
+  status) status; exit ;;
+esac
+
+mkdir -p "$ARCH"
+# Let screenshots and downloads finish writing before moving them.
+sleep 3
+
+shopt -s nullglob
+for src in "$DESK"/*; do
+  name=$(basename "$src")
+  case "$name" in
+    *.crdownload|*.download|*.part|*.partial|*.tmp) continue ;;
+  esac
+
+  if [ -d "$src" ] && [[ "$name" != *.app ]]; then
+    type="Folders"
+  else
+    ext=$(echo "${name##*.}" | tr '[:upper:]' '[:lower:]')
+    [ "$ext" = "$(echo "$name" | tr '[:upper:]' '[:lower:]')" ] && ext=""
+    case "$ext" in
+      gif) type="GIFs" ;;
+      png|jpg|jpeg|heic|webp|svg|tiff|bmp) type="Images" ;;
+      mp4|mov|m4v|webm|mkv|avi) type="Videos" ;;
+      mp3|wav|m4a|aac|flac) type="Audio" ;;
+      pdf|doc|docx|txt|md|rtf|pages|xlsx|xls|csv|pptx|key|numbers) type="Documents" ;;
+      zip|dmg|pkg|tar|gz|rar|7z) type="Installers" ;;
+      url|webloc|command|app|alias|inetloc) type="Shortcuts" ;;
+      *) type="Other" ;;
+    esac
+  fi
+
+  dest_dir="$ARCH/$type"
+  mkdir -p "$dest_dir"
+  dest="$dest_dir/$name"
+  if [ -e "$dest" ]; then
+    base="${name%.*}"; suffix=""
+    [ "$base" != "$name" ] && suffix=".${name##*.}"
+    dest="$dest_dir/$base $(date +%Y%m%d-%H%M%S)$suffix"
+  fi
+
+  mv -n "$src" "$dest" && echo "$(date '+%F %T') $name -> $type/" >> "$LOG"
+done
+
+if [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 2000 ]; then
+  tail -1000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi
+# A non-zero exit makes the wrapper app show an error dialog.
+exit 0
