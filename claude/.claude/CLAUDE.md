@@ -79,6 +79,12 @@ Checking must never take hours. Target: about 25s after an edit, under 2 min bef
 - Fix a flaky test the first time it fails; never re-run until green.
 - Run at most 2 or 3 working sessions at once on this Mac, and close idle test browsers: overload made checks 5 to 50 times slower.
 
+# Machine health, HARD RULE, applies to every project/session (agreed 2026-11-06)
+- When a task is done, close any browser, dev server or Playwright/DevTools window you opened.
+- Never leave more than one Supabase stack running; stop it with `supabase stop` when finished.
+- Before heavy work (tests, builds, scans), check load with `sysctl -n vm.loadavg`; if above 20, warn me first.
+- Never start a full-disk scan during the day.
+
 # Working with worker sessions, HARD RULE, applies to every project/session (agreed 2026-10-14)
 When I hand work to another Claude session (a cmux worker or a subagent):
 - After sending a message to a worker, read its screen again and confirm it is working. A message sitting unsent in its input box does not count; press Enter again until it starts. Never say a worker "is doing X" before seeing it start.
