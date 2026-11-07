@@ -67,19 +67,22 @@ sync:
         exit 1
     fi
 
-# Re-apply all stow symlinks
+# Re-apply all stow symlinks; lists any package a real file blocks instead of stopping there
 link:
-    cd {{dotfiles}} && stow -v --restow bash git zsh dev p10k aliases
-    cd {{dotfiles}} && stow -v --no-folding --restow taskwarrior
-    cd {{dotfiles}} && stow -v --no-folding --restow claude
-    cd {{dotfiles}} && stow -v --no-folding --restow notes
-    stow -v --restow --target="{{env_var('HOME')}}/.config/zed"        --dir={{dotfiles}} zed
-    stow -v --restow --target="{{env_var('HOME')}}/.config/autostart"  --dir={{dotfiles}} autostart
-    cd {{dotfiles}} && stow -v --restow wezterm
-    cd {{dotfiles}} && stow -v --no-folding --restow ghostty
-    cd {{dotfiles}} && stow -v --no-folding --restow cmux
-    cd {{dotfiles}} && stow -v --no-folding --restow herdr
-    cd {{dotfiles}} && stow -v --restow startup
+    #!/usr/bin/env bash
+    cd {{dotfiles}}
+    failed=()
+    s() { stow -v --restow "$@" || failed+=("${@: -1}"); }
+    for p in bash git zsh dev p10k aliases wezterm; do s "$p"; done
+    for p in taskwarrior claude notes ghostty cmux herdr; do s --no-folding "$p"; done
+    mkdir -p "$HOME/.config/zed" && s --target="$HOME/.config/zed" zed
+    # Ubuntu only: GNOME autostart, the login launcher and the daily timer.
+    if [ "$(uname -s)" = Linux ]; then
+        mkdir -p "$HOME/.config/autostart" && s --target="$HOME/.config/autostart" autostart
+        s startup
+        s --no-folding systemd
+    fi
+    if [ ${#failed[@]} -gt 0 ]; then echo "Not linked, a real file is in the way (move it aside, rerun): ${failed[*]}"; exit 1; fi
 
 # Set up cmux on macOS: app, Ghostty look, sidebar, project colors, glow, human and the Claude Stop hook (safe to rerun)
 cmux:
