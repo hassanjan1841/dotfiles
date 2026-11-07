@@ -68,14 +68,6 @@
     ],
     "PreToolUse": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -n \"$CMUX_WORKSPACE_ID\" ] || { if [ \"$TOOL_NAME\" = \"AskUserQuestion\" ]; then if command -v osascript >/dev/null 2>&1; then osascript -e 'display notification \"⚠️ Input needed!\" with title \"Claude Code\"'; afplay /System/Library/Sounds/Funk.aiff; else notify-send 'Claude Code' '⚠️ Input needed!' --icon=dialog-question --urgency=critical && paplay /usr/share/sounds/freedesktop/stereo/complete.oga; fi; fi; }"
-          }
-        ]
-      },
-      {
         "matcher": "Glob|Grep",
         "hooks": [
           {
@@ -119,14 +111,6 @@
     "Stop": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "[ -n \"$CLAUDE_NO_NOTIFY\" ] || [ -n \"$CMUX_WORKSPACE_ID\" ] || osascript -e 'display notification \"Work completed! ✅\" with title \"Claude Code\"'"
-          },
-          {
-            "type": "command",
-            "command": "[ -n \"$CLAUDE_NO_NOTIFY\" ] || [ -n \"$CMUX_WORKSPACE_ID\" ] || afplay /System/Library/Sounds/Glass.aiff"
-          },
           {
             "type": "command",
             "command": "$HOME/dotfiles/bin/cmux-stop-settle",
