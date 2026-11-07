@@ -15,5 +15,7 @@
 - Files and Changes panels: open them from the command palette (cmd+shift+P), since the top bar is hidden.
 - Back to Herdr's own layout: ctrl+shift+L. Emergency reset: ctrl+alt+shift+escape.
 - After editing the sidebar, run `herdr-app check ~/.config/herdr-app/mods/spaces-tree`.
+- Herdr does not notice edits made here in dotfiles, because its files are links: run `touch -h ~/.config/herdr-app/mods/spaces-tree/main.js` (the edited file) to make it reload.
+- A working tab shows a pulsing dot, not Herdr's spinning ring: Herdr 0.1.13 draws animations at about 11 to 19 frames per second, which makes a ring jump (measured 2026-11-08, reported to Herdr).
 - Herdr can replace a link with a plain file when it saves; `just sync` copies it back into dotfiles and relinks.
 - Workers: `cw-new` and `cw-board` work in Herdr and cmux (see `claude/.claude/skills/workers/SKILL.md`).

@@ -43,7 +43,7 @@ This file is the map: read it instead of exploring. Facts were checked on 2026-1
 - `p10k`: `~/.p10k.zsh` (linked, generated; use `p10k configure`). `bash`: `~/.bashrc` (blocked, real file here).
 - `dev`: `~/.devrc` (not linked here): `PROJECT_PATH` (old speaklogic project), `NOTES_DIR`.
 - `claude`: `~/.claude` (CLAUDE.md, settings.json, statusline, session recipes, skills) and `~/.leader` (register guard). File-level links (`--no-folding`). Details below.
-- `herdr`: `~/.config/herdr-app` (linked): `layouts/cmux-style.json`, `mods/spaces-tree/{main.js,mod.json}`, `settings.json`. See docs/herdr.md.
+- `herdr`: `~/.config/herdr-app` (linked): `layouts/cmux-style.json`, `mods/spaces-tree/{main.js,mod.json}`, `settings.json`. See docs/herdr.md. Herdr does not hot-reload an edit made here: `touch -h` the linked file in `~/.config/herdr-app`, then `herdr-app check` the mod.
 - `cmux`: `~/.config/cmux/cmux.json` + `projects.example.json` (linked). `ghostty`: `~/.config/ghostty/config` (linked, read by cmux).
 - `wezterm`: `~/.wezterm.lua` (linked, older fallback). `zed`: target `~/.config/zed` (blocked, real `settings.json` there).
 - `taskwarrior`, `notes` (Obsidian settings and templates for `~/notes/hassanjan`): not linked here, tools not installed.

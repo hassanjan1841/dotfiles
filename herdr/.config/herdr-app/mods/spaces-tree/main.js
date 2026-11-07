@@ -460,7 +460,8 @@ export default class Spaces extends View {
         })
         .on_mouse_down("left", e => { if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(on || unseen ? t.foreground : t.muted).when(unseen, el => el.font_semibold()).child(name))
-        .when(c.status === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(11).flex_none().text_color(t.working).spin(900)))
+        // A slow pulse, not a spinning ring: Herdr draws these animations at a low, uneven rate, and a rotating arc shows every skipped frame as a jump.
+        .when(c.status === "working", el => el.child(div().size(7).rounded(4).flex_none().bg(t.working).loop("opacity", { from: 0.3, to: 1, period: 1600 })))
         .when(unseen, el => el.child(div().size(8).rounded(4).flex_none().bg(t[c.status])))
         .when(on, el => el.child(div().id(`tab-close-${c.id}`).flex_none().text_color(t.dim).hover(s => s.text_color(t.foreground))
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
