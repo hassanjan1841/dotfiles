@@ -1,6 +1,6 @@
 {
   "env": {
-    "CLAUDE_CODE_PLUGIN_DIRS": "/Users/hassanjan/.claude/dev-mods/e7d4e38b-bf57-4f51-a62e-dd7df524b3e3/worker-board:/Users/hassanjan/.claude/dev-mods/e7d4e38b-bf57-4f51-a62e-dd7df524b3e3/ship-state:/Users/hassanjan/.claude/dev-mods/e7d4e38b-bf57-4f51-a62e-dd7df524b3e3/clean-copy:/Users/hassanjan/.claude/dev-mods/e7d4e38b-bf57-4f51-a62e-dd7df524b3e3/verify-gate:/Users/hassanjan/.claude/dev-mods/e7d4e38b-bf57-4f51-a62e-dd7df524b3e3/context-guard:/Users/hassanjan/.claude/dev-mods/16562989-8b7a-4166-a98e-aba9b32efb77/desk-pet"
+    "CLAUDE_CODE_PLUGIN_DIRS": "/Users/hassanjan/.claude/dev-mods/e7d4e38b-bf57-4f51-a62e-dd7df524b3e3/worker-board:/Users/hassanjan/.claude/dev-mods/e7d4e38b-bf57-4f51-a62e-dd7df524b3e3/ship-state:/Users/hassanjan/.claude/dev-mods/e7d4e38b-bf57-4f51-a62e-dd7df524b3e3/clean-copy:/Users/hassanjan/.claude/dev-mods/e7d4e38b-bf57-4f51-a62e-dd7df524b3e3/verify-gate:/Users/hassanjan/.claude/dev-mods/e7d4e38b-bf57-4f51-a62e-dd7df524b3e3/context-guard:/Users/hassanjan/.claude/dev-mods/6782d6c3-fe7a-45ac-80a9-457ce11ebd25/robo-hud"
   },
   "permissions": {
     "allow": [
@@ -42,7 +42,6 @@
     ],
     "ask": []
   },
-  "model": "opus",
   "hooks": {
     "PostToolUse": [
       {
