@@ -396,6 +396,13 @@
       shell: "just --justfile {{ dotfiles_dir }}/Justfile cmux"
       ignore_errors: true
 
+    # Herdr is the main terminal on macOS since 2026-11-08; this links its layout, sidebar and settings (docs/herdr.md).
+    - name: Link Herdr setup (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      shell: "just --justfile {{ dotfiles_dir }}/Justfile herdr"
+      ignore_errors: true
+
     # ── startup.sh + GNOME autostart (Ubuntu only) ────────────────────────────
     - name: Stow startup script (Ubuntu)
       when: ansible_os_family == "Debian"

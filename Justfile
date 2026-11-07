@@ -50,6 +50,14 @@ sync:
     if [ -f "$f" ] && [ ! -L "$f" ]; then
         cp "$f" {{dotfiles}}/claude/.claude/settings.json && rm "$f" && (cd {{dotfiles}} && stow --no-folding --restow claude)
     fi
+    # Herdr can do the same to its links when it saves (settings, theme picks).
+    if [ -d "$HOME/.config/herdr-app" ]; then
+        for f in $(cd {{dotfiles}}/herdr && find .config -type f); do
+            t="$HOME/$f"
+            if [ -f "$t" ] && [ ! -L "$t" ]; then cp "$t" "{{dotfiles}}/herdr/$f" && rm "$t"; fi
+        done
+        (cd {{dotfiles}} && stow --no-folding --restow herdr)
+    fi
     cd {{dotfiles}} && git add -A
     cd {{dotfiles}} && git diff --cached --quiet || git commit -m "sync: $(date '+%Y-%m-%d %H:%M:%S')"
     if cd {{dotfiles}} && git push; then
@@ -70,6 +78,7 @@ link:
     cd {{dotfiles}} && stow -v --restow wezterm
     cd {{dotfiles}} && stow -v --no-folding --restow ghostty
     cd {{dotfiles}} && stow -v --no-folding --restow cmux
+    cd {{dotfiles}} && stow -v --no-folding --restow herdr
     cd {{dotfiles}} && stow -v --restow startup
 
 # Set up cmux on macOS: app, Ghostty look, sidebar, project colors, glow, human and the Claude Stop hook (safe to rerun)
@@ -108,6 +117,20 @@ cmux:
         print("Claude Stop hook: added to ~/.claude/settings.json")
     PY
     echo "cmux is set up. Next: grant human its macOS permissions, then run: human check (see docs/cmux.md)"
+
+# Link the Herdr setup (cmux-style layout, spaces-tree sidebar, settings). Install the Herdr app first. Safe to rerun.
+herdr:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{dotfiles}}
+    command -v stow >/dev/null || brew install stow
+    # Herdr writes its own settings.json on first launch; move real files aside so stow can link ours.
+    for f in $(cd herdr && find .config -type f); do
+        t="$HOME/$f"
+        if [ -e "$t" ] && [ ! -L "$t" ]; then mv "$t" "$t.bak-$(date +%Y%m%d-%H%M%S)"; echo "Backed up $t"; fi
+    done
+    stow -v --no-folding --restow herdr
+    if herdr-app do layout.switch --name cmux-style >/dev/null 2>&1; then echo "Herdr now shows the cmux-style layout"; else echo "Open Herdr, then press ctrl+shift+L until the cmux-style layout shows"; fi
 
 # Preview what Ansible would change without applying anything
 dry-run:

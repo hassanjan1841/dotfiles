@@ -5,7 +5,7 @@
 - Managed with GNU Stow + Ansible (`setup.yml`). Bootstrap: `bash <(curl -fsSL https://raw.githubusercontent.com/hassanjan1841/dotfiles/main/bootstrap.sh)`
 - Justfile commands: `just install` (full setup), `just link` (re-stow symlinks), `just sync` (commit+push), `just update` (pull+re-run ansible)
 
-## Terminal: cmux on macOS, WezTerm as fallback
+## Terminal: Herdr on macOS (since 2026-11-08, see docs/herdr.md), cmux and WezTerm as fallbacks
 - cmux (`brew install --cask cmux`) is the main terminal for Claude Code work: vertical workspace tabs, agent notifications, built-in browser pane
 - cmux look comes from `~/dotfiles/ghostty/.config/ghostty/config` (stowed to `~/.config/ghostty/config`); `cmux reload-config` applies edits live
 - Driving cmux from Claude: `~/.claude/cmux-sessions.md`; sidebar project headers and colors: run `cmux-tidy` in a cmux tab

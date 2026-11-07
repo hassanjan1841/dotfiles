@@ -17,7 +17,8 @@ Personal dotfiles for Ubuntu and macOS, managed with [GNU Stow](https://www.gnu.
 | `taskwarrior` | `~/.task/` + `~/.timewarrior/` config |
 | `wezterm` | `~/.wezterm.lua` (fallback terminal) |
 | `ghostty` | `~/.config/ghostty/config` (theme/font for cmux) |
-| `cmux` | `~/.config/cmux/cmux.json` (sidebar look) + `projects.example.json`; setup in [docs/cmux.md](docs/cmux.md) |
+| `herdr` | `~/.config/herdr-app/` layout, sidebar mod and settings (main terminal on macOS); setup in [docs/herdr.md](docs/herdr.md) |
+| `cmux` | `~/.config/cmux/cmux.json` (sidebar look) + `projects.example.json` (fallback terminal); setup in [docs/cmux.md](docs/cmux.md) |
 | `zed` | `~/.config/zed/settings.json` + `themes/` |
 | `claude` | `~/.claude/settings.json` + `CLAUDE.md` |
 | `autostart` | `~/.config/autostart/startup.desktop` |
@@ -94,14 +95,18 @@ Logs at `~/.local/share/startup.log`. On macOS use `startup-mac.sh` (System Sett
 
 GitHub Actions runs the Ansible playbook in `--check` (dry run) mode on every push to `main`, on both `ubuntu-latest` and `macos-latest`.
 
-## cmux (macOS terminal)
+## Herdr (macOS terminal)
+
+Install the Herdr app, then `just herdr` links the cmux-style layout, the sidebar that lists each space's tabs, and Herdr's settings. Details: [docs/herdr.md](docs/herdr.md).
+
+## cmux (fallback macOS terminal)
 
 `just cmux` sets up cmux, the Ghostty look, project colors and groups, the screen glow, the `human` GUI tool and the Claude Stop hook. It is safe to rerun. Details and macOS permissions: [docs/cmux.md](docs/cmux.md).
 
 ## Installed tools (via Ansible)
 
 - **Shell:** zsh, Oh My Zsh, Powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting
-- **Terminal:** cmux (macOS, main), WezTerm (fallback), just
+- **Terminal:** Herdr (macOS, main, installed by hand), cmux and WezTerm (fallbacks), just
 - **Node:** NVM, Node LTS, npm global tools (claude, vercel, typescript, pnpm, biome, opencode)
 - **JS runtime:** Bun
 - **Python:** uv, aider-chat
