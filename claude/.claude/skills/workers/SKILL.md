@@ -1,11 +1,13 @@
 ---
 name: workers
-description: Start, watch and check Claude worker sessions in cmux the same way every time. Use whenever you are a leader handing work to another Claude session, starting a worker, asking "what is going on", "is the worker working", "status of the workers", "which workers are idle", or before reporting a worker's progress. Uses the dotfiles scripts cw-new and cw-board.
+description: Start, watch and check Claude worker sessions in Herdr (or cmux) the same way every time. Use whenever you are a leader handing work to another Claude session, starting a worker, asking "what is going on", "is the worker working", "status of the workers", "which workers are idle", or before reporting a worker's progress. Uses the dotfiles scripts cw-new and cw-board.
 ---
 
 # Workers: start them right, watch them always
 
-Two scripts in `~/dotfiles/bin` (on PATH): `cw-new` starts a worker, `cw-board` shows every worker's real state. Use them; do not hand-roll cmux commands for these jobs.
+Two scripts in `~/dotfiles/bin` (on PATH): `cw-new` starts a worker, `cw-board` shows every worker's real state. Use them; do not hand-roll Herdr or cmux commands for these jobs.
+
+Both work in Herdr and cmux: inside Herdr they use `hc`/`herdr-app`, inside cmux the cmux CLI. `CW_BACKEND=herdr|cmux` forces one. In Herdr the worker opens as a background tab in the leader's space (or `--space NAME`), so Hassan's screen never jumps; its address is a terminal id like `t19` (read it with `hc read t19`, message it with `hc send t19 "..."`).
 
 ## Start a worker: `cw-new`
 ```
@@ -16,11 +18,11 @@ cw-new --name "K20 Small parts" --dir ~/Passenger-ds-K20 --branch chore/design-s
        --baseline-to ~/Passenger-research/tailwind-migration/screenshots-K20 \
        --model claude-fable-5-1 --brief ~/Passenger-worker-briefs/K20.md
 ```
-It makes the worktree from `--base` (default origin/staging), its own free port and test baseline, runs npm ci, opens the cmux workspace in the project's group and colour (`cmux-autocolor`), turns on `/remote-control`, sends the brief, and confirms each step on screen. Write the brief file first. Name the workspace with the tracker id first ("K20 ..."), so the board can find its tracker row.
+It makes the worktree from `--base` (default origin/staging), its own free port and test baseline, runs npm ci, opens the worker (Herdr: background tab started with `claude --remote-control`; cmux: workspace in the project's group and colour), sends the brief, and confirms each step on screen. Write the brief file first. Name the workspace with the tracker id first ("K20 ..."), so the board can find its tracker row.
 
 ## Watch: `cw-board`
 - One look: `cw-board --match '~/Passenger-*' --tracker ~/Passenger-research/tailwind-migration/TRACKER.md --app passenger-app`
-- Live pane for the human: the same with `--watch 60`, in a pane of the leader's workspace.
+- Live pane for the human: the same with `--watch 60`, in a pane of the leader's tab (Herdr) or workspace (cmux).
 - Leader background watch: the same with `--alerts 60`, run with the Monitor tool (timeout 30 minutes, re-arm when it expires), so each new flag arrives as its own notification. A plain run_in_background only notifies when it ends.
 
 Flags and what to do:
@@ -37,4 +39,4 @@ The global CLAUDE.md worker rules still apply: confirm a worker started after ev
 A follow-up or fix to finished work gets a NEW row (for example K20b), never a log line under a DONE row: the board only flags REVIEW rows, so a job without its own row finishes silently.
 
 ## Close a worker
-When its PR is merged and the board shows dirty 0 and +0: close its cmux workspace, then `git worktree remove` its folder (save any uncommitted work as a patch in the project's research folder first).
+When its PR is merged and the board shows dirty 0 and +0: close its tab (Herdr: `hc kill <t>`) or cmux workspace, then `git worktree remove` its folder (save any uncommitted work as a patch in the project's research folder first).

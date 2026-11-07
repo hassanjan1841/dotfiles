@@ -16,7 +16,8 @@
 Two tools, and the target decides which are even possible.
 
 - **Native app** (Blender, Cursor, Finder, Figma desktop, a terminal, anything not a web page): use `human`. Don't ask, Playwright cannot drive a native app, so there is no choice to offer.
-- **cmux** (main terminal since 2026-10-03; opening/switching/driving a terminal session): use the **`cmux` CLI** (`new-workspace`/`new-pane`/`read-screen`/`send`/`send-key`/`tree`, addressing by ref), NOT `human`/keystrokes. It only accepts commands from processes started inside cmux, so drive it from a Claude session running in a cmux tab; never loosen its socket mode. Full recipe: [cmux-sessions.md](./cmux-sessions.md).
+- **Herdr** (main terminal since 2026-11-08; opening/switching/driving a terminal session or tab): use the **`herdr-app` CLI** (`do tab.new`/`ls`/`status`/`shot`) and **`hc`** (`run`/`read`/`send`/`keys`/`wait`, addressing terminals as t7), NOT `human`/keystrokes. Open anything for a worker in the background (`hc run --bg` with herdr labels, as `cw-new` does), never with a command that switches Hassan's view. Its interface is files in `~/.config/herdr-app` (my layout `cmux-style`, sidebar mod `spaces-tree`).
+- **cmux** (fallback terminal, main from 2026-10-03 to 2026-11-08; opening/switching/driving a terminal session): use the **`cmux` CLI** (`new-workspace`/`new-pane`/`read-screen`/`send`/`send-key`/`tree`, addressing by ref), NOT `human`/keystrokes. It only accepts commands from processes started inside cmux, so drive it from a Claude session running in a cmux tab; never loosen its socket mode. Full recipe: [cmux-sessions.md](./cmux-sessions.md).
 - **WezTerm** (fallback terminal): use **`wezterm cli`** (`spawn`/`send-text`/`get-text`/`list`, addressing panes by id), NOT `human`/keystrokes, macOS composes Option+key into characters so WezTerm's Alt/workspace bindings never fire, and blind keys land in the wrong session. Full recipe: [wezterm-sessions.md](./wezterm-sessions.md).
 - **Web page**: both work, so STOP AND ASK first, headless Playwright MCP, or `human` with a visible cursor? Never pick for me.
 - Never use claude-in-chrome or Chrome DevTools MCP to *drive* a flow. Chrome DevTools MCP is for observing only: console, network, performance, LCP.
@@ -86,7 +87,7 @@ Checking must never take hours. Target: about 25s after an edit, under 2 min bef
 - Never start a full-disk scan during the day.
 
 # Working with worker sessions, HARD RULE, applies to every project/session (agreed 2026-10-14)
-When I hand work to another Claude session (a cmux worker or a subagent):
+When I hand work to another Claude session (a Herdr or cmux worker, or a subagent):
 - After sending a message to a worker, read its screen again and confirm it is working. A message sitting unsent in its input box does not count; press Enter again until it starts. Never say a worker "is doing X" before seeing it start.
 - In the same turn, start a background watch (Bash run_in_background until-loop) that ends when the worker finishes: its tracker row turns REVIEW or DONE, its output file appears, or its PR opens.
 - When the watch fires, check the result myself (look at the picture, run the checks) and report to Hassan at once, sending pictures with SendUserFile. Never wait for him to ask "how is it going".

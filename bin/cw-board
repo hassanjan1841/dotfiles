@@ -2,13 +2,14 @@
 """cw-board: one table of every Claude worker in a project, and flags for anything that needs the leader.
 
   cw-board --match '~/Passenger-*' [--base origin/staging] [--tracker FILE] [--app passenger-app]
-  cw-board ... --watch 60        redraw every 60 seconds (run it in a cmux pane)
+  cw-board ... --watch 60        redraw every 60 seconds (run it in a Herdr or cmux pane)
   cw-board ... --alerts 60       print only NEW flags, one line each (for a leader's background watch)
 
-A worker is a cmux workspace whose folder matches --match. The tracker row is found by the first word of the
-workspace title (for example "K16") in a markdown table: | K16 | ... | STATUS | ...
+A worker is a Claude terminal in a Herdr tab (or a cmux workspace) whose folder matches --match. The tracker row is
+found by the first word of the tab or workspace title (for example "K16") in a markdown table: | K16 | ... | STATUS |
+Backend: Herdr inside Herdr or when cmux is not in use, cmux inside cmux. CW_BACKEND=herdr|cmux forces one.
 """
-import argparse, fnmatch, json, os, re, subprocess, sys, time
+import argparse, fnmatch, json, os, re, shutil, subprocess, sys, time
 
 SPIN = re.compile(r"(esc to interrupt|ctrl\+b to run in background|[✻✶✽✢·*] \w[^\n]*… \(|Running \d+ shell)")
 
@@ -20,6 +21,26 @@ def run(cmd, cwd=None, timeout=50):
         return p.stdout if p.returncode == 0 else ""
     except subprocess.TimeoutExpired:
         return ""
+
+
+def backend():
+    if os.environ.get("CW_BACKEND"):
+        return os.environ["CW_BACKEND"]
+    if os.environ.get("HC_TERMINAL_ID"):
+        return "herdr"
+    if os.environ.get("CMUX_WORKSPACE_ID"):
+        return "cmux"
+    return "herdr" if shutil.which("hc") else "cmux"
+
+
+BACKEND = backend()
+
+
+def hc_json(*a):
+    try:
+        return json.loads(run(["hc", *a]) or "{}")
+    except json.JSONDecodeError:
+        return {}
 
 
 def cmux(*a):
@@ -67,10 +88,15 @@ def worker(w, args):
     env = os.path.join(cwd, args.app or "", ".env.local")
     port = next((l.split("=", 1)[1].strip() for l in open(env) if l.startswith("APP_PORT=")), "") if os.path.exists(env) else ""
     up = bool(port) and bool(run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"]))
-    surf = surface_of(w["ref"])
-    text = cmux("read-screen", "--surface", surf) if surf else ""
+    if BACKEND == "herdr":
+        surf = w["ref"]
+        text = run(["hc", "read", "--lines", "60", surf])
+    else:
+        surf = surface_of(w["ref"])
+        text = cmux("read-screen", "--surface", surf) if surf else ""
     lines = [l for l in text.splitlines() if l.strip()]
-    working = any(SPIN.search(l) and " done " not in l for l in lines[-30:])
+    # Herdr knows the agent's own status once it has taken a turn; before that, read the screen.
+    working = w.get("status") == "working" or any(SPIN.search(l) and " done " not in l for l in lines[-30:])
     # cmux can time out under load: an unread screen is unknown, never idle, so it raises no flag.
     if not lines:
         return dict(ref=w["ref"], surface=surf or "?", title=title, state="unknown", status=tracker_status(args.tracker, title.split()[0] if title else ""), branch=branch, dirty=dirty, ahead=ahead, behind=behind, port=f":{port}" if port else "-", flags=[])
@@ -93,7 +119,29 @@ def worker(w, args):
                 port=f":{port}{'' if up else ' down'}" if port else "-", flags=flags)
 
 
+def collect_herdr(args):
+    pat = os.path.expanduser(args.match)
+    me = os.environ.get("HC_TERMINAL_ID")
+    # The leader's whole tab is left out, so a --watch pane beside it is not counted either.
+    my_tab = hc_json("get", me).get("labels", {}).get("herdr.tab") if me else None
+    out = []
+    for t in hc_json("ls", "--json").get("terminals", []):
+        if t.get("state") != "live" or t["address"] == me or not fnmatch.fnmatch(t.get("cwd") or "", pat):
+            continue
+        info = hc_json("get", t["address"])
+        fg = " ".join((info.get("foreground") or {}).get("argv") or [])
+        if "claude" not in (t.get("agent") or "") and "claude" not in fg:
+            continue
+        if my_tab and info.get("labels", {}).get("herdr.tab") == my_tab:
+            continue
+        title = (t.get("where") or "").split(" / ", 1)[-1]
+        out.append(worker(dict(ref=t["address"], current_directory=t["cwd"], title=title, status=t.get("status")), args))
+    return out
+
+
 def collect(args):
+    if BACKEND == "herdr":
+        return collect_herdr(args)
     data = json.loads(cmux("list-workspaces", "--json") or "[]")
     ws = data if isinstance(data, list) else data.get("workspaces", [])
     pat = os.path.expanduser(args.match)

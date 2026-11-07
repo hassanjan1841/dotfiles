@@ -1,29 +1,40 @@
 #!/usr/bin/env bash
-# cw-new: start a Claude worker in its own git worktree and cmux workspace, the same way every time.
+# cw-new: start a Claude worker in its own git worktree and a Herdr tab (or cmux workspace), the same way every time.
 #
 #   cw-new --name "K20 Small parts" --dir ~/Passenger-ds-K20 --branch chore/k20-small-parts \
 #          --repo ~/Passenger-ds-B [--base origin/staging] [--app passenger-app] [--port 3107] \
 #          [--env-from ~/Passenger-ds-B/passenger-app/.env.local] [--baseline-from DIR --baseline-to DIR] \
-#          [--model claude-fable-5-1] [--brief ~/Passenger-worker-briefs/K20.md]
+#          [--model claude-fable-5-1] [--brief ~/Passenger-worker-briefs/K20.md] [--space "Externiture Passenger"]
+#
+# Backend: Herdr when run inside Herdr (or when cmux is not in use), cmux inside cmux. CW_BACKEND=herdr|cmux forces one.
+# Herdr: the worker is a tab in --space (default: the leader's own space).
 #
 # Steps: worktree (new or reused if clean), .env.local with its own APP_PORT/APP_URL/VISUAL_DIR, test
-# baseline copy, npm ci, cmux workspace in the project's group and colour (cmux-autocolor), /remote-control,
-# then the brief. Each send is checked on screen, because cmux can drop or queue keys under load.
+# baseline copy, npm ci, the worker's tab (Herdr) or workspace in the project's group and colour (cmux),
+# /remote-control, then the brief. Each send is checked on screen, because keys can drop under load.
 set -euo pipefail
 
-name= dir= branch= repo= base=origin/staging app= port= envfrom= blfrom= blto= model= brief=
+name= dir= branch= repo= base=origin/staging app= port= envfrom= blfrom= blto= model= brief= space=
 while [ $# -gt 0 ]; do
   case "$1" in
     --name) name=$2;; --dir) dir=$2;; --branch) branch=$2;; --repo) repo=$2;; --base) base=$2;;
     --app) app=$2;; --port) port=$2;; --env-from) envfrom=$2;; --baseline-from) blfrom=$2;;
-    --baseline-to) blto=$2;; --model) model=$2;; --brief) brief=$2;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0;;
+    --baseline-to) blto=$2;; --model) model=$2;; --brief) brief=$2;; --space) space=$2;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0;;
     *) echo "cw-new: unknown option $1" >&2; exit 2;;
   esac
   shift 2
 done
 for v in name dir branch repo; do [ -n "${!v}" ] || { echo "cw-new: --$v is required" >&2; exit 2; }; done
 export CMUX_QUIET=1
+
+backend=${CW_BACKEND:-}
+if [ -z "$backend" ]; then
+  if [ -n "${HC_TERMINAL_ID:-}" ]; then backend=herdr
+  elif [ -n "${CMUX_WORKSPACE_ID:-}" ]; then backend=cmux
+  elif command -v herdr-app >/dev/null; then backend=herdr
+  else backend=cmux; fi
+fi
 
 # cmux answers slowly when the machine is busy: retry instead of failing or double-sending.
 c() { local out i; for i in 1 2 3 4 5; do out=$(perl -e 'alarm 50; exec @ARGV' cmux "$@" 2>&1) && ! grep -q "timed out" <<<"$out" && { printf '%s\n' "$out"; return 0; }; sleep 6; done; printf '%s\n' "$out" >&2; return 1; }
@@ -49,6 +60,60 @@ if [ -n "$envfrom" ]; then
 fi
 if [ -n "$blfrom" ] && [ -n "$blto" ] && [ ! -e "$blto" ]; then echo "3/7 baseline"; cp -R "$blfrom" "$blto"; fi
 if [ -f "$appdir/package-lock.json" ]; then echo "4/7 npm ci"; (cd "$appdir" && npm ci --no-audit --no-fund >/dev/null); fi
+
+if [ "$backend" = herdr ]; then
+  echo "5/7 tab (herdr)"
+  js() { python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
+  space_id=
+  if [ -n "$space" ]; then
+    space_id=$(herdr-app ls | SPACE="$space" js 'next((x["id"] for x in d["spaces"] if x["name"]==__import__("os").environ["SPACE"]), "")')
+    [ -n "$space_id" ] || { echo "cw-new: no Herdr space named $space" >&2; exit 1; }
+  elif [ -n "${HC_TERMINAL_ID:-}" ]; then
+    space_id=$(hc get "$HC_TERMINAL_ID" | js 'd.get("labels",{}).get("herdr.space","")')
+  fi
+  # Opened in the background, so whoever is typing in the leader keeps their screen and keys.
+  # A label with an id Herdr has not seen becomes a new tab (or space). The shell is interactive:
+  # only a Claude typed into one reports done/blocked to Herdr.
+  new_space=
+  [ -n "$space_id" ] || { space_id=sp$(openssl rand -hex 16); new_space=1; }
+  term=$(hc run --bg --keep --outlive-parent --json --cwd "$dir" --label "herdr.space=$space_id" \
+         --label "herdr.tab=tb$(openssl rand -hex 16)" -- zsh -il | js 'd.get("address","")')
+  [ -n "$term" ] || { echo "cw-new: hc did not start the worker terminal" >&2; exit 1; }
+  pause 2
+  labels=$(hc get "$term")
+  herdr-app do tab.rename --id "$(js 'd["labels"]["herdr.tab"]' <<<"$labels")" --name "$name" >/dev/null
+  [ -z "$new_space" ] || herdr-app do space.rename --id "$(js 'd["labels"]["herdr.space"]' <<<"$labels")" --name "$name" >/dev/null
+  screen_has() { hc read --lines 80 "$term" 2>/dev/null | grep -qE "$1"; }
+  hsend() { # text, pattern that proves it landed; reads before any resend so nothing is sent twice
+    local i
+    for i in 1 2 3; do
+      hc send "$term" "$1" >/dev/null 2>&1 || true; pause 10
+      screen_has "$2" && return 0
+    done
+    echo "cw-new: could not confirm on $term: $1" >&2; return 1
+  }
+  pause 3
+  # Remote control goes on the launch line: a pasted /remote-control arrives as chat text, not a command.
+  hc send "$term" "claude --remote-control $(printf %q "$name")${model:+ --model $model}" >/dev/null
+  now() { hc read --lines 40 "$term" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -12; }
+  for i in $(seq 30); do
+    if now | grep -q "trust this folder"; then
+      # A new worktree is our own repo: move the selection to "Yes" (its place varies), then confirm.
+      if now | grep -qE "❯ *([0-9]\. )?Yes, I trust"; then hc keys "$term" enter >/dev/null; else hc keys "$term" down >/dev/null; fi
+      pause 2; continue
+    fi
+    now | grep -qE "auto mode|for shortcuts|bypass permissions" && break; pause 4
+  done
+  echo "6/7 remote control"
+  now | grep -qiE "remote control|remote-control" || echo "cw-new: remote control not confirmed on $term, check it" >&2
+  if [ -n "$brief" ]; then
+    echo "7/7 brief"
+    # The launch already put output on screen, so only the brief's own path proves it landed.
+    hsend "Read $brief in full and follow it exactly. Do not push." "$(basename "$brief")"
+  fi
+  echo "OK $name: herdr $term dir=$dir branch=$branch port=${port:-none}"
+  exit 0
+fi
 
 echo "5/7 workspace"
 ref=$(c new-workspace --name "$name" --cwd "$dir" --command "claude${model:+ --model $model}" --focus false | grep -oE 'workspace:[0-9]+' | head -1)
