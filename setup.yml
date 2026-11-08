@@ -131,7 +131,7 @@
       when: ansible_os_family == "Darwin"
       become: false
       community.general.homebrew_cask:
-        name: [zed, copyq]
+        name: [zed, copyq, rectangle]
         state: present
 
     # ── Google Chrome (Ubuntu) ────────────────────────────────────────────────
@@ -401,6 +401,13 @@
       when: ansible_os_family == "Darwin"
       become: false
       shell: "just --justfile {{ dotfiles_dir }}/Justfile herdr"
+      ignore_errors: true
+
+    # Rectangle is the window tiler; this loads its saved settings from rectangle/ and starts it.
+    - name: Set up Rectangle (macOS)
+      when: ansible_os_family == "Darwin"
+      become: false
+      shell: "just --justfile {{ dotfiles_dir }}/Justfile rectangle"
       ignore_errors: true
 
     # ── startup.sh + GNOME autostart (Ubuntu only) ────────────────────────────

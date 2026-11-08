@@ -107,6 +107,7 @@ Install the Herdr app, then `just herdr` links the cmux-style layout, the sideba
 
 - **Shell:** zsh, Oh My Zsh, Powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting
 - **Terminal:** Herdr (macOS, main, installed by hand), cmux and WezTerm (fallbacks), just
+- **Window tiling:** Rectangle (macOS; `just rectangle` loads its saved settings, `ctrl+opt+arrows` to tile)
 - **Node:** NVM, Node LTS, npm global tools (claude, vercel, typescript, pnpm, biome, opencode)
 - **JS runtime:** Bun
 - **Python:** uv, aider-chat

@@ -135,6 +135,25 @@ herdr:
     stow -v --no-folding --restow herdr
     if herdr-app do layout.switch --name cmux-style >/dev/null 2>&1; then echo "Herdr now shows the cmux-style layout"; else echo "Open Herdr, then press cmd+shift+L until the cmux-style layout shows"; fi
 
+# Rectangle (window tiling, macOS): install, load the saved settings from rectangle/, start it. Safe to rerun.
+rectangle:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ "$(uname -s)" = Darwin ] || { echo "Rectangle is macOS only."; exit 0; }
+    [ -d /Applications/Rectangle.app ] || brew install --cask rectangle
+    osascript -e 'quit app "Rectangle"' 2>/dev/null || true
+    defaults import com.knollsoft.Rectangle {{dotfiles}}/rectangle/com.knollsoft.Rectangle.plist
+    open -a Rectangle
+    echo "Rectangle is running with the saved settings. New Mac: allow it in System Settings > Privacy & Security > Accessibility."
+
+# Save Rectangle's current settings into rectangle/ (then commit them)
+rectangle-save:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Update-check and version bookkeeping change on every launch, so they stay out of git.
+    defaults export com.knollsoft.Rectangle - | python3 -c 'import plistlib,sys; d=plistlib.loads(sys.stdin.buffer.read()); sys.stdout.buffer.write(plistlib.dumps({k:v for k,v in d.items() if not k.startswith("SU") and k not in ("lastVersion","installVersion")}))' > {{dotfiles}}/rectangle/com.knollsoft.Rectangle.plist
+    echo "Saved to rectangle/com.knollsoft.Rectangle.plist"
+
 # Preview what Ansible would change without applying anything
 dry-run:
     ansible-playbook {{dotfiles}}/setup.yml --check --diff -i localhost, --connection local

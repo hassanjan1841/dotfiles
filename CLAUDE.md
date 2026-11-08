@@ -15,13 +15,14 @@ This file is the map: read it instead of exploring. Facts were checked on 2026-1
 ## Pushing
 - Remote: `https://github.com/hassanjan1841/dotfiles.git`, branch `main`, commits go straight to `main` (no PRs).
 - GitHub only accepts `hassanjan1841`. The active gh account is usually `hassanjanext` (403). SSH has no key on GitHub (fails).
-- Claude cannot switch accounts itself (blocked). Commit, then give Hassan this to run:
-  `! gh auth switch -u hassanjan1841 && git -C ~/dotfiles push origin main; gh auth switch -u hassanjanext`
+- Hassan's standing OK (2026-11-08): commit and push yourself, do not ask. Push with:
+  `gh auth switch -u hassanjan1841 && git -C ~/dotfiles push origin main; gh auth switch -u hassanjanext` (always switch back).
 - Every push to `main` runs CI (below).
 
 ## just commands (`Justfile`)
 - `just install`: Ansible playbook (asks for sudo once). `just update`: `git pull`, then install.
 - `just link`: restows every package; Ubuntu-only ones run on Linux only; ends with a list of packages a real file blocked.
+- `just rectangle`: installs Rectangle (window tiling), loads `rectangle/com.knollsoft.Rectangle.plist`, starts it. `just rectangle-save`: saves its current settings there (commit after).
 - `just herdr`: links the Herdr package (backs up real files first) and switches to the cmux-style layout.
 - `just cmux`: installs cmux, links ghostty and cmux, builds `glow` and `human`, adds the cmux Stop hook to Claude settings.
 - `just sync`: pulls back replaced Claude/Herdr links, then `git add -A`, timestamp commit, push (push fails as `hassanjanext`).
@@ -32,7 +33,7 @@ This file is the map: read it instead of exploring. Facts were checked on 2026-1
 ## New machine
 1. `bash <(curl -fsSL https://raw.githubusercontent.com/hassanjan1841/dotfiles/main/bootstrap.sh)`: sudo once, Homebrew (macOS) or apt, git/ansible/just, clones to `~/dotfiles`, runs `just install` then `just link`.
 2. Create `~/.secrets` (TAVILY_API_KEY, RESTIC_PASSWORD, NTFY_TOPIC).
-3. macOS: install the Herdr app by hand, open it once, run `just herdr`. Grant `human` its permissions (docs/cmux.md).
+3. macOS: install the Herdr app by hand, open it once, run `just herdr`. Grant `human` and Rectangle Accessibility (System Settings > Privacy & Security).
 4. Run `bash ~/dotfiles/security/install.sh` (malscan; not part of `just install`).
 - `setup.yml`: brew formulae and casks (macOS) or apt repos (Ubuntu), NVM + Node LTS, global npm (claude-code, vercel, typescript, pnpm, biome, lighthouse, opencode-ai, bitwarden cli, tldr), Bun, uv, Oh My Zsh + plugins + powerlevel10k, pre-commit, `~/notes` folders, stows, the daily job. Most tasks have `ignore_errors: true`, so a green run can hide failures.
 
@@ -63,6 +64,7 @@ This file is the map: read it instead of exploring. Facts were checked on 2026-1
 - WezTerm: older fallback, still linked.
 
 ## Tools (`bin/` is on PATH; not stowed)
+- Rectangle: window tiling (`ctrl+opt` shortcuts), installed by setup.yml, settings in `rectangle/`; macOS drag-to-edge tiling is turned off in its favour.
 - `cw-new`, `cw-board`: start and watch Claude workers; Herdr or cmux, picked automatically, `CW_BACKEND=herdr|cmux` forces one. Herdr workers open as background tabs.
 - `human`: wrapper that pings `glow`, then runs `human-input/human` (Swift binary, built by `just cmux` or `human-input/build.sh`; gitignored). `human-do` and `wa-send` link into `human-input/`. Read `human-input/HANDOFF.md` before changing it; its push and machine notes are old.
 - `glow`: screen-edge "Claude is using your Mac" overlay; `glow on|off|status|test`; source `glow/glow.swift`, binary gitignored.

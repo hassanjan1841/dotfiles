@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>allowAnyShortcut</key>
+	<true/>
+	<key>alternateDefaultShortcuts</key>
+	<true/>
+	<key>internalTilingNotified</key>
+	<true/>
+	<key>landscapeSnapAreas</key>
+	<string>[7,{"compound":-4},6,{"action":13},3,{"action":16},4,{"compound":-2},8,{"action":14},1,{"action":15},2,{"action":2},5,{"compound":-3}]</string>
+	<key>launchOnLogin</key>
+	<true/>
+	<key>subsequentExecutionMode</key>
+	<integer>1</integer>
+	<key>wasWelcomeDisplayed</key>
+	<true/>
+</dict>
+</plist>
