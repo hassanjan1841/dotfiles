@@ -133,7 +133,7 @@ herdr:
         if [ -e "$t" ] && [ ! -L "$t" ]; then mv "$t" "$t.bak-$(date +%Y%m%d-%H%M%S)"; echo "Backed up $t"; fi
     done
     stow -v --no-folding --restow herdr
-    if herdr-app do layout.switch --name cmux-style >/dev/null 2>&1; then echo "Herdr now shows the cmux-style layout"; else echo "Open Herdr, then press ctrl+shift+L until the cmux-style layout shows"; fi
+    if herdr-app do layout.switch --name cmux-style >/dev/null 2>&1; then echo "Herdr now shows the cmux-style layout"; else echo "Open Herdr, then press cmd+shift+L until the cmux-style layout shows"; fi
 
 # Preview what Ansible would change without applying anything
 dry-run:
