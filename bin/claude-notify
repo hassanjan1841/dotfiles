@@ -1,52 +1,39 @@
 #!/bin/bash
-# Claude Code hook: adds a card to the top-right stack, plus a sound and a macOS banner, when Claude is done or needs you.
-# Click a card (or the banner): Herdr opens on the terminal that finished. Skipped when Herdr is already in front.
+# Claude Code hook. Drops a marker for the Herdr terminal this session runs in; the overlay daemon
+# (notify-flash) shows a card only while Herdr says that terminal is finished or blocked.
 # Usage in hooks: claude-notify done | needs | clear
+# Sessions outside Herdr (no HC_TERMINAL_ID) are ignored: headless runs and background jobs have nowhere to jump to.
 kind="${1:-done}"
+qdir="$HOME/.config/claude-notify/queue"
+key=$(printf '%s' "${HC_TERMINAL_ID:-}" | tr -c 'A-Za-z0-9_-' '_')
 
-# A session that starts working again no longer needs its card.
+# a session that gets a new prompt is working again
 if [ "$kind" = "clear" ]; then
-  [ -n "$HC_TERMINAL_ID" ] && rm -f "$HOME/.config/claude-notify/queue/$(printf '%s' "$HC_TERMINAL_ID" | tr -c 'A-Za-z0-9_-' '_').json"
+  [ -n "$key" ] && rm -f "$qdir/$key.json"
   exit 0
 fi
 
+[ -z "$key" ] && exit 0
 input=$(cat)
-
-front=$(osascript -e 'tell application "System Events" to get bundle identifier of first application process whose frontmost is true' 2>/dev/null)
-[ "$front" = "dev.herdr.app" ] && [ -z "$CLAUDE_NOTIFY_FORCE" ] && exit 0
-
-qdir="$HOME/.config/claude-notify/queue"
 mkdir -p "$qdir"
 
-# prints "<project>\t<body>" and writes the card file
-IFS=$'\t' read -r project body < <(printf '%s' "$input" | KIND="$kind" QDIR="$qdir" python3 -I -c '
-import json, os, re, sys, time
+printf '%s' "$input" | KIND="$kind" QDIR="$qdir" KEY="$key" TERMINAL="$HC_TERMINAL_ID" python3 -I -c '
+import json, os, sys, time
 try:
     d = json.load(sys.stdin)
 except Exception:
     d = {}
 kind = os.environ["KIND"]
-project = os.path.basename(d.get("cwd", "")) or "claude"
-msg = (d.get("message") or "").replace("\n", " ").replace("\t", " ")
-terminal = os.environ.get("HC_TERMINAL_ID", "")
-title = "Claude needs you" if kind == "needs" else "Claude is done"
-body = (msg or "Waiting for your answer") if kind == "needs" else "Finished in " + project
-key = re.sub(r"[^A-Za-z0-9_-]", "_", terminal or project)
-with open(os.path.join(os.environ["QDIR"], key + ".json"), "w") as f:
-    json.dump({"title": title, "project": project, "body": body, "kind": kind, "terminal": terminal, "time": time.time()}, f)
-print(project + "\t" + body)
-')
+# "waiting for your input" after a minute of silence is not a request; the finished card already covers it
+if kind == "needs" and d.get("notification_type") == "idle_prompt":
+    sys.exit(0)
+msg = (d.get("message") or "").replace("\n", " ")[:140]
+with open(os.path.join(os.environ["QDIR"], os.environ["KEY"] + ".json"), "w") as f:
+    json.dump({"terminal": os.environ["TERMINAL"], "kind": kind, "time": time.time(), "message": msg, "cwd": d.get("cwd", "")}, f)
+' || exit 0
+[ -f "$qdir/$key.json" ] || exit 0
 
 bin="$(cd "$(dirname "$0")/../notify-flash" && pwd)"
 [ -x "$bin/notify-flash" ] || swiftc -O "$bin/flash.swift" -o "$bin/notify-flash" 2>/dev/null
 pgrep -f "notify-flash/notify-flash" >/dev/null || ( nohup "$bin/notify-flash" >/dev/null 2>&1 & )
-
-if [ "$kind" = "needs" ]; then title="Claude needs you"; sound="Sosumi"; else title="Claude is done"; sound="Glass"; fi
-
-go="open -b dev.herdr.app"
-[ -n "$HC_TERMINAL_ID" ] && go="$HOME/.local/bin/herdr-app do pane.focus --terminal $HC_TERMINAL_ID; $go"
-terminal-notifier -title "$title" -subtitle "$project" -message "$body" \
-  -sound "$sound" -group "claude-${HC_TERMINAL_ID:-$project}" -execute "$go" >/dev/null 2>&1
-
-afplay "/System/Library/Sounds/$sound.aiff" >/dev/null 2>&1 &
 exit 0

@@ -1,6 +1,7 @@
-// notify-flash: Claude Code alerts as small cards stacked in the top right, one per session.
-// Cards live as JSON files in ~/.config/claude-notify/queue (written by bin/claude-notify).
-// Click a card: Herdr opens on that terminal and every card clears. The x dismisses one. Herdr in front: all clear.
+// notify-flash: Claude Code alerts as small cards stacked in the top right, one per Herdr terminal.
+// A hook (bin/claude-notify) drops a marker file per finished or blocked session; Herdr's own status for that
+// terminal decides whether the card shows. Working again, gone, or you went to Herdr: the card goes away.
+// Click a card: Herdr opens on that terminal. The x dismisses one.
 // Colours follow dark-theme guidance: off-white text on dark gray (no pure black or white), desaturated accents.
 import AppKit
 
@@ -25,23 +26,80 @@ let amber = rgb(228, 186, 112)
 
 struct Item {
     let path: String
-    let title, project, body, kind, terminal: String
+    let title, status, detail: String
+    let needs: Bool
+    let terminal: String
     let time: Double
-    var needs: Bool { kind == "needs" }
 }
 
-func loadItems() -> [Item] {
+struct Agent { let status: String?; let tab: String; let space: String }
+
+/// Herdr's own view of every terminal: its agent status and where it lives.
+func herdrAgents() -> [String: Agent]? {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "\(home)/.local/bin/herdr-app")
+    p.arguments = ["ls"]
+    let pipe = Pipe()
+    p.standardOutput = pipe
+    p.standardError = FileHandle.nullDevice
+    guard (try? p.run()) != nil else { return nil }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    p.waitUntilExit()
+    guard let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let spaces = j["spaces"] as? [[String: Any]] else { return nil }
+    var out: [String: Agent] = [:]
+    for sp in spaces {
+        let spaceName = sp["name"] as? String ?? ""
+        for tab in (sp["tabs"] as? [[String: Any]]) ?? [] {
+            let tabName = tab["name"] as? String ?? ""
+            for t in (tab["terminals"] as? [[String: Any]]) ?? [] {
+                guard let id = t["terminal"] as? String else { continue }
+                out[id] = Agent(status: t["status"] as? String, tab: tabName, space: spaceName)
+            }
+        }
+    }
+    return out
+}
+
+func isNumber(_ s: String) -> Bool { !s.isEmpty && s.allSatisfy { $0.isNumber } }
+
+func removeMarker(_ path: String) { try? FileManager.default.removeItem(atPath: path) }
+
+/// Markers whose Herdr status says the session is really waiting on you, newest first.
+func loadItems(agents: [String: Agent]?) -> [Item] {
+    let now = Date().timeIntervalSince1970
     let names = (try? FileManager.default.contentsOfDirectory(atPath: queueDir)) ?? []
     var items: [Item] = []
     for n in names where n.hasSuffix(".json") {
-        let p = "\(queueDir)/\(n)"
-        guard let d = FileManager.default.contents(atPath: p),
-              let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { continue }
+        let path = "\(queueDir)/\(n)"
+        guard let d = FileManager.default.contents(atPath: path),
+              let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { removeMarker(path); continue }
         let t = (j["time"] as? Double) ?? 0
-        if Date().timeIntervalSince1970 - t > maxAge { try? FileManager.default.removeItem(atPath: p); continue }
-        items.append(Item(path: p, title: j["title"] as? String ?? "Claude", project: j["project"] as? String ?? "",
-                          body: j["body"] as? String ?? "", kind: j["kind"] as? String ?? "done",
-                          terminal: j["terminal"] as? String ?? "", time: t))
+        let terminal = j["terminal"] as? String ?? ""
+        if now - t > maxAge { removeMarker(path); continue }
+
+        if (j["test"] as? Bool) == true {
+            let needs = (j["kind"] as? String) == "needs"
+            items.append(Item(path: path, title: j["title"] as? String ?? "Test card", status: needs ? "Needs your input" : "Finished, ready for review",
+                              detail: j["message"] as? String ?? "", needs: needs, terminal: "", time: t))
+            continue
+        }
+
+        guard let agents = agents else { continue }
+        guard let agent = agents[terminal] else { removeMarker(path); continue }
+        let status = agent.status ?? ""
+        // the Stop hook can fire a moment before Herdr flips the status, so a fresh marker is given a few seconds
+        if status == "working" {
+            if now - t > 6 { removeMarker(path) }
+            continue
+        }
+        let needs = status == "blocked"
+        let title = (agent.tab.isEmpty || isNumber(agent.tab)) ? agent.space : agent.tab
+        let message = (j["message"] as? String) ?? ""
+        let place = title == agent.space && !agent.tab.isEmpty ? "Tab \(agent.tab)" : agent.space
+        let detail = needs ? (message.isEmpty ? "Waiting for your approval" : message) : place
+        items.append(Item(path: path, title: title, status: needs ? "Needs your input" : "Finished, ready for review",
+                          detail: detail, needs: needs, terminal: terminal, time: t))
     }
     return items.sorted { $0.time > $1.time }
 }
@@ -101,10 +159,9 @@ final class CardView: NSView {
         let tx = 24 * k
         let pillW = 70 * k, pillH = 30 * k
         let tw = w - tx - pillW - 44 * k
-        addSubview(label(item.project, 17, .semibold, ink, x: tx, midY: h / 2 + 18 * k, width: tw))
-        addSubview(label(item.needs ? "Needs your input" : "Finished, ready for review", 13, .medium, tint, x: tx, midY: h / 2 - 2 * k, width: tw))
-        let detail = item.needs ? item.body : "Click to jump back in"
-        addSubview(label(detail, 11, .regular, NSColor(white: 1, alpha: 0.45), x: tx, midY: h / 2 - 22 * k, width: tw))
+        addSubview(label(item.title, 17, .semibold, ink, x: tx, midY: h / 2 + 18 * k, width: tw))
+        addSubview(label(item.status, 13, .medium, tint, x: tx, midY: h / 2 - 2 * k, width: tw))
+        addSubview(label(item.detail, 11, .regular, NSColor(white: 1, alpha: 0.45), x: tx, midY: h / 2 - 22 * k, width: tw))
 
         let pill = NSView(frame: NSRect(x: w - 30 * k - pillW, y: (h - pillH) / 2, width: pillW, height: pillH))
         pill.wantsLayer = true
@@ -142,30 +199,45 @@ final class App: NSObject, NSApplicationDelegate {
     var panel: NSPanel?
     var signature = ""
     var idleTicks = 0
+    var announced = Set<String>()
+    var agents: [String: Agent]?
+    var tickCount = 0
 
     func applicationDidFinishLaunching(_ note: Notification) {
-        Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.tick() }
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.tick() }
         tick()
     }
 
     func clearAll() {
-        for i in loadItems() { try? FileManager.default.removeItem(atPath: i.path) }
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: queueDir)) ?? []
+        for n in names where n.hasSuffix(".json") { removeMarker("\(queueDir)/\(n)") }
     }
 
     func tick() {
         let keep = ProcessInfo.processInfo.environment["NOTIFY_FLASH_KEEP"] != nil
+        // going to Herdr counts as having seen everything
         if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == herdrId && !keep { clearAll() }
-        let items = loadItems()
+        tickCount += 1
+        if tickCount % 2 == 1 || agents == nil { agents = herdrAgents() }
+        let items = loadItems(agents: agents)
         if items.isEmpty {
             idleTicks += 1
             panel?.orderOut(nil)
             panel = nil
             signature = ""
-            if idleTicks > 8 { NSApp.terminate(nil) }
+            if idleTicks > 60 { NSApp.terminate(nil) }
             return
         }
         idleTicks = 0
-        let sig = items.map { "\($0.path)\($0.time)" }.joined()
+        for i in items where !announced.contains("\(i.path)\(i.time)") {
+            announced.insert("\(i.path)\(i.time)")
+            let name = i.needs ? "Sosumi" : "Glass"
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
+            p.arguments = ["/System/Library/Sounds/\(name).aiff"]
+            try? p.run()
+        }
+        let sig = items.map { "\($0.path)\($0.time)\($0.needs)" }.joined()
         if sig != signature { signature = sig; rebuild(items) }
     }
 
@@ -181,7 +253,7 @@ final class App: NSObject, NSApplicationDelegate {
         let root = NSView(frame: NSRect(origin: .zero, size: frame.size))
         for (i, item) in items.enumerated() {
             let card = CardView(item: item,
-                                onDismiss: { [weak self] in try? FileManager.default.removeItem(atPath: item.path); self?.tick() },
+                                onDismiss: { [weak self] in removeMarker(item.path); self?.tick() },
                                 onOpen: { [weak self] in self?.clearAll(); self?.tick() })
             card.frame.origin = NSPoint(x: pad, y: pad + total - ch - CGFloat(i) * (ch + gap))
             root.addSubview(card)
