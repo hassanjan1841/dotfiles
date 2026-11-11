@@ -244,7 +244,7 @@ final class App: NSObject, NSApplicationDelegate {
             let p = makePanel(frame: s.frame)
             p.contentView = CoverView(
                 frame: NSRect(origin: .zero, size: s.frame.size), items: items, showCards: s == main,
-                onDismissItem: { [weak self] item in try? FileManager.default.removeItem(atPath: item.path); self?.tick() },
+                onDismissItem: { [weak self] _ in self?.clearAll(); self?.tick() },
                 onBackdrop: { [weak self] in self?.clearAll(); self?.tick() })
             p.setFrame(s.frame, display: true)
             p.alphaValue = wasShowing ? 1 : 0

@@ -140,6 +140,11 @@
           {
             "type": "command",
             "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Reply style: short checklist, outcome first. No preamble, no restating, no explaining unless the user says explain. Aim for 8 lines or fewer.\"}}'"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/dotfiles/bin/claude-notify clear",
+            "timeout": 5
           }
         ]
       }

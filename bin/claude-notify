@@ -1,8 +1,15 @@
 #!/bin/bash
 # Claude Code hook: adds a card to the on-screen stack, plus a sound and a macOS banner, when Claude is done or needs you.
 # Click a card (or the banner): Herdr opens on the terminal that finished. Skipped when Herdr is already in front.
-# Usage in hooks: claude-notify done | claude-notify needs
+# Usage in hooks: claude-notify done | needs | clear
 kind="${1:-done}"
+
+# A session that starts working again no longer needs its card.
+if [ "$kind" = "clear" ]; then
+  [ -n "$HC_TERMINAL_ID" ] && rm -f "$HOME/.config/claude-notify/queue/$(printf '%s' "$HC_TERMINAL_ID" | tr -c 'A-Za-z0-9_-' '_').json"
+  exit 0
+fi
+
 input=$(cat)
 
 front=$(osascript -e 'tell application "System Events" to get bundle identifier of first application process whose frontmost is true' 2>/dev/null)
