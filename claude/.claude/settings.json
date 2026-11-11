@@ -114,6 +114,22 @@
             "type": "command",
             "command": "$HOME/dotfiles/bin/cmux-stop-settle",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$HOME/dotfiles/bin/claude-notify done",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/dotfiles/bin/claude-notify needs",
+            "timeout": 10
           }
         ]
       }
