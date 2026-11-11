@@ -68,7 +68,7 @@ This file is the map: read it instead of exploring. Facts were checked on 2026-1
 - `cw-new`, `cw-board`: start and watch Claude workers; Herdr or cmux, picked automatically, `CW_BACKEND=herdr|cmux` forces one. Herdr workers open as background tabs.
 - `human`: wrapper that pings `glow`, then runs `human-input/human` (Swift binary, built by `just cmux` or `human-input/build.sh`; gitignored). `human-do` and `wa-send` link into `human-input/`. Read `human-input/HANDOFF.md` before changing it; its push and machine notes are old.
 - `glow`: screen-edge "Claude is using your Mac" overlay; `glow on|off|status|test`; source `glow/glow.swift`, binary gitignored.
-- `claude-notify`: Stop and Notification hook; macOS banner + sound (terminal-notifier, brew) when Claude is done or needs you and Herdr is not the front app; clicking it opens Herdr (`dev.herdr.app`).
+- `claude-notify`: Stop and Notification hook; a small card in the top right per Claude session (same style for done and needs), plus a sound and a macOS banner, when Herdr is not the front app. Click a card to open Herdr on that session; all cards clear once Herdr is in front. Overlay source in `notify-flash/`.
 - `cmux-autocolor`, `cmux-tidy`, `cmux-stop-settle`: cmux-only helpers (project colours and groups, Stop-hook fix).
 - `desktop-tidy`: keeps `~/Desktop` empty (launchd `com.hassan.desktop-tidy`; `install` restarts Finder).
 - `hass`: older personal CLI (dashboard, notes, `new` makes WezTerm projects).

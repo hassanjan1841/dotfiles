@@ -1,5 +1,5 @@
 #!/bin/bash
-# Claude Code hook: adds a card to the on-screen stack, plus a sound and a macOS banner, when Claude is done or needs you.
+# Claude Code hook: adds a card to the top-right stack, plus a sound and a macOS banner, when Claude is done or needs you.
 # Click a card (or the banner): Herdr opens on the terminal that finished. Skipped when Herdr is already in front.
 # Usage in hooks: claude-notify done | needs | clear
 kind="${1:-done}"
