@@ -1,11 +1,12 @@
 #!/bin/bash
-# Claude Code hook: macOS banner + sound when Claude is done or needs you, unless Herdr is already in front.
+# Claude Code hook: big screen flash, voice and a clickable banner when Claude is done or needs you.
+# Click the banner: Herdr comes to the front on the terminal that finished. Skipped when Herdr is already in front.
 # Usage in hooks: claude-notify done | claude-notify needs
 kind="${1:-done}"
 input=$(cat)
 
 front=$(osascript -e 'tell application "System Events" to get bundle identifier of first application process whose frontmost is true' 2>/dev/null)
-[ "$front" = "dev.herdr.app" ] && exit 0
+[ "$front" = "dev.herdr.app" ] && [ -z "$CLAUDE_NOTIFY_FORCE" ] && exit 0
 
 read -r project message < <(printf '%s' "$input" | python3 -I -c '
 import json, os, sys
@@ -22,6 +23,15 @@ else
   title="Claude is done"; sound="Glass"; body="Finished in $project"
 fi
 
+dir=$(cd "$(dirname "$0")/../notify-flash" && pwd)
+[ -x "$dir/notify-flash" ] || swiftc -O "$dir/flash.swift" -o "$dir/notify-flash" 2>/dev/null
+[ -x "$dir/notify-flash" ] && ( "$dir/notify-flash" "$title" "$project" "$kind" >/dev/null 2>&1 & )
+
+go="open -b dev.herdr.app"
+[ -n "$HC_TERMINAL_ID" ] && go="$HOME/.local/bin/herdr-app do pane.focus --terminal $HC_TERMINAL_ID; $go"
+
 terminal-notifier -title "$title" -subtitle "$project" -message "$body" \
-  -sound "$sound" -group "claude-$project" -activate dev.herdr.app >/dev/null 2>&1
+  -sound "$sound" -group "claude-${HC_TERMINAL_ID:-$project}" -execute "$go" >/dev/null 2>&1
+
+say "$title" >/dev/null 2>&1 &
 exit 0
