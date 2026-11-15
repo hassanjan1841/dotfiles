@@ -22,6 +22,10 @@ UPWORK_CONTRACT_PATTERN="Global Computer Sales"
 CLAUDE_TERM=""
 CLAUDE_RESTART_CMD=""
 CLAUDE_STALL_S=180
+CLAUDE_BAD_S=60
+CLAUDE_GRACE_S=90
+CLAUDE_CWD=""
+LOWBATT_STOP_PCT=5
 HC="${WD_HC:-hc}"
 [ -f "$CONF" ] && . "$CONF"
 
@@ -122,7 +126,12 @@ uw_click_re() {
 # Brings Upwork forward, clicks Start if it is stopped, then returns focus.
 uw_ensure_recording() {
   local prev="${PREV_FRONT:-$(human front 2>/dev/null)}"
+  # reopen un-minimizes and un-hides the window; activate brings it to the front
+  act osascript -e 'tell application "Upwork" to reopen' -e 'tell application "Upwork" to activate' >/dev/null 2>&1
   act human focus Upwork >/dev/null 2>&1; sleep 2
+  # a scrolled window hides Start/Stop behind a collapsed header, so always scroll to the top
+  local r; r=$(human window where 2>/dev/null | tr ',' ' ')
+  set -- $r; [ -n "$4" ] && act human scroll 15 $(( $1 + $3 / 2 )) $(( $2 + $4 / 2 )) >/dev/null 2>&1 && sleep 1
   local i
   for i in 1 2 3 4; do
     local t; t=$(uw_see)
@@ -137,9 +146,7 @@ uw_ensure_recording() {
   [ -n "$prev" ] && [ "$prev" != "Upwork" ] && act human focus "$prev" >/dev/null 2>&1
 }
 
-uw_restart() {
-  PREV_FRONT=$(human front 2>/dev/null); log upwork "restarting app"
-  [ -n "$WD_DRY" ] && { echo "DRY: quit, click Exit, open, start"; return; }
+uw_quit() {
   osascript -e 'tell application "Upwork" to quit' >/dev/null 2>&1
   local i
   for i in 1 2 3 4 5 6; do
@@ -148,11 +155,18 @@ uw_restart() {
   done
   for i in 1 2 3 4 5 6 7 8; do pgrep -x Upwork >/dev/null || break; sleep 2; done
   pgrep -x Upwork >/dev/null && { log upwork "quit stuck, killing"; pkill -x Upwork; sleep 3; }
+}
+
+uw_restart() {
+  PREV_FRONT=$(human front 2>/dev/null); log upwork "restarting app"
+  [ -n "$WD_DRY" ] && { echo "DRY: quit, click Exit, open, start"; return; }
+  uw_quit
   open -a Upwork; sleep 12
   uw_ensure_recording
 }
 
 part_upwork() {
+  [ "$(getv lowbatt_done)" = 1 ] && return 0
   if ! pgrep -x Upwork >/dev/null; then
     log upwork "app not running, opening"; act open -a Upwork; sleep 12; uw_ensure_recording; return
   fi
@@ -184,31 +198,91 @@ part_upwork() {
 }
 
 # ---------- claude session ----------
+# CLAUDE_TERM is an hc --name, not an address: addresses like t7 change on every restart.
 claude_screen_bad() {
   grep -qiE "No response from API|Retrying in [0-9]+|API Error|ECONNRESET|overloaded_error|socket hang up|Unable to connect to API"
 }
 
+# prints: <live|finished|missing> <working|idle|-> <herdr.space> <herdr.tab> <cwd...>
+claude_info() {
+  $HC get "$CLAUDE_TERM" --json 2>/dev/null | python3 -c '
+import sys, json
+try: d = json.load(sys.stdin)
+except Exception: print("missing - - -"); sys.exit()
+l = d.get("labels") or {}
+print(d.get("state") or "missing", (d.get("status") or {}).get("state") or "-",
+      l.get("herdr.space") or "-", l.get("herdr.tab") or "-", d.get("cwd") or "-")'
+}
+
 part_claude() {
   [ -z "$CLAUDE_TERM" ] && return 0
-  local scr; scr=$($HC read "$CLAUDE_TERM" 2>&1 | tail -40)
-  if echo "$scr" | grep -q "No such\|not found\|unknown"; then
-    log claude "terminal $CLAUDE_TERM gone"; claude_restart "gone"; return
+  [ -f "$STATE/claude_off" ] && return 0
+  [ $(( $(now) - $(getv claude_last_restart) )) -lt "$CLAUDE_GRACE_S" ] && return 0
+  local st ag sp tb cwd scr h
+  read -r st ag sp tb cwd <<< "$(claude_info)"
+  if [ "$st" != live ]; then claude_restart "terminal $st"; return; fi
+  setv claude_meta "$sp $tb $cwd"
+  scr=$($HC read "$CLAUDE_TERM" 2>/dev/null | tail -15)
+  if echo "$scr" | claude_screen_bad; then
+    [ "$(getv claude_bad_since)" = 0 ] && { setv claude_bad_since "$(now)"; log claude "error text on screen, watching"; }
+    [ $(( $(now) - $(getv claude_bad_since) )) -ge "$CLAUDE_BAD_S" ] && claude_restart "API error on screen ${CLAUDE_BAD_S}s"
+    return
   fi
-  local h; h=$(echo "$scr" | md5 -q 2>/dev/null || echo "$scr" | md5sum | cut -c1-32)
-  if echo "$scr" | claude_screen_bad; then claude_restart "API error on screen"; return; fi
-  if [ "$h" = "$(getv claude_hash x)" ]; then
-    if echo "$scr" | grep -qiE "esc to interrupt|Running|Thinking|Working" && [ $(( $(now) - $(getv claude_hash_since) )) -ge "$CLAUDE_STALL_S" ]; then
-      claude_restart "screen frozen ${CLAUDE_STALL_S}s while busy"
-    fi
-  else setv claude_hash "$h"; setv claude_hash_since "$(now)"; fi
+  setv claude_bad_since 0
+  h=$(echo "$scr" | md5 -q 2>/dev/null)
+  if [ "$h" != "$(getv claude_hash x)" ]; then setv claude_hash "$h"; setv claude_hash_since "$(now)"; return; fi
+  if [ "$ag" = working ] && [ $(( $(now) - $(getv claude_hash_since) )) -ge "$CLAUDE_STALL_S" ]; then
+    claude_restart "busy but screen frozen ${CLAUDE_STALL_S}s"
+  fi
 }
 
 claude_restart() {
   [ -z "$CLAUDE_RESTART_CMD" ] && { log claude "$1, no restart command set"; return; }
-  [ $(( $(now) - $(getv claude_last_restart) )) -lt 120 ] && return
-  setv claude_last_restart "$(now)"; log claude "restarting: $1"
-  act $HC kill "$CLAUDE_TERM" >/dev/null 2>&1
-  [ -n "$WD_DRY" ] && echo "DRY: $HC run --bg $CLAUDE_RESTART_CMD" || $HC run --bg "$CLAUDE_RESTART_CMD" >/dev/null 2>&1
+  if ! net_ok; then
+    [ "$(getv claude_waitnet)" = 0 ] && log claude "$1, no internet, restart waits for it"
+    setv claude_waitnet 1; return
+  fi
+  setv claude_waitnet 0
+  # at most 6 restarts an hour, then one per 15 min, so a dead API never causes a restart storm
+  local hs n; hs=$(getv claude_hour_start); n=$(getv claude_hour_n)
+  [ $(( $(now) - hs )) -gt 3600 ] && { hs=$(now); n=0; setv claude_hour_start "$hs"; }
+  [ "$n" -ge 6 ] && [ $(( $(now) - $(getv claude_last_restart) )) -lt 900 ] && return
+  setv claude_hour_n $(( n + 1 )); setv claude_last_restart "$(now)"; setv claude_bad_since 0; setv claude_hash x
+  local sp tb cwd; read -r sp tb cwd <<< "$(getv claude_meta "- - -")"
+  [ "$cwd" = - ] || [ -z "$cwd" ] && cwd="$CLAUDE_CWD"
+  log claude "restarting $CLAUDE_TERM: $1"
+  local args=(run --bg --no-parent --outlive-parent --name "$CLAUDE_TERM")
+  [ -n "$cwd" ] && args+=(--cwd "$cwd")
+  [ "$sp" != - ] && args+=(--label "herdr.space=$sp")
+  [ "$tb" != - ] && args+=(--label "herdr.tab=$tb")
+  if [ -n "$WD_DRY" ]; then echo "DRY: $HC kill+rm $CLAUDE_TERM; $HC ${args[*]} -- sh -c $CLAUDE_RESTART_CMD"; return; fi
+  $HC kill "$CLAUDE_TERM" >/dev/null 2>&1; sleep 2; $HC rm "$CLAUDE_TERM" >/dev/null 2>&1
+  local out; out=$($HC "${args[@]}" -- sh -c "$CLAUDE_RESTART_CMD" 2>&1 | tr '\n' ' ' | cut -c1-160)
+  log claude "started again: $out"
+}
+
+# ---------- power ----------
+batt() { [ -n "$WD_BATT" ] && echo "$WD_BATT" || pmset -g batt; }
+
+part_power() {
+  local b src pct
+  b=$(batt); src=$(echo "$b" | grep -q "AC Power" && echo ac || echo battery); pct=$(echo "$b" | grep -oE '[0-9]+%' | head -1 | tr -d %)
+  [ -z "$pct" ] && return 0
+  if [ "$src" != "$(getv power_src none)" ]; then
+    [ "$src" = ac ] && log power "back on mains power ($pct%)" || log power "mains power lost, on battery ($pct%)"
+    setv power_src "$src"; setv power_logged_pct "$pct"
+  fi
+  if [ "$src" = ac ]; then
+    [ "$(getv lowbatt_done)" = 1 ] && { log power "mains back, Upwork may reopen"; setv lowbatt_done 0; }
+    return 0
+  fi
+  [ $(( $(getv power_logged_pct 100) - pct )) -ge 10 ] && { log power "battery $pct%"; setv power_logged_pct "$pct"; }
+  # a clean stop saves the current time block; a dead battery would lose it
+  if [ "$pct" -le "$LOWBATT_STOP_PCT" ] && [ "$(getv lowbatt_done)" != 1 ]; then
+    setv lowbatt_done 1
+    log power "battery $pct%, stopping Upwork cleanly before the Mac dies"
+    if [ -n "$WD_DRY" ]; then echo "DRY: uw_quit"; else pgrep -x Upwork >/dev/null && uw_quit; fi
+  fi
 }
 
 # ---------- run ----------
@@ -232,7 +306,9 @@ status() {
 
 tick() {
   setv heartbeat "$(now)"
-  part_wifi; part_awake
+  [ -f "$STATE/paused" ] && return 0
+  [ "$(stat -f %z "$LOGF" 2>/dev/null || echo 0)" -gt 5000000 ] && { tail -n 5000 "$LOGF" > "$LOGF.tmp" && mv "$LOGF.tmp" "$LOGF"; }
+  part_power; part_wifi; part_awake
   [ "$(getv tick_n 0)" -ge 2 ] && { setv tick_n 0; part_upwork; part_claude; } || setv tick_n $(( $(getv tick_n 0) + 1 ))
 }
 
@@ -252,6 +328,8 @@ case "${1:-status}" in
   upwork-restart) WD_VERBOSE=1 uw_restart ;;
   upwork-ensure) WD_VERBOSE=1 uw_ensure_recording ;;
   claude-test) claude_screen_bad && echo BAD || echo fine ;;
+  claude-info) claude_info ;;
+  power) WD_VERBOSE=1 part_power ;;
   status) status ;;
   *) echo "usage: watchdog loop|once|status|wifi|awake|upwork|claude"; exit 1 ;;
 esac

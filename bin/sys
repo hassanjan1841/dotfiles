@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# sys: simple macOS health snapshot. no deps.
+# usage: sys | sys watch [sec] | sys top | sys kill
+
+set -u
+
+DIM="\033[2m"; OFF="\033[0m"; B="\033[1m"
+RED="\033[31m"; YLW="\033[33m"; GRN="\033[32m"
+
+status_color() {
+  local pct=$1
+  if (( pct >= 85 )); then printf "%s" "$RED"
+  elif (( pct >= 60 )); then printf "%s" "$YLW"
+  else printf "%s" "$GRN"; fi
+}
+word() {
+  local pct=$1
+  if (( pct >= 85 )); then echo "BAD"
+  elif (( pct >= 60 )); then echo "busy"
+  else echo "ok"; fi
+}
+bar() {
+  local pct=$1 w=16 filled c
+  filled=$(( pct * w / 100 ))
+  (( filled > w )) && filled=$w
+  c=$(status_color "$pct")
+  printf "%b" "$c"
+  printf '█%.0s' $(seq 1 $filled)
+  printf "%b" "$DIM"
+  printf '░%.0s' $(seq 1 $((w - filled)))
+  printf "%b" "$OFF"
+}
+nice_name() {
+  local raw=$1 base
+  base=${raw##*/}
+  base=${base%% *}
+  case "$base" in
+    "Google Chrome Helper (Aperitif Renderer)"|"Google Chrome Helper"*) echo "Chrome tab" ;;
+    "Google Chrome") echo "Chrome" ;;
+    claude) echo "Claude CLI" ;;
+    WindowServer) echo "macOS windows" ;;
+    "Microsoft Teams WebView Helper"*) echo "Teams tab" ;;
+    "Slack Helper"*) echo "Slack tab" ;;
+    "Upwork Helper"*) echo "Upwork tab" ;;
+    mds|mds_stores|mdworker*|mdbulkimport) echo "Spotlight indexing" ;;
+    spotlightknowledged*) echo "Spotlight (learning)" ;;
+    searchpartyuseragent) echo "Find My network" ;;
+    findmydevice*) echo "Find My device" ;;
+    helpd) echo "macOS help" ;;
+    syspolicyd) echo "macOS security check" ;;
+    XprotectService|XProtect*) echo "macOS malware scan" ;;
+    trustd) echo "macOS certificate check" ;;
+    cfprefsd) echo "macOS preferences" ;;
+    dasd) echo "macOS task scheduler" ;;
+    launchd) echo "macOS launcher" ;;
+    coreaudiod) echo "audio" ;;
+    bluetoothd) echo "bluetooth" ;;
+    wifid|airportd) echo "Wi-Fi" ;;
+    CloudflareWARP|warp-svc) echo "Cloudflare WARP" ;;
+    nextdns) echo "NextDNS (DNS proxy)" ;;
+    ublockdns) echo "uBlockDNS (DNS proxy)" ;;
+    "Wispr Flow"*) echo "Wispr Flow" ;;
+    *) echo "$base" ;;
+  esac
+}
+
+snapshot() {
+  local cores load1 load5 load15 loadpct
+  cores=$(sysctl -n hw.ncpu)
+  read -r load1 load5 load15 < <(sysctl -n vm.loadavg | tr -d '{}')
+  loadpct=$(awk -v l="$load1" -v c="$cores" 'BEGIN{p=l/c*100; if(p>999)p=999; printf "%.0f", p}')
+
+  local total_ram_b used_pct free_p active_p inactive_p wired_p compressor_p page_size
+  total_ram_b=$(sysctl -n hw.memsize)
+  page_size=$(vm_stat | awk '/page size of/ {print $8}')
+  eval "$(vm_stat | awk -F: '
+    /Pages free/     {gsub(/[ .]/,"",$2); print "free_p="$2}
+    /Pages active/   {gsub(/[ .]/,"",$2); print "active_p="$2}
+    /Pages wired/    {gsub(/[ .]/,"",$2); print "wired_p="$2}
+    /Pages occupied by compressor/ {gsub(/[ .]/,"",$2); print "compressor_p="$2}
+  ')"
+  local used_b=$(( (active_p + wired_p + compressor_p) * page_size ))
+  used_pct=$(( used_b * 100 / total_ram_b ))
+  local used_gb=$(awk -v b="$used_b" 'BEGIN{printf "%.1f", b/1073741824}')
+  local tot_gb=$(awk -v b="$total_ram_b" 'BEGIN{printf "%.0f", b/1073741824}')
+
+  local swap_tot swap_used swap_pct
+  read -r swap_tot swap_used < <(sysctl vm.swapusage | awk '{
+    for (i=1;i<=NF;i++) {
+      if ($i=="total") {t=$(i+2); gsub(/M/,"",t)}
+      if ($i=="used")  {u=$(i+2); gsub(/M/,"",u)}
+    }
+    print t, u
+  }')
+  swap_pct=$(awk -v u="$swap_used" -v t="$swap_tot" 'BEGIN{if(t==0){print 0}else{printf "%.0f", u/t*100}}')
+  local swap_gb=$(awk -v m="$swap_used" 'BEGIN{printf "%.1f", m/1024}')
+
+  local disk
+  disk=$(df -h / | awk 'NR==2 {print $4" free of "$2}')
+
+  local batt pct src
+  pct=$(pmset -g batt | awk -F'\t' 'NR==2 {print $2}' | awk -F';' '{print $1}')
+  src=$(pmset -g batt | awk -F"'" 'NR==1 {print $2}')
+  batt="${pct} (${src})"
+
+  printf "%bYour Mac right now%b   %s\n\n" "$B" "$OFF" "$(date '+%a %H:%M')"
+
+  printf "  CPU    %s  %s  %bload %d%%%b of %d cores\n" \
+    "$(bar "$loadpct")" "$(word "$loadpct")" "$DIM" "$loadpct" "$OFF" "$cores"
+  printf "  RAM    %s  %s  %b%s GB of %s GB used%b\n" \
+    "$(bar "$used_pct")" "$(word "$used_pct")" "$DIM" "$used_gb" "$tot_gb" "$OFF"
+  printf "  Swap   %s  %s  %b%s GB on disk%b" \
+    "$(bar "$swap_pct")" "$(word "$swap_pct")" "$DIM" "$swap_gb" "$OFF"
+  if (( swap_pct > 50 )); then printf "  %bslowdown%b" "$RED" "$OFF"; fi
+  printf "\n"
+  printf "  Disk   %b%s%b\n" "$DIM" "$disk" "$OFF"
+  printf "  Power  %b%s%b\n" "$DIM" "$batt" "$OFF"
+  echo
+
+  if (( swap_pct > 60 || used_pct > 85 )); then
+    printf "  %bTip:%b too much open. close Chrome tabs and extra apps.\n\n" "$YLW" "$OFF"
+  elif (( loadpct > 150 )); then
+    printf "  %bTip:%b something is hogging CPU. see list below.\n\n" "$YLW" "$OFF"
+  fi
+
+  printf "%bWhat's eating it%b  %b(top 5, %% of 1 core)%b\n" "$B" "$OFF" "$DIM" "$OFF"
+  ps -Ao pid,pcpu,rss,comm -r | awk -v DIM="$DIM" -v OFF="$OFF" 'NR>1 && NR<=6 {
+    pid=$1; cpu=$2; rss=$3;
+    cmd=""; for (i=4;i<=NF;i++) cmd=cmd" "$i; sub(/^ /,"",cmd);
+    printf "  %s[%d]%s  %.0f%% CPU  %.0f MB  %s\n", DIM, pid, OFF, cpu, rss/1024, cmd
+  }' | while IFS= read -r line; do
+    pid=$(sed -E 's/.*\[([0-9]+)\].*/\1/' <<<"$line")
+    rest=$(sed -E 's/.*\]  //' <<<"$line")
+    cpu=$(sed -E 's/.* ([0-9]+)% CPU.*/\1/' <<<"$rest")
+    ram=$(sed -E 's/.*CPU  +([0-9]+) MB.*/\1/' <<<"$rest")
+    raw=$(sed -E 's/.*MB  //' <<<"$rest")
+    nice=$(nice_name "$raw")
+    printf "  %b[%s]%b  %3s%% CPU  %4s MB  %s\n" "$DIM" "$pid" "$OFF" "$cpu" "$ram" "$nice"
+  done
+  echo
+
+  printf "%bBiggest in RAM%b   %b(top 5)%b\n" "$B" "$OFF" "$DIM" "$OFF"
+  ps -Ao pid,pcpu,rss,comm -m | awk 'NR>1 && NR<=6 {
+    pid=$1; cpu=$2; rss=$3;
+    cmd=""; for (i=4;i<=NF;i++) cmd=cmd" "$i; sub(/^ /,"",cmd);
+    printf "%s|%.0f|%.0f|%s\n", pid, cpu, rss/1024, cmd
+  }' | while IFS='|' read -r pid cpu ram raw; do
+    nice=$(nice_name "$raw")
+    printf "  %b[%s]%b  %4s MB  %3s%% CPU  %s\n" "$DIM" "$pid" "$OFF" "$ram" "$cpu" "$nice"
+  done
+}
+
+case "${1:-}" in
+  ""|snap) snapshot ;;
+  watch)
+    sec=${2:-2}
+    while true; do clear; snapshot; printf "\n%brefreshing every %ss, ctrl-c to quit%b\n" "$DIM" "$sec" "$OFF"; sleep "$sec"; done ;;
+  top) snapshot | sed -n '/What/,$p' ;;
+  kill)
+    snapshot
+    echo
+    printf "pid to kill (empty = cancel): "
+    read -r pid
+    [ -z "$pid" ] && { echo cancelled; exit 0; }
+    name=$(ps -p "$pid" -o comm= 2>/dev/null)
+    [ -z "$name" ] && { echo "no such pid"; exit 1; }
+    printf "kill %s (%s)? [y/N] " "$pid" "$name"
+    read -r yn
+    [ "$yn" = "y" ] || { echo cancelled; exit 0; }
+    kill "$pid" && echo "closed $pid" || echo "could not close"
+    ;;
+  -h|--help|help)
+    cat <<EOF
+sys: how your Mac is doing, in plain words
+
+  sys           snapshot
+  sys watch     live, refreshes every 2 seconds
+  sys watch 5   refresh every 5 seconds
+  sys top       just the hog lists
+  sys kill      pick a pid to close
+EOF
+    ;;
+  *) echo "unknown: $1. try 'sys help'"; exit 1 ;;
+esac

@@ -18,11 +18,51 @@ pid=$(launchctl list | awk '/com.hassan.watchdog/{print $1}'); hb=$(( $(date +%s
 c1=$(echo "Retrying in 12 seconds No response from API" | $W claude-test); c2=$(echo "API Error: socket hang up" | $W claude-test); c3=$(echo "Thinking... esc to interrupt" | $W claude-test)
 [ "$c1 $c2 $c3" = "BAD BAD fine" ] && res PASS claude-detect "error texts BAD, normal text fine" || res FAIL claude-detect "$c1 $c2 $c3"
 
-# claude restart path with a fake terminal id (dry): error on screen => restart command runs
-printf 'CLAUDE_TERM="tfake"\nCLAUDE_RESTART_CMD="echo restarted"\n' > $T/conf
-hcfake=$T/bin; mkdir -p $hcfake; printf '#!/bin/sh\n[ "$1" = read ] && echo "No response from API, Retrying in 9s"; exit 0\n' > $hcfake/hc; chmod +x $hcfake/hc
-o=$(WD_HC=$hcfake/hc WD_DRY=1 isolated $W claude 2>&1 | tr '\n' ' ')
-echo "$o" | grep -q "restarting: API error" && res PASS claude-restart "fake terminal with API error triggers restart: $(echo $o | cut -c1-80)" || res FAIL claude-restart "$o"
+# claude rules, against a fake hc (records run/kill calls instead of doing them)
+FH=$T/fakehc; mkdir -p $FH; cat > $FH/hc <<'FHEOF'
+#!/bin/sh
+D=$(dirname "$0")
+case "$1" in
+  get) [ -f "$D/missing" ] && { echo '{"error":{}}'; exit 1; }; printf '{"state":"live","status":{"state":"%s"},"labels":{"herdr.space":"spX","herdr.tab":"tbX"},"cwd":"/tmp/x"}\n' "$(cat $D/agent)";;
+  read) cat "$D/screen";;
+  run) echo "$*" >> "$D/runs"; echo '{"address":"t99"}';;
+  kill|rm) echo "$1" >> "$D/kills";;
+esac
+FHEOF
+chmod +x $FH/hc
+cl(){ # name expect(restart|none) conf-extra screen agent [state-setup]
+  rm -rf $T/st $FH/runs $FH/missing; mkdir -p $T/st; printf 'CLAUDE_TERM="qa"\nCLAUDE_RESTART_CMD="claude --resume X"\nCLAUDE_GRACE_S=0\n%s\n' "$3" > $T/conf
+  echo "$4" > $FH/screen; echo "$5" > $FH/agent; eval "$6"
+  o=$(WD_HC=$FH/hc isolated $W claude 2>&1 | tr '\n' ' '); r=$([ -s $FH/runs ] && echo restart || echo none)
+  [ "$r" = "$2" ] && res PASS "claude-$1" "$r ($(echo $o | cut -c1-70))" || res FAIL "claude-$1" "got $r: $o"; }
+NOW=$(date +%s)
+cl error-new none "" "API Error: No response from API" working ""
+cl error-60s restart "" "API Error: No response from API" working "echo $((NOW-70)) > $T/st/claude_bad_since"
+cl no-internet none 'PING_HOSTS="10.255.255.1"' "Retrying in 9 seconds" working "echo $((NOW-70)) > $T/st/claude_bad_since"
+cl frozen-busy restart "" "same screen" working "echo \$(printf 'same screen\n' | md5 -q) > $T/st/claude_hash; echo $((NOW-200)) > $T/st/claude_hash_since"
+cl idle-quiet none "" "same screen" idle "echo \$(printf 'same screen\n' | md5 -q) > $T/st/claude_hash; echo $((NOW-200)) > $T/st/claude_hash_since"
+cl missing restart "" "" idle "touch $FH/missing; echo 'spA tbA /tmp/keep' > $T/st/claude_meta"
+grep -q -- "--name qa --cwd /tmp/keep --label herdr.space=spA --label herdr.tab=tbA" $FH/runs 2>/dev/null && res PASS claude-same-place "recreated with same name, folder and Herdr tab" || res FAIL claude-same-place "$(cat $FH/runs 2>/dev/null)"
+cl rate-cap none "" "API Error" working "echo $((NOW-70)) > $T/st/claude_bad_since; echo $NOW > $T/st/claude_hour_start; echo 6 > $T/st/claude_hour_n; echo $((NOW-100)) > $T/st/claude_last_restart"
+cl grace none "CLAUDE_GRACE_S=90" "API Error" working "echo $((NOW-70)) > $T/st/claude_bad_since; echo $((NOW-10)) > $T/st/claude_last_restart"
+cl off-switch none "" "API Error" working "echo $((NOW-70)) > $T/st/claude_bad_since; touch $T/st/claude_off"
+
+# power: battery logging, clean Upwork stop at low battery, no reopen until mains is back
+rm -rf $T/st; mkdir -p $T/st; : > $T/conf
+BAT="Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=1)	4%; discharging"
+ACP="Now drawing from 'AC Power'
+ -InternalBattery-0 (id=1)	4%; charging"
+o=$(WD_BATT="$BAT" WD_DRY=1 isolated $W power 2>&1 | tr '\n' ' ')
+echo "$o" | grep -q "on battery" && echo "$o" | grep -q "DRY: uw_quit" && res PASS power-lowbatt "battery 4% => logged and Upwork stopped cleanly" || res FAIL power-lowbatt "$o"
+o=$(WD_BATT="$BAT" WD_DRY=1 isolated $W power 2>&1); echo "$o" | grep -q "uw_quit" && res FAIL power-once "stopped twice: $o" || res PASS power-once "only one clean stop"
+o=$(WD_DRY=1 isolated $W upwork 2>&1); [ -z "$o" ] && res PASS power-no-reopen "Upwork not reopened while on low battery" || res FAIL power-no-reopen "$o"
+o=$(WD_BATT="$ACP" WD_DRY=1 isolated $W power 2>&1 | tr '\n' ' '); echo "$o" | grep -q "back on mains" && [ "$(cat $T/st/lowbatt_done)" = 0 ] && res PASS power-mains-back "mains back => Upwork allowed again" || res FAIL power-mains-back "$o"
+
+# log cap
+mkdir -p $T/st; : > $T/conf; yes "old line padding padding padding padding" | head -c 5200000 > $T/biglog
+WD_STATE=$T/st WD_LOG=$T/biglog WD_CONF=$T/conf WD_DRY=1 $W once >/dev/null 2>&1
+sz=$(stat -f %z $T/biglog); [ "$sz" -lt 1000000 ] && res PASS log-cap "5.2MB log trimmed to $sz bytes" || res FAIL log-cap "size $sz"
 
 # wifi weak path: unreachable host => cycle at 3rd bad check
 echo 'PING_HOSTS="10.255.255.1"' > $T/conf; rm -rf $T/st; mkdir -p $T/st
