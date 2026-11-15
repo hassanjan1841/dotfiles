@@ -75,3 +75,4 @@
 29. 01:26:36: test: Wi-Fi forced off, launchd watchdog must restore it itself (backup restores at +150s).
 30. 01:30:01: BUG found: rejoin cmd returns ok when Wi-Fi power is off, so watchdog never turned it on (only my backup did). Fixed wifi_cycle to turn power on first and verify rejoin by ping. Retesting.
    Result: after the fix, launchd watchdog turned Wi-Fi on by itself: off 01:30:01, internet back 01:30:35 (log: "Wi-Fi power was off, turning on"). Backup timer did not fire.
+31. 01:45:36: final selftest 13 of 13 pass (2m15s). Scripts, plist, docs pushed to dotfiles main (9b26c52). SSID moved from the script into ~/.config/watchdog/watchdog.conf.
