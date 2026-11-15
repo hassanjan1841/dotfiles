@@ -1,0 +1,6 @@
+# GOOD_SUBNET: first part of the good network IP
+GOOD_SUBNET="192.168.0."
+# SSID: name of the first floor network to rejoin
+SSID="YOUR_WIFI_NAME"
+# CLAUDE_TERM=t24
+# CLAUDE_RESTART_CMD="cd /path && claude --permission-mode auto --resume SESSION_ID"

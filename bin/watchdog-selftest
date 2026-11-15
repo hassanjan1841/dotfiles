@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Proves the watchdog in about 3 minutes. Writes PASS/FAIL with evidence to the file given (default stdout).
+export PATH="$HOME/dotfiles/bin:$HOME/.local/bin:$PATH"
+OUT="${1:-/dev/stdout}"; W=$HOME/dotfiles/bin/watchdog; LIVE=$HOME/Library/Logs/watchdog.log
+T=$(mktemp -d /tmp/wdself.XXXX); P=0; F=0; : > "$OUT"
+res(){ if [ "$1" = PASS ]; then P=$((P+1)); else F=$((F+1)); fi; echo "- $1 $2: $3" >> "$OUT"; }
+echo "# Watchdog proof $(date '+%F %T')" >> "$OUT"; echo >> "$OUT"
+isolated(){ WD_STATE=$T/st WD_LOG=$T/log WD_CONF=$T/conf WD_VERBOSE=1 "$@"; }
+mkdir -p $T/st
+
+bash -n $W && res PASS syntax "bash -n ok" || res FAIL syntax "bash -n failed"
+
+# daemon alive
+pid=$(launchctl list | awk '/com.hassan.watchdog/{print $1}'); hb=$(( $(date +%s) - $(cat ~/.cache/watchdog/heartbeat 2>/dev/null || echo 0) ))
+{ [ "$pid" != "-" ] && [ "$hb" -lt 20 ]; } && res PASS daemon "launchd pid $pid, heartbeat ${hb}s old" || res FAIL daemon "pid=$pid heartbeat=${hb}s"
+
+# claude detection
+c1=$(echo "Retrying in 12 seconds No response from API" | $W claude-test); c2=$(echo "API Error: socket hang up" | $W claude-test); c3=$(echo "Thinking... esc to interrupt" | $W claude-test)
+[ "$c1 $c2 $c3" = "BAD BAD fine" ] && res PASS claude-detect "error texts BAD, normal text fine" || res FAIL claude-detect "$c1 $c2 $c3"
+
+# claude restart path with a fake terminal id (dry): error on screen => restart command runs
+printf 'CLAUDE_TERM="tfake"\nCLAUDE_RESTART_CMD="echo restarted"\n' > $T/conf
+hcfake=$T/bin; mkdir -p $hcfake; printf '#!/bin/sh\n[ "$1" = read ] && echo "No response from API, Retrying in 9s"; exit 0\n' > $hcfake/hc; chmod +x $hcfake/hc
+o=$(WD_HC=$hcfake/hc WD_DRY=1 isolated $W claude 2>&1 | tr '\n' ' ')
+echo "$o" | grep -q "restarting: API error" && res PASS claude-restart "fake terminal with API error triggers restart: $(echo $o | cut -c1-80)" || res FAIL claude-restart "$o"
+
+# wifi weak path: unreachable host => cycle at 3rd bad check
+echo 'PING_HOSTS="10.255.255.1"' > $T/conf; rm -rf $T/st; mkdir -p $T/st
+o=""; for i in 1 2 3; do o="$o $(WD_DRY=1 isolated $W wifi 2>&1)"; done
+echo "$o" | grep -q "DRY: wifi_cycle" && res PASS wifi-detect "3 bad checks trigger the fix" || res FAIL wifi-detect "$o"
+
+# wrong network warning
+echo 'GOOD_SUBNET="10.9.9."' > $T/conf; rm -rf $T/st; mkdir -p $T/st
+o=$(WD_DRY=1 isolated $W wifi 2>&1); echo "$o" | grep -q "different network" && res PASS wrong-network "warns when subnet differs" || res FAIL wrong-network "$o"
+
+# mouse nudge
+rm -f $T/st/mouse_last; : > $T/conf; before=$(human where); WD_STATE=$T/st WD_CONF=$T/conf $W awake; after=$(human where)
+bx=${before%,*}; ax=${after%,*}; d=$(( ax>bx ? ax-bx : bx-ax ))
+{ [ -f $T/st/mouse_last ] && [ "$d" -le 3 ]; } && res PASS mouse "nudge ran, cursor $before -> $after" || res FAIL mouse "state file or drift: $before -> $after"
+
+# upwork rule: offline flag + fresh ticks + net ok for 70s => restart (dry, fake log)
+ts=$(date '+%Y-%m-%dT%H:%M:%S.000'); {
+ echo "[$ts] [INFO] fe.WindowManager:Index - show  { type: 'trackingOffline' }"
+ echo "[$ts] [INFO] fe.[default] - [INFO] <Redux> - action {"; echo '	"type": "TRACKER_STEP",'; } > $T/uw.log
+rm -rf $T/st; mkdir -p $T/st; : > $T/conf; echo $(( $(date +%s) - 70 )) > $T/st/uw_off_net_since
+o=$(WD_UWLOG=$T/uw.log WD_DRY=1 isolated $W upwork 2>&1 | tr '\n' ' ')
+echo "$o" | grep -q "Connection lost" && echo "$o" | grep -q "DRY: quit" && res PASS upwork-offline-rule "flag set 70s with net up => restart" || res FAIL upwork-offline-rule "$o"
+# and no restart when flag clear
+sed -i '' '/trackingOffline/d' $T/uw.log; echo "[$ts] [INFO] x - onClose  { type: 'trackingOffline' }" >> $T/uw.log
+o=$(WD_UWLOG=$T/uw.log WD_DRY=1 isolated $W upwork 2>&1); echo "$o" | grep -q "DRY" && res FAIL upwork-no-false-restart "$o" || res PASS upwork-no-false-restart "flag clear => no action"
+
+# kill -9 restart + single instance lock
+oldpid=$pid; kill -9 $oldpid 2>/dev/null; np=""; for i in $(seq 1 25); do sleep 1; np=$(launchctl list | awk '/com.hassan.watchdog/{print $1}'); [ "$np" != "-" ] && [ "$np" != "$oldpid" ] && break; done
+{ [ -n "$np" ] && [ "$np" != "-" ] && [ "$np" != "$oldpid" ]; } && res PASS crash-restart "killed $oldpid, launchd started $np" || res FAIL crash-restart "old=$oldpid new=$np"
+sleep 3; o=$($W loop 2>&1 | head -1); echo "$o" | grep -q "already running" && res PASS single-instance "second loop refused: $o" || res FAIL single-instance "$o"
+
+# REAL: wifi off (daemon must restore) and Upwork stopped (daemon must click Start), in parallel
+sleep 12
+( networksetup -setairportpower en0 off; s=$(date +%s); b=0; for i in $(seq 1 45); do sleep 2; ping -c1 -t1 1.1.1.1 >/dev/null 2>&1 && { echo "$(( $(date +%s)-s ))" > $T/wifi_s; b=1; break; }; done
+  [ $b = 0 ] && { networksetup -setairportpower en0 on; echo FAIL > $T/wifi_s; } ) &
+WP=$!
+before_n=$(grep -c "recording confirmed" $LIVE)
+human focus Upwork >/dev/null; sleep 2
+cl(){ c=$(human see --app Upwork | awk -F'\t' -v l="$1" '$4==l&&$2=="AXButton"{print $1;exit}'); [ -n "$c" ] && human click ${c%%,*} ${c##*,}; }
+cl Stop; sleep 3; cl "Yes, stop tracking"; sleep 3; human focus Herdr >/dev/null
+st=$(human see --app Upwork 2>/dev/null | awk -F'\t' '$4~/Time tracking/{print $4}'); t0=$(date +%s)
+for i in $(seq 1 40); do sleep 4; [ "$(grep -c "recording confirmed" $LIVE)" -gt "$before_n" ] && break; done
+tu=$(( $(date +%s)-t0 )); on=$(human see --app Upwork 2>/dev/null | awk -F'\t' '$4=="Time tracking on"{print 1}')
+{ [ "$on" = 1 ] && [ "$(grep -c "recording confirmed" $LIVE)" -gt "$before_n" ]; } && res PASS upwork-stopped-recovery "was '$st', daemon clicked Start, recording after ${tu}s" || res FAIL upwork-stopped-recovery "state '$st', after ${tu}s on=$on"
+wait $WP; w=$(cat $T/wifi_s 2>/dev/null)
+case "$w" in ''|FAIL) res FAIL wifi-real-restore "net did not return by itself ($w)";; *) res PASS wifi-real-restore "Wi-Fi forced off, daemon restored internet in ${w}s: $(grep -a 'Wi-Fi power was off' $LIVE | tail -1 | cut -c1-80)";; esac
+
+echo >> "$OUT"; echo "Result: $P pass, $F fail" >> "$OUT"
+cat >> "$OUT" <<'EON'
+
+## Proven earlier (log evidence in UPWORK-STEP-LOG.md, not re-run here)
+- Upwork restart with no internet: quit, Exit, reopen, Start, recording in 30s.
+
+## Not testable in 5 minutes
+- Real power cut, reboot and sleep recovery (needs the Mac restarted or slept).
+- 24 hour soak.
+EON
+rm -rf $T; networksetup -getairportpower en0 | grep -q On || networksetup -setairportpower en0 on

@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+# watchdog: offline keep-alive for this Mac. No internet and no AI needed.
+# Usage: watchdog loop | once | status | <part> (wifi awake upwork claude)
+# WD_DRY=1 prints actions instead of doing them. Config: ~/.config/watchdog/watchdog.conf
+export PATH="$HOME/dotfiles/bin:$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+
+HUMAN_APP="$HOME/dotfiles/human-input/Human.app/Contents/MacOS/human"
+[ -x "$HUMAN_APP" ] && human() { "$HUMAN_APP" "$@"; }
+
+CONF="${WD_CONF:-$HOME/.config/watchdog/watchdog.conf}"
+STATE="${WD_STATE:-$HOME/.cache/watchdog}"; LOGF="${WD_LOG:-$HOME/Library/Logs/watchdog.log}"
+mkdir -p "$STATE" "$(dirname "$LOGF")" "$(dirname "$CONF")"
+
+SSID=""
+GOOD_SUBNET=""
+PING_HOSTS="1.1.1.1 8.8.8.8"
+WIFI_FAILS_BEFORE_FIX=3
+MOUSE_EVERY=90
+UPWORK_OFFLINE_RESTART_S=60
+UPWORK_STALE_STEP_S=45
+UPWORK_CONTRACT_PATTERN="Global Computer Sales"
+CLAUDE_TERM=""
+CLAUDE_RESTART_CMD=""
+CLAUDE_STALL_S=180
+HC="${WD_HC:-hc}"
+[ -f "$CONF" ] && . "$CONF"
+
+log() { echo "$(date '+%F %T') $1 $2" >> "$LOGF"; [ -n "$WD_VERBOSE" ] && echo "$1 $2"; }
+act() { if [ -n "$WD_DRY" ]; then echo "DRY: $*"; else "$@"; fi; }
+now() { date +%s; }
+getv() { cat "$STATE/$1" 2>/dev/null || echo "${2:-0}"; }
+setv() { echo "$2" > "$STATE/$1"; }
+
+# ---------- wifi ----------
+net_ok() { for h in $PING_HOSTS; do ping -c1 -t2 "$h" >/dev/null 2>&1 && return 0; done; return 1; }
+
+# bad = dead, or 5 pings lose 2+ or average over 400 ms
+wifi_quality_bad() {
+  local out loss avg
+  out=$(ping -c5 -i0.3 -t4 "${PING_HOSTS%% *}" 2>&1)
+  loss=$(echo "$out" | grep -oE '[0-9.]+% packet loss' | grep -oE '^[0-9.]+')
+  avg=$(echo "$out" | grep -oE '= [0-9.]+/[0-9.]+' | grep -oE '/[0-9.]+' | tr -d /)
+  [ -z "$loss" ] && return 0
+  awk -v l="$loss" -v a="${avg:-0}" 'BEGIN{exit !(l>=40 || a>400)}'
+}
+
+wifi_cycle() {
+  if networksetup -getairportpower en0 | grep -q "Off"; then
+    log wifi "Wi-Fi power was off, turning on"; networksetup -setairportpower en0 on; sleep 10; return
+  fi
+  if [ -n "$SSID" ]; then
+    log wifi "fixing: try rejoin $SSID"
+    networksetup -setairportnetwork en0 "$SSID" >/dev/null 2>&1; sleep 8
+    if net_ok; then log wifi "rejoined $SSID"; return; fi
+  fi
+  log wifi "rejoin did not help, power cycle"
+  networksetup -setairportpower en0 off; sleep 3; networksetup -setairportpower en0 on; sleep 10
+}
+
+part_wifi() {
+  if wifi_quality_bad; then
+    local f=$(( $(getv wifi_fails) + 1 )); setv wifi_fails "$f"
+    [ "$f" = 1 ] && log wifi "bad or no connection (ip $(ipconfig getifaddr en0 2>/dev/null))"
+    if [ "$f" -ge "$WIFI_FAILS_BEFORE_FIX" ] && [ $(( f % WIFI_FAILS_BEFORE_FIX )) = 0 ]; then
+      if [ -n "$WD_DRY" ]; then echo "DRY: wifi_cycle"; else wifi_cycle; fi
+    fi
+    return
+  fi
+  [ "$(getv wifi_fails)" -gt 0 ] && log wifi "connection good again after $(getv wifi_fails) bad checks (ip $(ipconfig getifaddr en0 2>/dev/null))"
+  setv wifi_fails 0
+  if [ -n "$GOOD_SUBNET" ]; then
+    ipconfig getifaddr en0 2>/dev/null | grep -q "^$GOOD_SUBNET" || { [ "$(getv wifi_wrongnet)" = 0 ] && log wifi "online on a different network than $GOOD_SUBNET" && setv wifi_wrongnet 1; }
+    ipconfig getifaddr en0 2>/dev/null | grep -q "^$GOOD_SUBNET" && setv wifi_wrongnet 0
+  fi
+}
+
+# ---------- awake ----------
+part_awake() {
+  pgrep -f "caffeinate -dimsu$" >/dev/null 2>&1 || { log awake "caffeinate not running, starting"; [ -n "$WD_DRY" ] && echo "DRY: caffeinate -dimsu" || { nohup caffeinate -dimsu >/dev/null 2>&1 & }; }
+  local last; last=$(getv mouse_last)
+  if [ $(( $(now) - last )) -ge "$MOUSE_EVERY" ]; then
+    local x y; read -r x y <<< "$(human where 2>/dev/null | head -1 | tr -c "0-9\n" " ")"
+    if [ -n "$x" ] && [ -n "$y" ]; then
+      act human move $((x + 2)) "$y" >/dev/null 2>&1; act human move "$x" "$y" >/dev/null 2>&1
+      setv mouse_last "$(now)"
+    fi
+  fi
+}
+
+# ---------- upwork ----------
+UWLOG() { [ -n "$WD_UWLOG" ] && { echo "$WD_UWLOG"; return; }; ls -t "$HOME/Library/Application Support/Upwork/Upwork/Logs"/upwork..2*.log 2>/dev/null | head -1; }
+
+uw_last_step_age() {
+  local f; f=$(UWLOG); [ -z "$f" ] && { echo 99999; return; }
+  local ts; ts=$(tail -c 200000 "$f" | awk '/^\[20[0-9-]+T[0-9:.]+\]/{t=substr($1,2,19)} /"type": "TRACKER_STEP"/{last=t} END{print last}')
+  [ -z "$ts" ] && { echo 99999; return; }
+  local e; e=$(date -j -f '%Y-%m-%dT%H:%M:%S' "$ts" +%s 2>/dev/null) || { echo 99999; return; }
+  echo $(( $(now) - e ))
+}
+
+uw_offline_flag() {
+  local f; f=$(UWLOG); [ -z "$f" ] && return 1
+  tail -c 300000 "$f" | grep -aE "show  \{ type: 'trackingOffline' \}|onClose  \{ type: 'trackingOffline'" | tail -1 | grep -q "show  {"
+}
+
+uw_see() { human see --app Upwork 2>/dev/null; }
+
+uw_click_text() {
+  local label="$1" c
+  c=$(uw_see | awk -F'\t' -v l="$label" '$4==l && $2=="AXButton"{print $1; exit}')
+  [ -z "$c" ] && return 1
+  act human click "${c%%,*}" "${c##*,}"
+}
+
+uw_click_re() {
+  local re="$1" c
+  c=$(uw_see | awk -F'\t' -v r="$re" '$2=="AXButton" && $4 ~ r {print $1; exit}')
+  [ -z "$c" ] && return 1
+  act human click "${c%%,*}" "${c##*,}"
+}
+
+# Brings Upwork forward, clicks Start if it is stopped, then returns focus.
+uw_ensure_recording() {
+  local prev="${PREV_FRONT:-$(human front 2>/dev/null)}"
+  act human focus Upwork >/dev/null 2>&1; sleep 2
+  local i
+  for i in 1 2 3 4; do
+    local t; t=$(uw_see)
+    if echo "$t" | grep -q "Time tracking on"; then break; fi
+    if echo "$t" | awk -F'\t' '$4=="Start"{f=1} END{exit !f}'; then
+      log upwork "timer stopped, clicking Start"; uw_click_text Start; sleep 4; continue
+    fi
+    if uw_click_re "$UPWORK_CONTRACT_PATTERN"; then log upwork "opened contract"; sleep 4; continue; fi
+    sleep 3
+  done
+  if uw_see | awk -F'\t' '$4=="Time tracking on"{f=1} END{exit !f}'; then log upwork "recording confirmed"; else log upwork "NOT recording after tries"; fi
+  [ -n "$prev" ] && [ "$prev" != "Upwork" ] && act human focus "$prev" >/dev/null 2>&1
+}
+
+uw_restart() {
+  PREV_FRONT=$(human front 2>/dev/null); log upwork "restarting app"
+  [ -n "$WD_DRY" ] && { echo "DRY: quit, click Exit, open, start"; return; }
+  osascript -e 'tell application "Upwork" to quit' >/dev/null 2>&1
+  local i
+  for i in 1 2 3 4 5 6; do
+    sleep 2; pgrep -x Upwork >/dev/null || break
+    uw_click_text Exit && break
+  done
+  for i in 1 2 3 4 5 6 7 8; do pgrep -x Upwork >/dev/null || break; sleep 2; done
+  pgrep -x Upwork >/dev/null && { log upwork "quit stuck, killing"; pkill -x Upwork; sleep 3; }
+  open -a Upwork; sleep 12
+  uw_ensure_recording
+}
+
+part_upwork() {
+  if ! pgrep -x Upwork >/dev/null; then
+    log upwork "app not running, opening"; act open -a Upwork; sleep 12; uw_ensure_recording; return
+  fi
+  local age off; age=$(uw_last_step_age); uw_offline_flag && off=1 || off=0
+  if [ "$age" -gt "$UPWORK_STALE_STEP_S" ]; then
+    local s; s=$(getv uw_nostep_since 0)
+    if [ "$s" = 0 ]; then setv uw_nostep_since "$(now)"; log upwork "no timer ticks for ${age}s"; return; fi
+    if [ $(( $(now) - $(getv uw_last_restart) )) -gt 300 ]; then
+      log upwork "no ticks for ${age}s, trying Start first"
+      uw_ensure_recording; sleep 15
+      if [ "$(uw_last_step_age)" -gt "$UPWORK_STALE_STEP_S" ]; then setv uw_last_restart "$(now)"; uw_restart; fi
+      setv uw_nostep_since 0
+    fi
+    return
+  fi
+  setv uw_nostep_since 0
+  if [ "$off" = 1 ]; then
+    if net_ok; then
+      local s; s=$(getv uw_off_net_since 0)
+      if [ "$s" = 0 ]; then setv uw_off_net_since "$(now)"; return; fi
+      if [ $(( $(now) - s )) -ge "$UPWORK_OFFLINE_RESTART_S" ] && [ $(( $(now) - $(getv uw_last_restart) )) -gt 300 ]; then
+        log upwork "still Connection lost ${UPWORK_OFFLINE_RESTART_S}s after internet returned"
+        setv uw_last_restart "$(now)"; uw_restart; setv uw_off_net_since 0
+      fi
+    fi
+  else
+    setv uw_off_net_since 0
+  fi
+}
+
+# ---------- claude session ----------
+claude_screen_bad() {
+  grep -qiE "No response from API|Retrying in [0-9]+|API Error|ECONNRESET|overloaded_error|socket hang up|Unable to connect to API"
+}
+
+part_claude() {
+  [ -z "$CLAUDE_TERM" ] && return 0
+  local scr; scr=$($HC read "$CLAUDE_TERM" 2>&1 | tail -40)
+  if echo "$scr" | grep -q "No such\|not found\|unknown"; then
+    log claude "terminal $CLAUDE_TERM gone"; claude_restart "gone"; return
+  fi
+  local h; h=$(echo "$scr" | md5 -q 2>/dev/null || echo "$scr" | md5sum | cut -c1-32)
+  if echo "$scr" | claude_screen_bad; then claude_restart "API error on screen"; return; fi
+  if [ "$h" = "$(getv claude_hash x)" ]; then
+    if echo "$scr" | grep -qiE "esc to interrupt|Running|Thinking|Working" && [ $(( $(now) - $(getv claude_hash_since) )) -ge "$CLAUDE_STALL_S" ]; then
+      claude_restart "screen frozen ${CLAUDE_STALL_S}s while busy"
+    fi
+  else setv claude_hash "$h"; setv claude_hash_since "$(now)"; fi
+}
+
+claude_restart() {
+  [ -z "$CLAUDE_RESTART_CMD" ] && { log claude "$1, no restart command set"; return; }
+  [ $(( $(now) - $(getv claude_last_restart) )) -lt 120 ] && return
+  setv claude_last_restart "$(now)"; log claude "restarting: $1"
+  act $HC kill "$CLAUDE_TERM" >/dev/null 2>&1
+  [ -n "$WD_DRY" ] && echo "DRY: $HC run --bg $CLAUDE_RESTART_CMD" || $HC run --bg "$CLAUDE_RESTART_CMD" >/dev/null 2>&1
+}
+
+# ---------- run ----------
+power_gap_check() {
+  local hb; hb=$(getv heartbeat 0)
+  if [ "$hb" != 0 ] && [ $(( $(now) - hb )) -gt 60 ]; then
+    log gap "watchdog was not running for $(( ($(now) - hb) / 60 )) min (sleep, power loss or restart)"
+  fi
+}
+
+status() {
+  WD_VERBOSE=1
+  net_ok && echo "net: ok" || echo "net: DOWN"
+  echo "ip: $(ipconfig getifaddr en0)  quality: $(wifi_quality_bad && echo BAD || echo good)"
+  pgrep -f "caffeinate -dimsu$" >/dev/null && echo "caffeinate: ours running" || echo "caffeinate: ours missing"
+  pgrep -x Upwork >/dev/null && echo "upwork: running" || echo "upwork: NOT running"
+  echo "upwork last tick age: $(uw_last_step_age)s"
+  uw_offline_flag && echo "upwork offline window: yes" || echo "upwork offline window: no"
+  echo "claude term: ${CLAUDE_TERM:-not set}"
+}
+
+tick() {
+  setv heartbeat "$(now)"
+  part_wifi; part_awake
+  [ "$(getv tick_n 0)" -ge 2 ] && { setv tick_n 0; part_upwork; part_claude; } || setv tick_n $(( $(getv tick_n 0) + 1 ))
+}
+
+case "${1:-status}" in
+  loop)
+    mkdir "$STATE/lock" 2>/dev/null || { pid=$(cat "$STATE/lock/pid" 2>/dev/null); kill -0 "$pid" 2>/dev/null && { echo "already running ($pid)"; exit 0; }; }
+    echo $$ > "$STATE/lock/pid"; trap 'rm -rf "$STATE/lock"' EXIT
+    log start "watchdog started pid $$"; power_gap_check
+    hs=$(human see --app Upwork 2>&1); if [ "$(echo "$hs" | wc -l)" -gt 5 ]; then log start "human can read Upwork (permission ok)"; else log start "WARNING human cannot read Upwork: $(echo "$hs" | head -2 | tr '\n' ' ' | cut -c1-150) | check: $(human check 2>&1 | head -3 | tr '\n' ' ')"; fi
+    while true; do tick; sleep 5; done ;;
+  once) tick ;;
+  wifi) WD_VERBOSE=1 part_wifi ;;
+  awake) WD_VERBOSE=1 part_awake ;;
+  upwork) WD_VERBOSE=1 part_upwork ;;
+  claude) WD_VERBOSE=1 part_claude ;;
+  upwork-read) uw_offline_flag && echo "offline-flag=YES" || echo "offline-flag=no"; echo "tick-age=$(uw_last_step_age)" ;;
+  upwork-restart) WD_VERBOSE=1 uw_restart ;;
+  upwork-ensure) WD_VERBOSE=1 uw_ensure_recording ;;
+  claude-test) claude_screen_bad && echo BAD || echo fine ;;
+  status) status ;;
+  *) echo "usage: watchdog loop|once|status|wifi|awake|upwork|claude"; exit 1 ;;
+esac
