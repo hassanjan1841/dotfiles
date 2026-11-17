@@ -12,6 +12,15 @@
 - Any text I will paste somewhere (DM, comment, email, WhatsApp, Slack) goes in a plain ```text code block, never a `>` blockquote. The blockquote's left line gets copied with it and breaks the paste.
 - This overrides any default that says to put drafts in a blockquote.
 
+# Anything others will see, HARD RULE, applies to every project/session (agreed 2026-11-17)
+Pages, prototypes, pictures and links that Zabih, Matt or a client will open must look like finished work, never like an AI's scratch work.
+- No explanation bars or notes about how it was made: no "clickable copy", "build", PR numbers, branch names, "Claude".
+- No test wording on screen: no "test", "invented", "not real", "fake", "dummy", "example", "TODO".
+- Invented data looks real: reuse the design's own invented place and names (Passenger: Northvale, JN9104, 9900NV…), never "Test Stop Alpha".
+- No pop-up boxes standing in for a missing feature; hide that button instead.
+- A shared page is built from the real code, never patched on its own, so it always matches the app.
+- Before sharing: walk every screen, scan all its text for the words above, and confirm 0 page errors.
+
 # Driving the GUI, HARD RULE, applies to every project/session
 Two tools, and the target decides which are even possible.
 
