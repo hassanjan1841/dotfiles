@@ -238,5 +238,6 @@
       "**Org-specific CLIs**: None configured"
     ]
   },
-  "voiceEnabled": true
+  "voiceEnabled": true,
+  "prefersReducedMotion": true
 }
