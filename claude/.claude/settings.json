@@ -167,7 +167,6 @@
     "playwright@claude-plugins-official": false,
     "ralph-loop@claude-plugins-official": false,
     "superpowers@claude-plugins-official": false,
-    "superpowers@superpowers-marketplace": false,
     "typescript-lsp@claude-plugins-official": true,
     "vercel@claude-plugins-official": true,
     "stripe@claude-plugins-official": true,
