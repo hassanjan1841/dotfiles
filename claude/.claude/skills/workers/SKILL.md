@@ -16,7 +16,7 @@ cw-new --name "K20 Small parts" --dir ~/Passenger-ds-K20 --branch chore/design-s
        --env-from ~/Passenger-ds-B/passenger-app/.env.local \
        --baseline-from ~/Passenger-research/tailwind-migration/screenshots \
        --baseline-to ~/Passenger-research/tailwind-migration/screenshots-K20 \
-       --model claude-fable-5-1 --brief ~/Passenger-worker-briefs/K20.md
+       --brief ~/Passenger-worker-briefs/K20.md
 ```
 It makes the worktree from `--base` (default origin/staging), its own free port and test baseline, runs npm ci, opens the worker (Herdr: background tab started with `claude --remote-control`; cmux: workspace in the project's group and colour), sends the brief, and confirms each step on screen. Write the brief file first. Name the workspace with the tracker id first ("K20 ..."), so the board can find its tracker row.
 

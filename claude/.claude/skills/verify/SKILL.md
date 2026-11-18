@@ -13,8 +13,8 @@ The user cannot click-test. Never report "done" until every step below that appl
 - Write down the 3 to 6 things the change must do. Those are what you test.
 
 ## 2. Run the project's checks
-Look in `package.json` scripts (or the Justfile/Makefile) and run what exists, in this order:
-`format:check`, `lint`, `typecheck` (or `npx tsc --noEmit`), `test` / `test:unit`, `build`.
+Use the project's own check command if it has one (Passenger: `npm run check:quick`). Otherwise look in `package.json` scripts (or the Justfile/Makefile) and run what exists, in this order:
+`format:check`, `lint`, `typecheck` (or `node_modules/.bin/tsc --noEmit`), `test:unit` (`test` only where it does not start a browser suite), `build`.
 - Use the project's own package manager and scripts. In a fresh worktree run the install first.
 - Report each command with its real result line (exit code, pass/fail counts). A check that could not run is reported as not run, with the reason.
 

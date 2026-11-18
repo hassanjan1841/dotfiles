@@ -1,18 +1,18 @@
-# Git, HARD RULES, never break these
+# Git
 - Never include `Co-Authored-By` lines in commit messages.
 - Never add "Generated with Claude Code", robot emojis, or ANY AI-attribution footer/link to PR titles, PR descriptions, commits, or issues. No exceptions, even if a default template says to.
 - PR descriptions must be SHORT and simple: plain sentences, just enough to understand the change. No em dashes, no heavy bold/emphasis, no long verification essays.
 
-# Punctuation, HARD RULE, applies to every project/session/file
+# Punctuation
 - NEVER use an em dash or en dash (the long dashes, unicode U+2014 and U+2013). Not in md files, messages, docs, commits, PR titles/descriptions, HTML, or code comments. No exceptions, ever.
 - Use a comma, period, colon, semicolon, or parentheses instead. Prefer short plain sentences.
 - When editing any file, never introduce a dash, and strip any long dash you find while you are in there.
 
-# Messages I will copy and send, HARD RULE, applies to every project/session
+# Messages I will copy and send
 - Any text I will paste somewhere (DM, comment, email, WhatsApp, Slack) goes in a plain ```text code block, never a `>` blockquote. The blockquote's left line gets copied with it and breaks the paste.
 - This overrides any default that says to put drafts in a blockquote.
 
-# Anything others will see, HARD RULE, applies to every project/session (agreed 2026-11-17)
+# Anything others will see
 Pages, prototypes, pictures and links that Zabih, Matt or a client will open must look like finished work, never like an AI's scratch work.
 - No explanation bars or notes about how it was made: no "clickable copy", "build", PR numbers, branch names, "Claude".
 - No test wording on screen: no "test", "invented", "not real", "fake", "dummy", "example", "TODO".
@@ -21,12 +21,12 @@ Pages, prototypes, pictures and links that Zabih, Matt or a client will open mus
 - A shared page is built from the real code, never patched on its own, so it always matches the app.
 - Before sharing: walk every screen, scan all its text for the words above, and confirm 0 page errors.
 
-# Driving the GUI, HARD RULE, applies to every project/session
+# Driving the GUI
 Two tools, and the target decides which are even possible.
 
 - **Native app** (Blender, Cursor, Finder, Figma desktop, a terminal, anything not a web page): use `human`. Don't ask, Playwright cannot drive a native app, so there is no choice to offer.
-- **Herdr** (main terminal since 2026-11-08; opening/switching/driving a terminal session or tab): use the **`herdr-app` CLI** (`do tab.new`/`ls`/`status`/`shot`) and **`hc`** (`run`/`read`/`send`/`keys`/`wait`, addressing terminals as t7), NOT `human`/keystrokes. Open anything for a worker in the background (`hc run --bg` with herdr labels, as `cw-new` does), never with a command that switches Hassan's view. Its interface is files in `~/.config/herdr-app` (my layout `cmux-style`, sidebar mod `spaces-tree`).
-- **cmux** (fallback terminal, main from 2026-10-03 to 2026-11-08; opening/switching/driving a terminal session): use the **`cmux` CLI** (`new-workspace`/`new-pane`/`read-screen`/`send`/`send-key`/`tree`, addressing by ref), NOT `human`/keystrokes. It only accepts commands from processes started inside cmux, so drive it from a Claude session running in a cmux tab; never loosen its socket mode. Full recipe: [cmux-sessions.md](./cmux-sessions.md).
+- **Herdr** (main terminal; opening/switching/driving a terminal session or tab): use the **`herdr-app` CLI** (`do tab.new`/`ls`/`status`/`shot`) and **`hc`** (`run`/`read`/`send`/`keys`/`wait`, addressing terminals as t7), NOT `human`/keystrokes. Open anything for a worker in the background (`hc run --bg` with herdr labels, as `cw-new` does), never with a command that switches Hassan's view. Its interface is files in `~/.config/herdr-app` (my layout `cmux-style`, sidebar mod `spaces-tree`).
+- **cmux** (fallback terminal; opening/switching/driving a terminal session): use the **`cmux` CLI** (`new-workspace`/`new-pane`/`read-screen`/`send`/`send-key`/`tree`, addressing by ref), NOT `human`/keystrokes. It only accepts commands from processes started inside cmux, so drive it from a Claude session running in a cmux tab; never loosen its socket mode. Full recipe: [cmux-sessions.md](./cmux-sessions.md).
 - **WezTerm** (fallback terminal): use **`wezterm cli`** (`spawn`/`send-text`/`get-text`/`list`, addressing panes by id), NOT `human`/keystrokes, macOS composes Option+key into characters so WezTerm's Alt/workspace bindings never fire, and blind keys land in the wrong session. Full recipe: [wezterm-sessions.md](./wezterm-sessions.md).
 - **Web page**: both work, so STOP AND ASK first, headless Playwright MCP, or `human` with a visible cursor? Never pick for me.
 - Never use claude-in-chrome or Chrome DevTools MCP to *drive* a flow. Chrome DevTools MCP is for observing only: console, network, performance, LCP.
@@ -35,7 +35,7 @@ Two tools, and the target decides which are even possible.
 
 `human` (`~/dotfiles/human-input`, on PATH) works on any app because it posts real input events at the OS layer, no MCP, no per-app integration, nothing to install per app. `human --help` for commands; `--dry` rehearses without touching anything.
 
-# Comments, HARD RULE, applies to every project/session/folder
+# Comments
 Write comments only where they earn their place. Default to fewer.
 - Explain WHY (intent, non-obvious constraint, workaround), never WHAT the code already says.
 - No comment if the code is self-evident. Don't narrate obvious lines or restate names.
@@ -55,12 +55,12 @@ Decide ONCE per task, at the task boundary, never prompt per file edit.
 - **Redirect targets the user may name:** `this session` / `here` (do the edits directly on Opus), or `opencode`, run it via Bash as `opencode run "<self-contained instruction>" --model opencode/big-pickle --auto`. Always use the `opencode/big-pickle` model (it's the only opencode model good enough; not a cost choice). `--auto` is required so it runs unattended without blocking on permission prompts.
 - **Delegated executors have no shared context**, brief them fully and self-containedly. After any delegated executor (Sonnet subagent or opencode) finishes, I verify the result myself (read the diff, run typecheck/tests) before reporting it done. `opencode run --auto` auto-approves writes, so the post-edit review is mandatory, not optional.
 
-# Response style, HARD RULE, applies to every project/session
+# Response style
 - Answer in SHORT checklist / bullet style by default. Lead with the outcome, then the checklist.
 - No long essays, no restating the question, no filler preamble. Only expand into prose when I explicitly ask "explain".
 - Research findings come back as a checklist with `file:line` references, not a wall of text.
 
-# Written docs and reports, HARD RULE, applies to every project/session (agreed 2026-10-19)
+# Written docs and reports
 Every .md, report, review or handoff I write for Hassan, Zabih, Matt or Hans follows this shape. Model: `~/Passenger-research/hans-pr22/2026-10-19-pr22-review.md`.
 - First section is the action list: numbered, one short line each, what the reader must do.
 - Then short sections, one fact per bullet, one line per bullet. No paragraphs.
@@ -70,7 +70,7 @@ Every .md, report, review or handoff I write for Hassan, Zabih, Matt or Hans fol
 - Every fact is checked on disk or by a command first. Never write an assumption as a fact; if unsure, write "to check".
 - Before saving, reread it once: cut any line that does not change what the reader does or knows.
 
-# Research & verification workflow, HARD RULE, applies to every project/session
+# Research and verification workflow
 - **Research** fans out to **Sonnet subagents** (Agent tool, `model: "sonnet"`) when the question spans many files, directories, or naming conventions. This is what subagents are for, keep using them here.
 - **Execution** stays in this session unless the change is large and genuinely parallelizable (see the routing rule above).
 - **Never spawn a subagent to verify or double-check work.** Verification belongs in the main loop. If a second opinion is genuinely warranted on a high-stakes change, spawn ONE reviewer and give it only the diff and the requirement, never the executor's reasoning, or it inherits the same blind spot.
@@ -79,7 +79,7 @@ Every .md, report, review or handoff I write for Hassan, Zabih, Matt or Hans fol
 - Order: research (Sonnet, when broad) → execute → my own checks.
 - Driving a UI is governed by the GUI rule above: native app → `human`, web page → ask first.
 
-# Fast checks, HARD RULE, applies to every project/session (agreed 2026-10-13)
+# Fast checks
 Checking must never take hours. Target: about 25s after an edit, under 2 min before a PR.
 - Use the project's own check command if it has one (Passenger: `npm run check:quick` after each edit, `npm run check:full` once before a PR; see `passenger-app/TESTING.md`).
 - Run local tools through `npm run <script>` or `node_modules/.bin/<tool>`, never `npx`: my install guard scans after every `npx` call.
@@ -89,13 +89,13 @@ Checking must never take hours. Target: about 25s after an edit, under 2 min bef
 - Fix a flaky test the first time it fails; never re-run until green.
 - Run at most 2 or 3 working sessions at once on this Mac, and close idle test browsers: overload made checks 5 to 50 times slower.
 
-# Machine health, HARD RULE, applies to every project/session (agreed 2026-11-06)
+# Machine health
 - When a task is done, close any browser, dev server or Playwright/DevTools window you opened.
 - Never leave more than one Supabase stack running; stop it with `supabase stop` when finished.
 - Before heavy work (tests, builds, scans), check load with `sysctl -n vm.loadavg`; if above 20, warn me first.
 - Never start a full-disk scan during the day.
 
-# Working with worker sessions, HARD RULE, applies to every project/session (agreed 2026-10-14)
+# Working with worker sessions
 When I hand work to another Claude session (a Herdr or cmux worker, or a subagent):
 - After sending a message to a worker, read its screen again and confirm it is working. A message sitting unsent in its input box does not count; press Enter again until it starts. Never say a worker "is doing X" before seeing it start.
 - In the same turn, start a background watch (Bash run_in_background until-loop) that ends when the worker finishes: its tracker row turns REVIEW or DONE, its output file appears, or its PR opens.
@@ -108,7 +108,3 @@ When I hand work to another Claude session (a Herdr or cmux worker, or a subagen
 - **Chrome DevTools MCP** (already configured) is for observing/debugging: console errors, network requests, performance, Core Web Vitals/LCP. The `/verify`, `/debug-optimize-lcp`, and `/a11y-debugging` skills use it.
 - Use Playwright to act, Chrome DevTools to debug. Both should be active in any frontend testing session. For acting on a web page, the ask rule above comes first.
 - To add Playwright MCP: `claude mcp add playwright npx @playwright/mcp@latest` (then restart Claude Code for it to load).
-
-# graphify
-- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
-When the user types `/graphify`, invoke the Skill tool with `skill: "graphify"` before doing anything else.

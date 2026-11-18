@@ -51,16 +51,16 @@ This file is the map: read it instead of exploring. Facts were checked on 2026-1
 - Ubuntu only: `startup` (`~/startup.sh`), `autostart` (GNOME), `systemd` (daily timer).
 
 ## Claude Code setup (`claude/`)
-- `.claude/CLAUDE.md`: Hassan's global rules for every project (git, no long dashes, GUI driving, comments, Sonnet for research, response style, docs shape, fast checks, machine health, workers).
+- `.claude/CLAUDE.md`: Hassan's global rules for every project (git, no long dashes, paste format, work others will see, GUI driving, comments, Sonnet for research, response style, docs shape, fast checks, machine health, workers).
 - `.claude/settings.json` hooks: atuin on Bash; malscan on SessionStart (warns if a project is flagged); `register-protect.py` on Edit/Write/Bash; `cmux-stop-settle` on Stop; a UserPromptSubmit reply-style note. Also plugins, marketplaces, statusline, `effortLevel` high, `CLAUDE_CODE_PLUGIN_DIRS` (local dev-mods).
-- `.claude/skills/`: `go`, `proof`, `simple`, `stories` (Passenger), `verify`, `workers` (cw-new/cw-board). Other skills in `~/.claude/skills` are not from this repo.
+- `.claude/skills/`: `go`, `proof`, `simple`, `stories` (Passenger), `ui-libraries`, `verify`, `workers` (cw-new/cw-board). Other skills in `~/.claude/skills` are not from this repo.
 - `.claude/statusline-command.sh`: branch, model + effort, ctx/5h/7d percentages.
 - `.claude/cmux-sessions.md`, `.claude/wezterm-sessions.md`: how to drive those terminals.
 - `.leader/Passenger-development/`: the Passenger daily register guard (`register_lib.py` shared; `register-protect.py` global hook; `register-review.py` and `register-published.py` wired in `~/Passenger-development/.claude/settings.local.json`; `register-daily.py` via launchd `com.passenger.register-daily` at 18:00; `register-guard-test.sh` tests).
 
 ## Terminals
-- Herdr: main since 2026-11-08. Drive it with `herdr-app` and `hc` (see global CLAUDE.md). The app and `~/.local/bin/{hc,herdr-app}` are installed by hand, not by this repo.
-- cmux: fallback (main 2026-10-03 to 2026-11-08). Its CLI only works from shells started inside cmux. docs/cmux.md.
+- Herdr: main terminal. Drive it with `herdr-app` and `hc` (see global CLAUDE.md). The app and `~/.local/bin/{hc,herdr-app}` are installed by hand, not by this repo.
+- cmux: fallback. Its CLI only works from shells started inside cmux. docs/cmux.md.
 - WezTerm: older fallback, still linked.
 
 ## Tools (`bin/` is on PATH; not stowed)
@@ -92,7 +92,6 @@ This file is the map: read it instead of exploring. Facts were checked on 2026-1
 ## Known issues (not fixed yet)
 - Not installed on this Mac: ansible, restic, pre-commit, taskwarrior; `~/.secrets`, `~/.devrc`, `~/notes` missing, so backups and the daily job cannot run.
 - `~/.bashrc` and `~/.config/zed/settings.json` are real files, so `bash` and `zed` are not linked.
-- Global CLAUDE.md still has a `graphify` section, but that skill is not installed.
 - `zsh/.zshrc:370` adds `/Users/macbookair/.opencode/bin` (another machine's path).
 - setup.yml installs atuin from a Linux tarball with no OS check (to check on a fresh Mac).
 - `startup-mac.sh` Dev Mode opens Terminal.app, not Herdr; `CONTEXT.md` and `CHEATSHEET.md` are mostly the old Ubuntu/WezTerm setup.

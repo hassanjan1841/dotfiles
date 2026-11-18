@@ -4,7 +4,7 @@
 #   cw-new --name "K20 Small parts" --dir ~/Passenger-ds-K20 --branch chore/k20-small-parts \
 #          --repo ~/Passenger-ds-B [--base origin/staging] [--app passenger-app] [--port 3107] \
 #          [--env-from ~/Passenger-ds-B/passenger-app/.env.local] [--baseline-from DIR --baseline-to DIR] \
-#          [--model claude-fable-5-1] [--brief ~/Passenger-worker-briefs/K20.md] [--space "Externiture Passenger"]
+#          [--model <id>] [--brief ~/Passenger-worker-briefs/K20.md] [--space "Externiture Passenger"]
 #
 # Backend: Herdr when run inside Herdr (or when cmux is not in use), cmux inside cmux. CW_BACKEND=herdr|cmux forces one.
 # Herdr: the worker is a tab in --space (default: the leader's own space).
