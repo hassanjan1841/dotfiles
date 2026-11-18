@@ -1,4 +1,4 @@
-# human-input — handoff
+# human-input, handoff
 
 Everything known about this project, including the mistakes, because the mistakes are
 the expensive part. Written 2026-08-03.
@@ -14,7 +14,7 @@ Two programs that let a machine be operated the way a person operates it.
 | `human` (Swift binary) | **Executes. Decides nothing.** Moves the pointer, clicks, drags, types, reads the screen. |
 | `human-do` (Python) | **Decides. Executes nothing.** Describes a task in words, produces a plan, hands it to `human`. |
 
-Either works alone. The split is deliberate — the thing that acts should have no opinions.
+Either works alone. The split is deliberate, the thing that acts should have no opinions.
 
 ### Where it lives
 
@@ -31,7 +31,7 @@ Either works alone. The split is deliberate — the thing that acts should have 
 ~/tools/human-input       -> symlink to the dotfiles dir (old path, still works)
 ```
 
-Repo: `hassanjan1841/dotfiles`. **Push over SSH** — `git push git@github.com:hassanjan1841/dotfiles.git HEAD:main`. HTTPS resolves to the `codebytesss` credential and 403s.
+Repo: `hassanjan1841/dotfiles`. **Push over SSH**, `git push git@github.com:hassanjan1841/dotfiles.git HEAD:main`. HTTPS resolves to the `codebytesss` credential and 403s.
 
 Build artefacts (`human`, `Human.app/`) are gitignored; the source is tracked. A fresh
 clone needs one `./build.sh`.
@@ -40,12 +40,12 @@ clone needs one `./build.sh`.
 
 ## 2. The machine this was built and verified on
 
-- MacBookAir10,1 — M1, 2020, **8 GB RAM**
+- MacBookAir10,1, M1, 2020, **8 GB RAM**
 - Single display, 1680×1050 points / 2560×1600 Retina. **Multi-display is deliberately unsupported.**
 - macOS 26.5 (Darwin 25.5.0)
-- Terminal: **WezTerm**, config at `~/.wezterm.lua` (also tracked at `dotfiles/wezterm/.wezterm.lua` — the two have drifted since July)
+- Terminal: **WezTerm**, config at `~/.wezterm.lua` (also tracked at `dotfiles/wezterm/.wezterm.lua`, the two have drifted since July)
 - Permissions, all granted: Accessibility, Screen Recording, Input Monitoring
-- `claude` CLI at `/opt/homebrew/bin/claude` — this is what `human-do` plans through
+- `claude` CLI on PATH (`~/.local/bin/claude`): this is what `human-do` plans through
 - No `anthropic` Python SDK, no `ANTHROPIC_API_KEY`, no `ant` CLI, no Ollama
 - `timeout` is **not** installed (use `perl -e 'alarm shift; exec @ARGV' N cmd`)
 
@@ -75,7 +75,7 @@ front · `5` aborted by the stop flag · `6` wait timed out · `7` secure input 
 ## 4. How the human motion model works, and why each part is there
 
 Everything below was arrived at by measuring, not by taste. **Smooth easing is what
-makes synthetic motion look synthetic** — the fixes were structural, not cosmetic.
+makes synthetic motion look synthetic**, the fixes were structural, not cosmetic.
 
 - **Ballistic throw plus corrective submovements.** A fast primary movement that misses
   by an amount growing with the distance thrown, then one or two corrections. This
@@ -83,13 +83,13 @@ makes synthetic motion look synthetic** — the fixes were structural, not cosme
 - **Whole pixels at a fixed ~8 ms poll.** A real mouse reports at 125 Hz in whole
   pixels: the *interval* holds steady and the *deltas* vary. Sub-pixel interpolation on
   a jittery clock is the exact opposite, and is the single biggest tell.
-- **Asymmetric velocity** — accelerates hard, decelerates longer. A symmetric bell is a
+- **Asymmetric velocity**, accelerates hard, decelerates longer. A symmetric bell is a
   tween.
 - **Smooth positive-only rate noise**, so velocity wobbles around the curve. Must stay
   positive: an earlier version let progress go *backwards* and the pointer stuttered.
-- **Tremor at 8–12 Hz**, where physiological hand tremor actually sits, with the wrist
-  drifting under it at 1–3 Hz. Frequencies in **real seconds**, not in path progress.
-  Amplitude stays sub-pixel — a whole pixel of shake at 10 Hz is visible shimmer.
+- **Tremor at 8 to 12 Hz**, where physiological hand tremor actually sits, with the wrist
+  drifting under it at 1 to 3 Hz. Frequencies in **real seconds**, not in path progress.
+  Amplitude stays sub-pixel, a whole pixel of shake at 10 Hz is visible shimmer.
 - **Never sets event deltas.** With an absolute cursor position the system applies
   pointer acceleration *on top of* the warp and the cursor visibly fights itself.
 - **Fitts' law budget covers the whole movement including corrections.** Spending the
@@ -104,7 +104,7 @@ finger slowest; a pause mixture from writing research (word retrieval ~330 ms, p
 boundary ~735 ms, planning ~2.7 s); error mix from typing corpora (substitution 39 %,
 insertion 33 %, omission 18 %, transposition 11 %).
 
-Behaviour: practice — the same saturating power law and fortnightly decay for a button
+Behaviour: practice, the same saturating power law and fortnightly decay for a button
 you keep clicking and a string you keep typing, both persisted; the gap between two
 commands shaped by what just happened and net of whatever the caller already spent
 thinking; traits drifting a few percent by the date; session shape driven by work done
@@ -113,7 +113,7 @@ threshold; `--device trackpad` steadier than mouse; idle in episodes (reading / 
 / busy / away) rather than a steady drip.
 
 The typing store keys on a 12-bit hash, so it holds a bucket that one string in four
-thousand lands in rather than the text — the same reason the audit log records that
+thousand lands in rather than the text, the same reason the audit log records that
 typing happened and never what was typed.
 
 Every one of those curves is asserted in `human selftest`, which the build runs. They are
@@ -124,7 +124,7 @@ asked 70 wpm → 68.9 / 70.3 / 72.9 measured. Pointer worst miss 2.2 px over 20 
 
 **Fatigue, measured at last** (it was the long-standing untested item). Three runs, each
 re-seeding `session.json` at a chosen action count and clearing `familiarity.json` first,
-because a repeated target gets familiar and speeds up — the same confound that
+because a repeated target gets familiar and speeds up, the same confound that
 invalidated the device comparison in §38:
 
 | run | rested | tired | ratio |
@@ -134,17 +134,17 @@ invalidated the device comparison in §38:
 | endpoints, short hops, 45 interleaved | 0.553 s | 0.679 s | **1.239** median |
 
 Predicted 1.180; the three centre on it. They scatter because the 7 % think pause in the
-between-command gap has a long tail, so a mean over tens of samples is noisy — the mean
+between-command gap has a long tail, so a mean over tens of samples is noisy, the mean
 of the random-distance run was 1.282 against its own median of 1.100. Process overhead is
 0.028 s and does not matter. Note that the end-to-end figure is *expected* to sit slightly
 under 1.180 on longer moves: the settle hover and the correction pauses are fixed costs
 that do not scale with tiredness, which works out at about 1.14 for a mid-length reach.
-An early guess that the 1.0 s clamp in `submove` was truncating the signal was **wrong** —
+An early guess that the 1.0 s clamp in `submove` was truncating the signal was **wrong**:
 even a 1600 px reach only takes 0.47 s, nowhere near it.
 
 ---
 
-## 5. Seeing — three tiers, chosen automatically
+## 5. Seeing, three tiers, chosen automatically
 
 1. **Exact text.** `wezterm cli get-text` for terminals; Claude Code transcripts on disk.
    Preferred whenever the target is a terminal.
@@ -183,10 +183,10 @@ never by reading the code.** The build was clean each time.
 
 ### Safety
 9. `--hold` never recorded which key it held, so SIGTERM left the key down and macOS
-   auto-repeated it forever. *(This is what made the arrow key look broken — see §9.)*
+   auto-repeated it forever. *(This is what made the arrow key look broken, see §9.)*
 10. The signal handler did the cleanup itself, which is not safe in signal context. It
     now only raises a flag; cleanup happens at the next pause.
-11. SIGKILL cannot be caught — a `kill -9` mid-keypress still leaves a key down.
+11. SIGKILL cannot be caught, a `kill -9` mid-keypress still leaves a key down.
     `human unstick` is the remedy.
 
 ### Scripts and rehearsal
@@ -194,7 +194,7 @@ never by reading the code.** The build was clean each time.
     the steps share a process, so a successful wait silently ended the script partway
     **with a success code**. Same for `changed`, `pane waitfor`, and dismissing a
     dialog when none was present. The worst shape a bug can take.
-13. Rehearsals actually waited — a plan with a 30 s wait polled for the full 30 s and
+13. Rehearsals actually waited, a plan with a 30 s wait polled for the full 30 s and
     then reported a failure for something that was never going to happen.
 14. `idle --dry` never returned and burned a core: it measured itself against the wall
     clock while accumulating simulated time.
@@ -216,7 +216,7 @@ never by reading the code.** The build was clean each time.
 22. A detected change is now confirmed a beat later, so a rendering blip is not news.
 
 ### Image matching
-23. Average pixel difference scored unrelated dark regions at **0.92** — on a dark
+23. Average pixel difference scored unrelated dark regions at **0.92**, on a dark
     screen everything is within a few grey levels of everything else. Normalised
     cross-correlation instead.
 24. A coarse pass that point-samples every k-th pixel misses the true peak when it
@@ -237,7 +237,7 @@ never by reading the code.** The build was clean each time.
     land in the save panel's filename field, the screen changes, and the action *looks*
     like it worked. `--recover` clears the way **before** acting.
 30. `NSWorkspace.frontmostApplication` never updates in a process with no run loop
-    running — pump it while waiting.
+    running, pump it while waiting.
 31. `open -a Foo` from a tool-run shell dies with the shell and takes the new window
     with it. Ask the running app instead:
     `osascript -e 'tell application "TextEdit" to open POSIX file "..."'`.
@@ -254,16 +254,16 @@ never by reading the code.** The build was clean each time.
 ### WhatsApp, found by sending one real message
 39. **`NSRunningApplication.activate` is ignored by WhatsApp** on macOS 26. `focus`
     failed by name *and* by bundle id while Chrome, TextEdit and Finder all worked, so
-    it read like a name-matching bug — it was not; `appMatches` strips the U+200E fine.
+    it read like a name-matching bug, it was not; `appMatches` strips the U+200E fine.
     An Apple Event still activates it. `focusApp` now waits 1.5 s for the cooperative
     path and then asks the other way.
-40. **Occlusion — an element can be published, positioned, and still not be there.**
+40. **Occlusion, an element can be published, positioned, and still not be there.**
     WhatsApp draws its search results *over* a chat list it never takes down, so with a
     search up the tree holds 15 chat rows: 2 real results and 13 sitting underneath the
     panel at coordinates that now belong to whatever covers them. Clicking one opens a
     different chat. This was first misread as a stale tree and then as duplicate ghosts;
     it is neither, and both readings produced a wrong fix.
-    Nothing in the tree can tell the two apart — they are equally real to it. Hit testing
+    Nothing in the tree can tell the two apart, they are equally real to it. Hit testing
     can, because it answers with what a click would actually reach. `find` now hit tests
     its leading candidates, comparing **element identity** up the ancestor chain: labels
     do not work, because the hit lands on a leaf inside the row that shares no text with
@@ -299,7 +299,7 @@ never by reading the code.** The build was clean each time.
     hit whatever sat at that spot in the window really on screen: a tab titled
     "…| sellerboard" produced an Intuit sign-in page, and it was only caught because the
     tab title was checked against what had been clicked. `see` and `find` now refuse to
-    descend into any `AXWindow` that is not the focused one — menus and the menu bar are
+    descend into any `AXWindow` that is not the focused one, menus and the menu bar are
     not windows, so they still come through, and `see --all` still shows everything.
     Verified both ways: the same `find` returns coordinates with that window in front
     and exits 1 with the other one in front. `frontDialog` deliberately still scans the
@@ -308,23 +308,23 @@ never by reading the code.** The build was clean each time.
 46. **A fixed sleep and "wait for any repaint" are both the wrong question.** `wa-send`
     slept a flat 2 s twice. Swapping that for `changed --timeout 3` made it *slower*
     (11 s to 17 s): if the repaint lands before the watch starts, it burns the whole
-    timeout. Each step now polls for the thing it is actually waiting for — the row
-    appearing, the header agreeing — and stops the moment it is true. 11 s to 2 s dry,
+    timeout. Each step now polls for the thing it is actually waiting for, the row
+    appearing, the header agreeing, and stops the moment it is true. 11 s to 2 s dry,
     6 s for a real send.
 
 ### Test bugs (mine, and they matter)
 43. **A test string sent a real message to a real group.** Testing `wa-send`'s refusal
-    guard, "Vu hacks" was passed as a name assumed not to be a chat. It is one — a
+    guard, "Vu hacks" was passed as a name assumed not to be a chat. It is one, a
     forty-character group title that a two-word substring matches. The guard worked
     perfectly and sent, because that is what it is for. Deleted for everyone within
     minutes, but the lesson is structural: **there was no way to exercise the flow
     without sending.** `wa-send --dry` now resolves the chat, prints the header it
     landed on, and stops before typing. Test names should be nonsense, not plausible.
-36. The selftest failed whenever a hand touched the mouse mid-test — it read as a 562 px
+36. The selftest failed whenever a hand touched the mouse mid-test, it read as a 562 px
     failure. It now retries; the check is about the tool's aim, not the user's.
 37. A sweep reported three commands "ok" that were never tested, because `timeout` does
     not exist here and I was grepping the shell's error message.
-38. A device-profile comparison was confounded by familiarity — both runs used the same
+38. A device-profile comparison was confounded by familiarity, both runs used the same
     target, so the second was faster regardless. The README claim was wrong and was
     corrected (0.89 vs 0.95, not 0.71 vs 0.95).
 
@@ -336,13 +336,13 @@ never by reading the code.** The build was clean each time.
 |---|---|
 | Pointer accuracy | worst miss 2.2 px over 20 moves; 0.0 px typical |
 | Pointer timing | 0.84 s / 1400 px vs Fitts 0.86 s |
-| Trace realism | 151 events, 10 ms median gap, all whole pixels, 1–25 px steps |
+| Trace realism | 151 events, 10 ms median gap, all whole pixels, 1 to 25 px steps |
 | Typing speed | asked 70 → 68.9 / 70.3 / 72.9 wpm (clean mode) |
 | Typing exactness | 300/300 dry, 8/8 and 6/6 in TextEdit |
 | Keycode typing | `Q3 net profit: $12,450 (up 8%) -- check Amazon & Walmart!` exact |
 | Modifiers | `shift+right ×5` selected exactly 5 chars; `cmd+tab` switches apps |
 | Drag | text selection; window resize +160×+90 exact; corner move +142/+89 |
-| Scroll | visible range 1–1161 → 4893–6132 |
+| Scroll | visible range 1 to 1161 → 4893 to 6132 |
 | Sight | `click "Format"` opened the menu (0 → 8 items) |
 | OCR | menu item at 84,14 vs tree's 84,15 |
 | Change detection | 6/6 quiet on a still screen; 4/4 on two typed chars in a window |
@@ -358,22 +358,22 @@ never by reading the code.** The build was clean each time.
 
 ## 8. Known limitations
 
-- **Multi-display unsupported** by choice — everything clamps to the built-in screen.
+- **Multi-display unsupported** by choice, everything clamps to the built-in screen.
 - **Multi-window is handled, but only for the focused window.** `see` and `find` ignore
   an app's other windows (§45). A target in a background window is therefore *not found*
   rather than found at coordinates that belong to whatever is really on screen. Raise the
-  window first — `cmd+\`` cycles them within an app.
+  window first, `cmd+\`` cycles them within an app.
 - **Secure input fields cannot be typed into.** macOS refusing, not a defect. A virtual
   HID driver (Karabiner-style DriverKit) is the only way past it. **`sudo` in a terminal
-  is *not* secure input** — that works fine (verified).
+  is *not* secure input**, that works fine (verified).
 - **Synthetic, not hardware.** Apps cannot tell; macOS can. That distinction is why the
   point above exists.
 - **Image matching finds what a thing looks like, not which one you meant.** Blank
   background matches everywhere; every macOS window has identical traffic lights. Use
   distinctive targets and `--region`. Appearance also changes with focus and hover.
-- **Verification costs ~2–3 s** when it falls back to pixels (baseline must span a caret
+- **Verification costs ~2 to 3 s** when it falls back to pixels (baseline must span a caret
   blink). Free when the accessibility tree can answer.
-- **Change detection blind spots are permanent for that check** — anything animating
+- **Change detection blind spots are permanent for that check**, anything animating
   during the baseline is masked out.
 - **A change that reverts within 0.35 s is ignored** (the confirmation window).
 - **`human-do` decides, and can be wrong.** The approval gate is the control. Read the
@@ -390,12 +390,12 @@ never by reading the code.** The build was clean each time.
 
 - **`~/.wezterm.lua`**: added a guard so the autosave timer stops stacking on every
   config reload. The unguarded `call_after` started a new chain per reload and they
-  never stop — a suspected cause of pointer stutter. **Existing chains only clear on a
+  never stop, a suspected cause of pointer stutter. **Existing chains only clear on a
   WezTerm restart, which has not happened yet.**
 - **`hidutil` remap and its LaunchAgent: removed.** They did nothing on this Mac.
 - **The arrow-key scare:** I claimed the right arrow was physically stuck. **That was
-  wrong.** `hidSystemState` counts events posted to the HID tap — which this tool had
-  been doing all evening — so the reading was contaminated. A clean 20-second test with
+  wrong.** `hidSystemState` counts events posted to the HID tap, which this tool had
+  been doing all evening, so the reading was contaminated. A clean 20-second test with
   hands off showed **zero** phantom input and no drift. The key feeling light is
   mechanical (worn or dirty switch); compressed air at 75° is the fix. No software
   remap is needed and none is installed.
@@ -415,19 +415,19 @@ faster and works in CI). Their call; `CLAUDE.md` should be amended either way.
 
 ## 11. What is left
 
-**Shipped since this list was written** — screen-region cache keyed to change detection;
+**Shipped since this list was written**, screen-region cache keyed to change detection;
 pointer follows intent (`--next`); mistakes tied to Fitts rather than a flat rate;
 upscaled OCR for small text; fuzzy matching for OCR misreads (`l` vs `1`); the gap
 between two commands; practice that saturates and decays, for targets and for typed
 strings; traits that drift by the day; fatigue that recovers with rest.
 
-**Reliability** — nothing outstanding that has a known reproduction.
-**Realism** — `--fallible` is still off by default, so the most human thing the tool does
+**Reliability**, nothing outstanding that has a known reproduction.
+**Realism**, `--fallible` is still off by default, so the most human thing the tool does
 is opt-in. Deliberate (a stray click lands on whatever is really there) but worth
 revisiting rather than leaving to inertia.
-**Coverage** — Open/Save panels; trackpad pinch/swipe are attempted but only indirectly
+**Coverage**, Open/Save panels; trackpad pinch/swipe are attempted but only indirectly
 evidenced; most Electron apps beyond WhatsApp and Chrome.
-**Robustness** — signed `.app` with its own permissions.
+**Robustness**, signed `.app` with its own permissions.
 
 Menu bars did not work at all until `human menu` existed: a menu opens on the press and
 closes on the release, so a click with a 0.055-0.135 s gap opened and dismissed it in one
@@ -437,15 +437,15 @@ While a menu is open the app is in a tracking loop and a general `axTree` sweep 
 back nearly empty (29 elements for Finder), so `openMenuItems` walks to the AXMenu
 explicitly instead. Guards, because releasing on the wrong row picks the wrong thing:
 greyed-out items, option-key alternates that share a row with the item they replace, and
-submenu parents named without a child. Verified end to end on Finder — View > Show Path
+submenu parents named without a child. Verified end to end on Finder, View > Show Path
 Bar flipped to Hide Path Bar, and View > Group By > Name moved the checkmark, both
 restored afterwards.
 
-The app switcher holds command down while it walks the icons and dwells before letting go, scaled by how far it went — keyed to cmd+tab and cmd+` rather than to holding a modifier, since nothing dwells on command after cmd+S. `--dwell s` overrides. Under `--fallible` it overshoots by one and steps back with shift; the correction is net-zero, verified by 12 runs from a fixed MRU all landing on the same app.
+The app switcher holds command down while it walks the icons and dwells before letting go, scaled by how far it went, keyed to cmd+tab and cmd+` rather than to holding a modifier, since nothing dwells on command after cmd+S. `--dwell s` overrides. Under `--fallible` it overshoots by one and steps back with shift; the correction is net-zero, verified by 12 runs from a fixed MRU all landing on the same app.
 
 Reading is now coupled to real work: a comprehension pause after a look is spent drifting
 over the screen instead of sitting still. It is capped at the pause it was already owed,
-so it never lengthens a run — asserted. The trade-off is that the pointer moves during
+so it never lengthens a run, asserted. The trade-off is that the pointer moves during
 work, which can raise a hover state; kept small and local (±70 px) for that reason, and
 skipped mid-drag.
 

@@ -52,7 +52,7 @@ This file is the map: read it instead of exploring. Facts were checked on 2026-1
 
 ## Claude Code setup (`claude/`)
 - `.claude/CLAUDE.md`: Hassan's global rules for every project (git, no long dashes, paste format, work others will see, GUI driving, comments, Sonnet for research, response style, docs shape, fast checks, machine health, workers).
-- `.claude/settings.json` hooks: atuin on Bash; malscan on SessionStart (warns if a project is flagged); `register-protect.py` on Edit/Write/Bash; `cmux-stop-settle` on Stop; a UserPromptSubmit reply-style note. Also plugins, marketplaces, statusline, `effortLevel` high, `CLAUDE_CODE_PLUGIN_DIRS` (local dev-mods).
+- `.claude/settings.json` hooks: atuin on Bash; malscan on SessionStart (warns if a project is flagged); `register-protect.py` on Edit/Write/Bash; `cmux-stop-settle` on Stop; `claude-notify` on Stop, Notification and UserPromptSubmit. Also plugins, marketplaces, statusline, `effortLevel` high, `CLAUDE_CODE_PLUGIN_DIRS` (local dev-mods).
 - `.claude/skills/`: `go`, `proof`, `simple`, `stories` (Passenger), `ui-libraries`, `verify`, `workers` (cw-new/cw-board). Other skills in `~/.claude/skills` are not from this repo.
 - `.claude/statusline-command.sh`: branch, model + effort, ctx/5h/7d percentages.
 - `.claude/cmux-sessions.md`, `.claude/wezterm-sessions.md`: how to drive those terminals.
