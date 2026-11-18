@@ -8,9 +8,17 @@
     "warnBeforeClosingTabXButton": true,
     "confirmQuit": "always",
     "accentColor": "#a7b4c6",
-    "minimalMode": false,
+    "minimalMode": true,
     "reorderOnNotification": false,
     "sendAnonymousTelemetry": false
+  },
+  "ui": {
+    "surfaceTabBar": {
+      "buttons": [
+        "cmux.splitRight",
+        "cmux.splitDown"
+      ]
+    }
   },
   "paneBorderColor": "#222326",
   "activePaneBorderColor": "#3d4350",
@@ -18,7 +26,13 @@
     "fontSize": 12
   },
   "terminal": {
-    "autoResumeAgentSessions": false
+    "autoResumeAgentSessions": false,
+    "titleUpdates": {
+      "coalescing": {
+        "enabled": true,
+        "delayMilliseconds": 3000
+      }
+    }
   },
   "sidebarAppearance": {
     "matchTerminalBackground": false,
@@ -44,13 +58,14 @@
   },
   "notifications": {
     "paneFlash": false,
-    "paneFlashOnTyping": false
+    "paneFlashOnTyping": false,
+    "showInMenuBar": false,
+    "dockBadge": false,
+    "sound": "Glass"
   },
   "computerUse": {
+    "enabled": false,
     "showInMenuBar": false
-  },
-  "chief": {
-    "enabled": false
   },
   "automation": {
     "workspaceAutoNaming": false,

@@ -411,8 +411,8 @@ sidebar(() =>
         const n = allAgents().length;
         const need = allAgents().filter((a) => a.status === "needs_input").length;
         const sel = workspaces().find((w) => w.selected);
-        const branch = sel && sel.branch ? sel.branch + " · " : "";
-        return "This computer · " + branch + n + (n === 1 ? " agent" : " agents") + (need ? " · " + need + " need you" : "");
+        const branch = sel && sel.branch ? " · " + sel.branch : "";
+        return "This computer · " + n + (n === 1 ? " agent" : " agents") + (need ? " · " + need + " need you" : "") + branch;
       }).font(11.8).color(C.muted).lineLimit(1).truncation("tail"),
       Spacer(),
     ])
