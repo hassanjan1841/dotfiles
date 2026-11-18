@@ -46,13 +46,18 @@ function badgeColor(w) {
 
 const letter = (w) => ((w && w.title) || "?").trim().charAt(0).toUpperCase() || "?";
 
-// Branch tail is only worth showing when it says something the name doesn't.
+// Like Herdr: "folder · branch", each part only when it says something the name doesn't.
 function gitTail(w) {
-  if (!w || !w.branch) return "";
+  if (!w) return "";
+  // A long name leaves only a sliver, which reads as a stray letter: skip the tail.
+  if ((w.title || "").length > 16) return w.dirty ? "●" : "";
+  const name = (w.title || "").toLowerCase();
+  const folder = (w.directory || "").replace(/\/+$/, "").split("/").pop() || "";
+  const parts = [];
+  if (folder && folder.toLowerCase() !== name && folder !== "~" && folder !== "hassanjan") parts.push(folder);
   const b = w.branch;
-  if (b === "main" || b === "master") return w.dirty ? "●" : "";
-  if (b.toLowerCase() === (w.title || "").toLowerCase()) return "";
-  return b + (w.dirty ? " ●" : "");
+  if (b && b !== "main" && b !== "master" && b.toLowerCase() !== name) parts.push(b);
+  return parts.join(" · ") + (w.dirty ? " ●" : "");
 }
 
 // --- state -------------------------------------------------------------------
@@ -190,7 +195,7 @@ function badge(w) {
       .frame({ width: 18, height: 18 })
       .cornerRadius(5),
     Text(() => letter(w())).font(10.5).bold().color(C.text),
-  ]).frame({ width: 18, height: 18 }).layoutPriority(2);
+  ]).frame({ width: 18, height: 18 }).layoutPriority(4);
 }
 
 function sectionHeader(title, trailing) {
@@ -233,24 +238,23 @@ function spaceMenu(w) {
 }
 
 function spaceRow(w) {
-  // Hover buttons float over the trailing edge so the name keeps the full width.
-  return ZStack({ alignment: "trailing" }, [
-    HStack({ spacing: 9 }, [
-      badge(w),
-      Text(() => w()?.title ?? "")
-        .font(13).color(C.text)
-        .lineLimit(1).truncation("tail")
-        .layoutPriority(1),
-      Spacer(),
-      Text(() => gitTail(w()))
-        .font(11.5).color(C.dim)
-        .lineLimit(1).truncation("tail")
-        .hideOnHover(),
-    ]).frame({ maxWidth: "infinity" }),
-    HStack({ spacing: 2 }, [
+  return HStack({ spacing: 9 }, [
+    badge(w),
+    // Herdr caps the name at 150pt so the folder tail always keeps some room.
+    Text(() => w()?.title ?? "")
+      .font(13).color(C.text)
+      .lineLimit(1).truncation("tail")
+      .frame({ maxWidth: 140 })
+      .layoutPriority(3),
+    Text(() => gitTail(w()))
+      .font(11.5).color(C.dim)
+      .lineLimit(1).truncation("tail")
+      .frame({ maxWidth: "infinity", alignment: "leading" })
+      .layoutPriority(0),
+    HStack({ spacing: 0 }, [
       iconButton("plus", 11, () => cmux("surface.create", { workspace_id: w().id })),
       iconButton(() => (isFolded(w()?.id) ? "chevron.right" : "chevron.down"), 11, () => toggleFold(w().id)),
-    ]).background(() => (isSelected(w()) ? C.selected : C.hover)).showOnHover(),
+    ]).layoutPriority(4),
   ])
     .paddingHorizontal(8)
     .frame({ maxWidth: "infinity", height: 30 })
@@ -404,7 +408,9 @@ sidebar(() =>
       Text(() => {
         const n = allAgents().length;
         const need = allAgents().filter((a) => a.status === "needs_input").length;
-        return "This computer · " + n + (n === 1 ? " agent" : " agents") + (need ? " · " + need + " need you" : "");
+        const sel = workspaces().find((w) => w.selected);
+        const branch = sel && sel.branch ? sel.branch + " · " : "";
+        return "This computer · " + branch + n + (n === 1 ? " agent" : " agents") + (need ? " · " + need + " need you" : "");
       }).font(11.8).color(C.muted).lineLimit(1).truncation("tail"),
       Spacer(),
     ])
