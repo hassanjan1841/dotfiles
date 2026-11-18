@@ -185,6 +185,7 @@ function iconButton(symbol, size, onTap) {
     .frame({ width: 18, height: 18 })
     .cornerRadius(4)
     .hoverBackground("#ffffff14")
+    .cursor("pointer")
     .onTap(onTap);
 }
 
@@ -350,13 +351,14 @@ function agentRow(e) {
         .lineLimit(1).truncation("tail"),
     ]).layoutPriority(1),
     Spacer({ minLength: 4 }),
-    Text(() => age(a().sinceEpoch ?? a().lastActivityAt)).font(11).color(C.dim).layoutPriority(2),
+    Text(() => age(a().sinceEpoch ?? a().lastActivityAt)).font(11).color(C.dim).fixedSize(),
     statusGlyph(() => a().status),
   ])
     .paddingHorizontal(8)
     .frame({ maxWidth: "infinity", height: 30 })
     .cornerRadius(8)
     .hoverBackground(C.hover)
+    .cursor("pointer")
     .onTap(focus);
 }
 
