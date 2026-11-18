@@ -7,13 +7,30 @@
     "warnBeforeClosingTab": true,
     "warnBeforeClosingTabXButton": true,
     "confirmQuit": "always",
-    "accentColor": "#7aa2f7"
+    "accentColor": "#a7b4c6",
+    "minimalMode": true,
+    "reorderOnNotification": false,
+    "sendAnonymousTelemetry": false
+  },
+  "paneBorderColor": "#222326",
+  "activePaneBorderColor": "#3d4350",
+  "surfaceTabBar": {
+    "fontSize": 12
+  },
+  "terminal": {
+    "autoResumeAgentSessions": false
+  },
+  "sidebarAppearance": {
+    "matchTerminalBackground": false,
+    "tintColor": "#101114",
+    "tintOpacity": 1
   },
   "workspaceColors": {
-    "selectionColor": "#426cbf",
+    "selectionColor": "#262629",
     "indicatorStyle": "leftRail"
   },
   "sidebar": {
+    "fontSize": 13,
     "showBranchDirectory": false,
     "showLog": false,
     "showSSH": false,
@@ -25,7 +42,29 @@
     "showPullRequests": false,
     "compactAgentStatus": true
   },
+  "notifications": {
+    "paneFlash": false,
+    "paneFlashOnTyping": false
+  },
+  "computerUse": {
+    "showInMenuBar": false
+  },
+  "chief": {
+    "enabled": false
+  },
   "automation": {
-    "workspaceAutoNaming": true
+    "workspaceAutoNaming": false,
+    "codexIntegration": false,
+    "piIntegration": false,
+    "ampIntegration": false,
+    "cursorIntegration": false,
+    "geminiIntegration": false,
+    "kiroIntegration": false
+  },
+  "shortcuts": {
+    "bindings": {
+      "nextSidebarTab": "cmd+opt+]",
+      "prevSidebarTab": "cmd+opt+["
+    }
   }
 }

@@ -1,26 +1,49 @@
-# Ghostty config, also read by cmux. Ported from ~/dotfiles/wezterm/.wezterm.lua.
+# Ghostty config, also read by cmux. Matches Herdr's graphite look (cmux-style layout).
 
-theme = TokyoNight Night
 font-family = JetBrainsMono Nerd Font
-font-size = 20
-adjust-cell-height = 12%
+font-size = 14
+adjust-cell-height = 8%
 
-window-padding-x = 16
-window-padding-y = 12,10
+background = #17191d
+foreground = #e6e7e9
+cursor-color = #e6e7e9
+selection-background = #2c3038
+selection-foreground = #ffffff
+palette = 0=#454c59
+palette = 1=#e06c75
+palette = 2=#98c379
+palette = 3=#e5c07b
+palette = 4=#61afef
+palette = 5=#c678dd
+palette = 6=#56b6c2
+palette = 7=#c8ccd4
+palette = 8=#767676
+palette = 9=#e06c75
+palette = 10=#98c379
+palette = 11=#e5c07b
+palette = 12=#61afef
+palette = 13=#c678dd
+palette = 14=#56b6c2
+palette = 15=#ffffff
+
+window-padding-x = 12
+window-padding-y = 14
 window-padding-balance = true
+window-padding-color = background
 
-# Solid by default: glass washes out text over a bright wallpaper.
+# Solid, no blur: transparency and blur make the compositor redraw behind every frame.
 background-opacity = 1.0
 background-blur = 0
 
+# A blinking cursor redraws the window twice a second, forever.
 cursor-style = bar
-cursor-style-blink = true
+cursor-style-blink = false
 shell-integration-features = no-cursor
 
-split-divider-color = #7aa2f7
-unfocused-split-opacity = 0.85
+split-divider-color = #222326
+unfocused-split-opacity = 1.0
 
 macos-option-as-alt = left
 copy-on-select = clipboard
 mouse-hide-while-typing = true
-scrollback-limit = 20000000
+scrollback-limit = 5000000

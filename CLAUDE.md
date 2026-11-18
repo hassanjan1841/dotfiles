@@ -45,7 +45,7 @@ This file is the map: read it instead of exploring. Facts were checked on 2026-1
 - `dev`: `~/.devrc` (not linked here): `PROJECT_PATH` (old speaklogic project), `NOTES_DIR`.
 - `claude`: `~/.claude` (CLAUDE.md, settings.json, statusline, session recipes, skills) and `~/.leader` (register guard). File-level links (`--no-folding`). Details below.
 - `herdr`: `~/.config/herdr-app` (linked): `layouts/cmux-style.json`, `mods/spaces-tree/{main.js,mod.json}`, `settings.json`. See docs/herdr.md. Herdr does not hot-reload an edit made here: `touch -h` the linked file in `~/.config/herdr-app`, then `herdr-app check` the mod.
-- `cmux`: `~/.config/cmux/cmux.json` + `projects.example.json` (linked). `ghostty`: `~/.config/ghostty/config` (linked, read by cmux).
+- `cmux`: `~/.config/cmux/cmux.json` + `projects.example.json` (linked), plus `sidebars/herdr.js`, a Herdr-look custom sidebar (picked with `cmux sidebar select herdr` from a cmux shell). cmux reports a linked `sidebars` folder as missing, so `~/.config/cmux/sidebars` must be a real folder holding a linked file. `ghostty`: `~/.config/ghostty/config` (linked, read by cmux), set to Herdr's graphite colours.
 - `wezterm`: `~/.wezterm.lua` (linked, older fallback). `zed`: target `~/.config/zed` (blocked, real `settings.json` there).
 - `taskwarrior`, `notes` (Obsidian settings and templates for `~/notes/hassanjan`): not linked here, tools not installed.
 - Ubuntu only: `startup` (`~/startup.sh`), `autostart` (GNOME), `systemd` (daily timer).
