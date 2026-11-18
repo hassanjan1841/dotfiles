@@ -8,7 +8,7 @@
     "warnBeforeClosingTabXButton": true,
     "confirmQuit": "always",
     "accentColor": "#a7b4c6",
-    "minimalMode": true,
+    "minimalMode": false,
     "reorderOnNotification": false,
     "sendAnonymousTelemetry": false
   },

@@ -18,8 +18,8 @@ const C = {
   claude: "#d97757",
 };
 
-// Sidebar height on the full-screen window (1130pt window minus the traffic-light strip).
-const SIDEBAR_MIN_HEIGHT = 1090;
+// Sidebar height on the full-screen window: 1130pt minus the top strip and cmux's own bottom icon row.
+const SIDEBAR_MIN_HEIGHT = 1052;
 
 // Herdr's space badge palette, in the order new spaces receive colours.
 const PALETTE = ["#22a99a", "#e3814f", "#5b8def", "#8b7cf6", "#3fae6a", "#d9649a"];
@@ -302,12 +302,12 @@ function tabRow(wsId, tabId) {
         .color(() => (active() || t()?.hasUnread ? C.text : C.muted))
         .lineLimit(1).truncation("tail"),
       Spacer({ minLength: 0 }),
-      Circle({ size: 7 }).fill(dotColor).hideOnHover(),
+      Circle({ size: 7 }).fill(dotColor),
       Image("xmark")
         .font(9).color(C.dim)
         .padding(3).cornerRadius(4)
         .hoverBackground("#ffffff14")
-        .showOnHover()
+        .opacity(() => (active() ? 1 : 0))
         .onTap(() => t()?.surfaceId && cmux("surface.close", { surface_id: t().surfaceId })),
     ])
       .paddingLeading(12)
@@ -416,14 +416,6 @@ sidebar(() =>
     ])
       .paddingHorizontal(16)
       .frame({ maxWidth: "infinity", height: 28 }),
-    HStack({ spacing: 0 }, [
-      Text("⌘⇧P commands").font(11).color(C.dim).lineLimit(1),
-      Spacer(),
-      Text("⌘, settings").font(11).color(C.dim).lineLimit(1),
-    ])
-      .paddingHorizontal(16)
-      .paddingBottom(8)
-      .frame({ maxWidth: "infinity", height: 26 }),
   ])
     .background(C.chrome)
     // The host scrolls the sidebar, so a Spacer only pins Agents to the bottom
