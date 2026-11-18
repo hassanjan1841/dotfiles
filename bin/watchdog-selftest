@@ -53,11 +53,16 @@ BAT="Now drawing from 'Battery Power'
  -InternalBattery-0 (id=1)	4%; discharging"
 ACP="Now drawing from 'AC Power'
  -InternalBattery-0 (id=1)	4%; charging"
-o=$(WD_BATT="$BAT" WD_DRY=1 isolated $W power 2>&1 | tr '\n' ' ')
+o=$(for i in 1 2 3; do WD_BATT="$BAT" WD_DRY=1 isolated $W power 2>&1; done | tr '\n' ' ')
 echo "$o" | grep -q "on battery" && echo "$o" | grep -q "DRY: uw_quit" && res PASS power-lowbatt "battery 4% => logged and Upwork stopped cleanly" || res FAIL power-lowbatt "$o"
 o=$(WD_BATT="$BAT" WD_DRY=1 isolated $W power 2>&1); echo "$o" | grep -q "uw_quit" && res FAIL power-once "stopped twice: $o" || res PASS power-once "only one clean stop"
 o=$(WD_DRY=1 isolated $W upwork 2>&1); [ -z "$o" ] && res PASS power-no-reopen "Upwork not reopened while on low battery" || res FAIL power-no-reopen "$o"
-o=$(WD_BATT="$ACP" WD_DRY=1 isolated $W power 2>&1 | tr '\n' ' '); echo "$o" | grep -q "back on mains" && [ "$(cat $T/st/lowbatt_done)" = 0 ] && res PASS power-mains-back "mains back => Upwork allowed again" || res FAIL power-mains-back "$o"
+o=$(for i in 1 2 3; do WD_BATT="$ACP" WD_DRY=1 isolated $W power 2>&1; done | tr '\n' ' '); echo "$o" | grep -q "back on mains" && [ "$(cat $T/st/lowbatt_done)" = 0 ] && res PASS power-mains-back "mains back => Upwork allowed again" || res FAIL power-mains-back "$o"
+
+# flicker: AC for one check between battery checks must not log a change
+rm -rf $T/st; mkdir -p $T/st; : > $T/conf
+o=$( (for i in 1 2 3; do WD_BATT="$BAT" WD_DRY=1 isolated $W power; done; WD_BATT="$ACP" WD_DRY=1 isolated $W power; WD_BATT="$BAT" WD_DRY=1 isolated $W power) 2>&1 | grep -c "back on mains")
+[ "$o" = 0 ] && res PASS power-flicker "1 second of AC between battery reads is ignored" || res FAIL power-flicker "logged $o changes"
 
 # log cap
 mkdir -p $T/st; : > $T/conf; yes "old line padding padding padding padding" | head -c 5200000 > $T/biglog
@@ -94,6 +99,7 @@ oldpid=$pid; kill -9 $oldpid 2>/dev/null; np=""; for i in $(seq 1 25); do sleep 
 { [ -n "$np" ] && [ "$np" != "-" ] && [ "$np" != "$oldpid" ]; } && res PASS crash-restart "killed $oldpid, launchd started $np" || res FAIL crash-restart "old=$oldpid new=$np"
 sleep 3; o=$($W loop 2>&1 | head -1); echo "$o" | grep -q "already running" && res PASS single-instance "second loop refused: $o" || res FAIL single-instance "$o"
 
+if [ -z "$WD_SKIP_REAL" ]; then
 # REAL: wifi off (daemon must restore) and Upwork stopped (daemon must click Start), in parallel
 sleep 12
 ( networksetup -setairportpower en0 off; s=$(date +%s); b=0; for i in $(seq 1 45); do sleep 2; ping -c1 -t1 1.1.1.1 >/dev/null 2>&1 && { echo "$(( $(date +%s)-s ))" > $T/wifi_s; b=1; break; }; done
@@ -110,6 +116,7 @@ tu=$(( $(date +%s)-t0 )); on=$(human see --app Upwork 2>/dev/null | awk -F'\t' '
 wait $WP; w=$(cat $T/wifi_s 2>/dev/null)
 case "$w" in ''|FAIL) res FAIL wifi-real-restore "net did not return by itself ($w)";; *) res PASS wifi-real-restore "Wi-Fi forced off, daemon restored internet in ${w}s: $(grep -a 'Wi-Fi power was off' $LIVE | tail -1 | cut -c1-80)";; esac
 
+else res PASS real-tests-skipped "WD_SKIP_REAL set: Wi-Fi off and Upwork stop not run"; fi
 echo >> "$OUT"; echo "Result: $P pass, $F fail" >> "$OUT"
 cat >> "$OUT" <<'EON'
 

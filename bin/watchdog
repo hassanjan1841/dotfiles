@@ -268,10 +268,17 @@ part_power() {
   local b src pct
   b=$(batt); src=$(echo "$b" | grep -q "AC Power" && echo ac || echo battery); pct=$(echo "$b" | grep -oE '[0-9]+%' | head -1 | tr -d %)
   [ -z "$pct" ] && return 0
+  # mains here can flicker every second, so a change only counts after 3 checks in a row
   if [ "$src" != "$(getv power_src none)" ]; then
-    [ "$src" = ac ] && log power "back on mains power ($pct%)" || log power "mains power lost, on battery ($pct%)"
-    setv power_src "$src"; setv power_logged_pct "$pct"
+    if [ "$src" = "$(getv power_cand x)" ]; then setv power_cand_n $(( $(getv power_cand_n) + 1 )); else setv power_cand "$src"; setv power_cand_n 1; fi
+    if [ "$(getv power_cand_n)" -ge 3 ]; then
+      [ "$src" = ac ] && log power "back on mains power ($pct%)" || log power "mains power lost, on battery ($pct%)"
+      setv power_src "$src"; setv power_logged_pct "$pct"; setv power_cand_n 0
+    fi
+  else
+    setv power_cand_n 0
   fi
+  src=$(getv power_src "$src")
   if [ "$src" = ac ]; then
     [ "$(getv lowbatt_done)" = 1 ] && { log power "mains back, Upwork may reopen"; setv lowbatt_done 0; }
     return 0
