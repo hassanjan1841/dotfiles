@@ -1,16 +1,36 @@
 #!/usr/bin/env bash
 # Background arm of malscan, driven by launchd.
 #   malscan-agent watch   every few minutes: kill live payload processes  (no-sudo stand-in for a firewall block)
-#   malscan-agent daily   deep scan of $HOME, notify on findings
+#   malscan-agent daily   runs hourly; does the deep scan of $HOME only when it is due and cheap
+#                         (see is_due), notifies on NEW critical findings, keeps 3 days of data
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 SCAN="$HOME/.security/malscan"
-LOG="$HOME/.security/logs/agent.log"
-mkdir -p "$(dirname "$LOG")"
+LOGDIR="$HOME/.security/logs"
+LOG="$LOGDIR/agent.log"
+STAMP="$LOGDIR/last-full-scan"          # touched after every completed deep scan
+KNOWN="$LOGDIR/known-critical.txt"      # critical lines already reported
+REMIND="$LOGDIR/last-known-reminder"
+mkdir -p "$LOGDIR"
 
 notify() { # title, message
   /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Basso\"" >/dev/null 2>&1
 }
 log() { printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG"; }
+hours_since() { [ -f "$1" ] || { echo 9999; return; }; echo $(( ( $(date +%s) - $(stat -f %m "$1") ) / 3600 )); }
+
+# Due when the last deep scan is 20+ hours old AND it costs no battery: on the charger,
+# at night or while the user is away. After 72 hours it runs regardless (on battery
+# too, still at background priority), so coverage never lapses for more than 3 days.
+is_due() {
+  local age idle hour
+  age=$(hours_since "$STAMP")
+  [ "$age" -ge 72 ] && return 0
+  [ "$age" -ge 20 ] || return 1
+  pmset -g batt | head -1 | grep -q "AC Power" || return 1
+  hour=$((10#$(date +%H)))
+  idle=$(ioreg -c IOHIDSystem | awk '/HIDIdleTime/ {print int($NF/1000000000); exit}')
+  [ "$hour" -lt 7 ] || [ "${idle:-0}" -ge 900 ]
+}
 
 case "${1:-watch}" in
   watch)
@@ -24,16 +44,31 @@ case "${1:-watch}" in
     fi
     ;;
   daily)
-    out=$("$SCAN" --all 2>&1); rc=$?
-    log "daily scan rc=$rc"
-    if [ "$rc" = 1 ]; then
-      n=$(printf '%s' "$out" | grep -c CRITICAL)
-      log "$out"
-      notify "⚠️ malscan found $n critical item(s)" "Run: scan-all"
-    elif [ "$rc" = 2 ]; then
-      log "SCANNER BROKEN: $out"
-      notify "malscan is broken" "Daily scan did not run."
+    if ! is_due; then "$SCAN" --prune; exit 0; fi
+    log "deep scan start (last one $(hours_since "$STAMP") h ago)"
+    # taskpolicy -b: background QoS, so macOS keeps it on the efficiency cores and
+    # throttles its disk reads; 2 ripgrep threads instead of one per core.
+    out=$(MALSCAN_THREADS=2 /usr/sbin/taskpolicy -b nice -n 20 "$SCAN" --all 2>&1); rc=$?
+    if [ "$rc" = 2 ]; then
+      log "SCANNER BROKEN: $(printf '%s' "$out" | tail -3)"
+      notify "malscan is broken" "Nightly scan did not run. Check ~/.security/logs/agent.log"
+      exit 0
     fi
+    touch "$STAMP"
+    printf '%s\n' "$out" | grep -E 'CRITICAL' | sed 's/\x1b\[[0-9;]*m//g' | sort -u > "$KNOWN.new"
+    n=$(wc -l < "$KNOWN.new" | tr -d ' ')
+    new=$( [ -f "$KNOWN" ] && comm -13 "$KNOWN" "$KNOWN.new" || cat "$KNOWN.new" )
+    m=$(printf '%s' "$new" | grep -c CRITICAL)
+    log "deep scan done rc=$rc critical=$n new=$m $(printf '%s' "$out" | grep -o 'NOTE: [0-9]* path(s) were unreadable' | head -1)"
+    [ "$m" -gt 0 ] && printf '%s\n' "$new" | sed 's/^/    NEW /' >> "$LOG"
+    mv "$KNOWN.new" "$KNOWN"
+    if [ "$m" -gt 0 ]; then
+      notify "⚠️ malscan: $m new critical item(s)" "Details: ~/.security/logs/agent.log"
+    elif [ "$n" -gt 0 ] && [ "$(hours_since "$REMIND")" -ge 168 ]; then
+      touch "$REMIND"
+      notify "malscan: $n known critical item(s) still on disk" "Nothing new. List: ~/.security/logs/known-critical.txt"
+    fi
+    "$SCAN" --prune
     ;;
 esac
 exit 0

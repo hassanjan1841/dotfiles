@@ -1,4 +1,4 @@
-# malscan — supply-chain payload guard
+# malscan, supply-chain payload guard
 
 Built after a real compromise on 2026-08-04. A cloned client repo carried an
 obfuscated loader hidden in `postcss.config.js`; it stole GitHub credentials,
@@ -7,7 +7,7 @@ eventually rewrote `npm`'s own `cli.js`.
 
 Attributed to **PolinRider**, a DPRK-linked campaign that has hit 1,900+ GitHub
 repositories. Notably, **every published variant-specific IOC matched none of the
-samples found here** — the variant seen was newer and used Ethereum rather than
+samples found here**, the variant seen was newer and used Ethereum rather than
 TRON/Aptos. That is why this scanner leads with structural detection, not IOC lists.
 
 ## Install
@@ -30,7 +30,7 @@ it detects a known-bad sample.
 | `safe-install` | refuses `npm install` until the tree passes |
 | `malscan --selftest` | prove the scanner still works |
 
-**Exit codes: `0` clean, `1` findings, `2` scanner broken — which is NOT clean.**
+**Exit codes: `0` clean, `1` findings, `2` scanner broken, which is NOT clean.**
 The first version of this tool silently reported "clean" because ripgrep was
 missing and `--no-messages` hid the error. It now fails closed.
 
@@ -38,34 +38,40 @@ missing and `--no-messages` hid the error. It now fails closed.
 
 | Point | Mechanism | Catches |
 |---|---|---|
-| Every repo, existing and future | `core.hooksPath=~/.git-hooks` | `pre-commit` blocks; `post-merge` warns — **`git pull` is how the payload actually arrived** |
+| Every repo, existing and future | `core.hooksPath=~/.git-hooks` | `pre-commit` blocks; `post-merge` warns, **`git pull` is how the payload actually arrived** |
 | Every clone | `gclone` in `~/.security/shellrc` | poisoned repo before `npm install` |
 | Every Claude Code session | `SessionStart` hook | scans the project on open |
 | Every 180s | `com.malscan.watch` | kills live payload processes (stands in for an outbound firewall, which needs sudo) |
-| Daily 13:00 | `com.malscan.daily` | deep sweep, macOS notification on findings |
+| Hourly check | `com.malscan.daily` | deep sweep when due: 20+ h since the last one, on the charger, at night or while away (forced after 72 h); notifies on new critical findings only |
 | CI | `scripts/scan-payload.sh` | blocks it reaching `main` |
 
 Repos using husky set `core.hooksPath` locally, which overrides the global value.
 Those stay covered by the clone wrapper, the Claude hook and the daily sweep.
 
+Power and data:
+- Both jobs run as background tasks (efficiency cores, low-priority disk). The deep sweep uses 2 ripgrep threads.
+- Hook scans (`--quiet`) reuse the last result for a tree until a file in it changes (by change time, which cannot be backdated); `--fresh` forces a full scan.
+- Skipped: `~/OrbStack` (live view of container files, very costly to read), `.claude/projects` (transcripts that quote IOCs), files over 10 MB.
+- Quarantine keeps one copy per distinct file. Quarantine, logs and cache keep 3 days (`malscan --prune`, run by the agent).
+
 ## Detection rules, and why they are shaped this way
 
 Each of these was wrong on the first attempt and fixed against real samples.
 
-- **Hidden code after whitespace padding** — the tail must start with a non-space
+- **Hidden code after whitespace padding**, the tail must start with a non-space
   (otherwise `.{199,}` just re-matches the padding), must not start with `*`
   (JSDoc continuation lines), and must reach a runtime token like `require(` or
   `global[`. Padding alone flags minified Flow parsers and markdown tables in `.d.ts`.
-- **`\uXXXX`-escaped module names only.** Bare escape density is unusable —
+- **`\uXXXX`-escaped module names only.** Bare escape density is unusable:
   `emoji-regex`, `iconv-lite`, `date-fns` locales and eslint's own
   `no-irregular-whitespace` rule are legitimately full of them.
 - **Family invariant: `global.r = require` / `global.m = module`.** The loader
   stashes these so its obfuscated body can reach them. This matched **all three**
   samples across **two different variants**, while published IOCs matched none.
   This is the durable rule.
-- **Published PolinRider markers** — obfuscator seeds, XOR keys, C2 domains,
+- **Published PolinRider markers**, obfuscator seeds, XOR keys, C2 domains,
   blockchain dead-drop addresses, `temp_auto_push.bat`. Bonus coverage only.
-- **`.vscode/tasks.json` with `runOn: folderOpen`** — executes on opening the
+- **`.vscode/tasks.json` with `runOn: folderOpen`**, executes on opening the
   folder, which is why cloning alone can infect you.
 
 Scans run with `--hidden --no-ignore-vcs`: nested dotdirs and `.gitignore`d paths
@@ -79,10 +85,10 @@ themselves.
 Needs a human: FileVault, macOS firewall, [LuLu](https://objective-see.org/products/lulu.html)
 outbound firewall, SSH key passphrases, GitHub 2FA and branch protection.
 
-An outbound firewall is the single highest-value addition — it would have
+An outbound firewall is the single highest-value addition, it would have
 prompted the moment `node` dialled an unknown IP.
 
-## 2026-09-07 — second incident, campaign evolved
+## 2026-09-07, second incident, campaign evolved
 
 A new wave hit this machine. Same campaign, new indicators, and it partly
 evaded the v1 scanner. Fixed in this commit.

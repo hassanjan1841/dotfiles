@@ -62,6 +62,9 @@ mk_plist() { # label, arg, schedule-xml
   <key>ProgramArguments</key>
   <array><string>$HOME/.security/malscan-agent</string><string>$2</string></array>
   $3
+  <key>ProcessType</key><string>Background</string>
+  <key>LowPriorityIO</key><true/>
+  <key>Nice</key><integer>10</integer>
   <key>StandardErrorPath</key><string>$HOME/.security/logs/$2.err</string>
 </dict></plist>
 PLIST
@@ -80,12 +83,15 @@ done
 # watch: kills live payload processes. Stands in for an outbound firewall rule,
 # which would need sudo.
 mk_plist com.malscan.watch watch '<key>StartInterval</key><integer>180</integer><key>RunAtLoad</key><true/>'
-mk_plist com.malscan.daily daily '<key>StartCalendarInterval</key><dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>'
+# daily: checks every hour but only scans when due and cheap (on the charger, at
+# night or while away; forced after 72 h). A fixed 13:00 run caught up at the next
+# wake, mid-day and on battery.
+mk_plist com.malscan.daily daily '<key>StartInterval</key><integer>3600</integer>'
 # Capture first: `launchctl list | grep -q` SIGPIPEs launchctl, and pipefail
 # turns that into a false failure even when the agents loaded fine.
 LOADED="$(launchctl list 2>/dev/null || true)"
 case "$LOADED" in
-  *com.malscan.watch*) ok "watch (180s) + daily (13:00) loaded" ;;
+  *com.malscan.watch*) ok "watch (180s) + daily (hourly check, scans at night on the charger) loaded" ;;
   *) warn "agents did not load: check: launchctl list | grep malscan" ;;
 esac
 

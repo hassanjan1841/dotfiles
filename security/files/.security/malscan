@@ -8,9 +8,13 @@
 #   malscan --procs    check for live payload processes / C2 connections
 #   malscan --kill     as --procs, but kill what it finds
 #   malscan --selftest prove the scanner still detects a known-bad sample
-#   malscan --quiet    print only on findings (for hooks)
+#   malscan --quiet    print only on findings (for hooks); reuses the last result for a
+#                      tree whose files have not changed since (see the cache below)
+#   malscan --fresh    never reuse a cached result
+#   malscan --prune    keep only the last 3 days of quarantine, logs and cache
 #
 # Exit 0 = clean, 1 = findings, 2 = scanner itself is broken (treat as UNKNOWN, not clean).
+# MALSCAN_THREADS=N limits ripgrep threads (the nightly agent uses 2 to stay on low power).
 
 set -uo pipefail
 
@@ -21,18 +25,22 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PAT
 SEC_DIR="$HOME/.security"
 QUARANTINE="$SEC_DIR/quarantine"
 LOG="$SEC_DIR/logs/malscan.log"
-mkdir -p "$QUARANTINE" "$(dirname "$LOG")" 2>/dev/null
+CACHE_DIR="$SEC_DIR/cache"
+KEEP_DAYS=3
+mkdir -p "$QUARANTINE" "$(dirname "$LOG")" "$CACHE_DIR" 2>/dev/null
 
-QUIET=0; DEEP=0; MODE=scan; TARGET=""; KILL=0; SCAN_TOOLING=0; NOPROCS=0
+QUIET=0; DEEP=0; MODE=scan; TARGET=""; KILL=0; SCAN_TOOLING=0; NOPROCS=0; FRESH=0
 for a in "$@"; do
   case "$a" in
     --quiet)    QUIET=1 ;;
     --deep)     DEEP=1 ;;
     --tree)     NOPROCS=1 ;;
+    --fresh)    FRESH=1 ;;
     --all)      DEEP=1; TARGET="$HOME"; SCAN_TOOLING=1 ;;
     --procs)    MODE=procs ;;
     --kill)     MODE=procs; KILL=1 ;;
     --selftest) MODE=selftest ;;
+    --prune)    MODE=prune ;;
     -h|--help)  sed -n '2,15p' "$0"; exit 0 ;;
     -*) echo "malscan: unknown flag: $a" >&2; exit 2 ;;
     *)  TARGET="$a" ;;
@@ -109,10 +117,16 @@ R_FONT_JS='require\s*\(|child_process|process[.]env|eval\s*\(|Function\s*\('
 ign_globs() {
   # Anchored globs ('Library/**') only match relative to the search root, so they
   # silently miss when scanning an absolute path. '**/' prefixes match at any depth.
+  # OrbStack: ~/OrbStack is a live view into every container's filesystem; reading it
+  #   makes the OrbStack VM serve each file (220% CPU on 2026-11-19). The images come
+  #   from their registries, and their published source is not this machine's code.
+  # .claude/projects: Claude transcripts and notes quote IOC strings while discussing
+  #   them; they are never executed and only produced false alarms.
   printf '%s\n' --glob '!**/.git/**' --glob '!**/Library/**' --glob '!**/.Trash/**' \
                 --glob '!**/.next/cache/**' --glob '!*.map' --glob '!*.min.js' \
                 --glob '!**/*.bundle' --glob '!**/.security/**' \
-                --glob '!**/.npm/_cacache/**' --glob '!**/.git/objects/**'
+                --glob '!**/.npm/_cacache/**' --glob '!**/.git/objects/**' \
+                --glob '!**/OrbStack/**' --glob '!**/.claude/projects/**'
   [ "$DEEP" = 1 ] || printf '%s\n' --glob '!**/node_modules/**'
 }
 code_globs() {
@@ -134,7 +148,10 @@ run_rule() {
   # --hidden: nested dotdirs (.vscode, .config, .github) are skipped by default,
   #   and .vscode/tasks.json is an execute-on-open vector.
   # --no-ignore-vcs: a .gitignore'd path is exactly where a payload would hide.
-  "$RG" -l --no-config --hidden --no-ignore-vcs -e "$pat" "${args[@]}" -- "$root" > "$out" 2> "$errf"
+  # --max-filesize: every payload seen is a few KB appended to a config or script; the
+  #   multi-MB files skipped are generated bundles, data and media, and cost most of the I/O.
+  "$RG" -l --no-config --hidden --no-ignore-vcs --max-filesize 10M ${MALSCAN_THREADS:+-j "$MALSCAN_THREADS"} \
+        -e "$pat" "${args[@]}" -- "$root" > "$out" 2> "$errf"
   local rc=$?
   if [ "$rc" -gt 1 ]; then
     # rg exits 2 for any I/O error, including unreadable files in a broad sweep.
@@ -149,6 +166,16 @@ run_rule() {
   rm -f "$errf"
 }
 
+# One copy per distinct file content: hooks rescanned the same infected file hundreds of
+# times a day and grew the quarantine to 9 GB of identical copies.
+quarantine_copy() { # <file> <tag>
+  local f="$1" tag="$2" sum safe
+  sum=$(shasum -a 256 "$f" 2>/dev/null | cut -c1-16) || return 0
+  compgen -G "$QUARANTINE/$sum-*" >/dev/null && return 0
+  safe=$(printf '%s' "$f" | sed 's|/|_|g; s|^_||')
+  cp -p "$f" "$QUARANTINE/$sum-$(date +%Y%m%d-%H%M%S)-$tag-$safe" 2>/dev/null
+}
+
 report() {
   local sev="$1" msg="$2" tag="$3"; shift 3
   local f
@@ -160,8 +187,7 @@ report() {
     esac
     logit "$sev $tag $f"
     if [ "$sev" = CRITICAL ] && [ -f "$f" ]; then
-      local safe; safe=$(printf '%s' "$f" | sed 's|/|_|g; s|^_||')
-      cp -p "$f" "$QUARANTINE/$(date +%Y%m%d-%H%M%S)-$tag-$safe" 2>/dev/null
+      quarantine_copy "$f" "$tag"
     fi
   done
 }
@@ -213,7 +239,7 @@ scan_persist() {
     while IFS= read -r f; do
       [ -n "$f" ] || continue
       hits=1; hit "${RED}CRITICAL${RST}  persistence job launches a loader  $f"; logit "CRITICAL persist $f"
-      cp -p "$f" "$QUARANTINE/$(date +%Y%m%d-%H%M%S)-PERSIST-$(printf '%s' "$f" | sed 's|/|_|g; s|^_||')" 2>/dev/null
+      quarantine_copy "$f" PERSIST
       if [ "$KILL" = 1 ]; then
         launchctl unload -w "$f" 2>/dev/null; launchctl bootout "gui/$(id -u)/$(basename "$f" .plist)" 2>/dev/null
         mv "$f" "$f.malscan-disabled" 2>/dev/null && { echo "          disabled $f"; logit "disabled persist $f"; }
@@ -253,6 +279,33 @@ scan_procs() {
   return 0
 }
 
+# Retention: keep KEEP_DAYS of quarantine copies, cached results and log lines.
+# Birth time, not mtime: quarantine copies keep the infected file's own mtime (cp -p).
+trim_log() { # <file>: keep dated lines from the cutoff on, with their undated continuation lines
+  local f="$1" cut; [ -f "$f" ] || return 0
+  cut=$(date -v-"${KEEP_DAYS}"d '+%Y-%m-%d')
+  awk -v c="$cut" '/^[0-9]{4}-[0-9]{2}-[0-9]{2} /{keep=($1>=c)} keep' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+}
+prune() {
+  find "$QUARANTINE" -type f -Btime +"${KEEP_DAYS}d" -delete 2>/dev/null
+  find "$CACHE_DIR" -type f -Btime +"${KEEP_DAYS}d" -delete 2>/dev/null
+  find "$SEC_DIR/logs" -type f -name 'full-scan-*' -Btime +"${KEEP_DAYS}d" -delete 2>/dev/null
+  trim_log "$LOG"; trim_log "$SEC_DIR/logs/agent.log"
+}
+
+# Result cache for hook scans (--quiet on one tree). Claude sessions and git hooks
+# rescanned the same unchanged project hundreds of times a day. A cached result is
+# reused only while nothing in the tree has a newer CHANGE time than the last scan:
+# ctime moves on every write, create, rename and chmod and cannot be set back, so a
+# backdated or freshly extracted file still forces a rescan. The key includes this
+# script's own hash, so new rules invalidate every cached result.
+cache_key() { printf '%s|%s|%s' "$TARGET" "$DEEP" "$(shasum -a 256 "$0" | cut -c1-16)" | shasum | cut -c1-24; }
+tree_changed_since() { # <stamp>: prints the first changed path, if any
+  local -a pr=(-name .git -o -path '*/.next/cache' -o -name OrbStack)
+  [ "$DEEP" = 1 ] || pr+=(-o -name node_modules)
+  find "$TARGET" \( "${pr[@]}" \) -prune -o -cnewer "$1" -print -quit 2>/dev/null
+}
+
 # Proves the scanner still works. A security tool that can't demonstrate a true
 # positive is indistinguishable from one that is silently broken.
 selftest() {
@@ -275,6 +328,18 @@ selftest() {
   grep -q "fonts/fa.eot"        <<<"$out" || { echo "${RED}FAIL${RST}: missed JavaScript hidden in a font"; ok=0; }
   grep -q "real.woff2"          <<<"$out" && { echo "${RED}FAIL${RST}: false positive on a binary font"; ok=0; }
   [ "$rc" = 1 ]               || { echo "${RED}FAIL${RST}: expected exit 1, got $rc"; ok=0; }
+
+  # Cache: a repeat hook scan must report the same finding, and a payload written into an
+  # existing file with its date set back to 2020 (the folder itself unchanged) must
+  # still force a fresh scan that catches it.
+  "$0" --quiet --tree "$t" >/dev/null 2>&1
+  out=$("$0" --quiet --tree "$t" 2>&1); rc=$?
+  { [ "$rc" = 1 ] && grep -q "postcss.config.js" <<<"$out"; } || { echo "${RED}FAIL${RST}: cached result lost the finding"; ok=0; }
+  sleep 1
+  printf 'x;%s global["r"]=require;\n' "$(printf ' %.0s' $(seq 1 120))" > "$t/clean.ts"
+  touch -t 202001010000 "$t/clean.ts"
+  out=$("$0" --quiet --tree "$t" 2>&1); rc=$?
+  { [ "$rc" = 1 ] && grep -q "clean.ts" <<<"$out"; } || { echo "${RED}FAIL${RST}: cache hid a backdated payload"; ok=0; }
   rm -rf "$t"
   if [ "$ok" = 1 ]; then echo "${GRN}selftest PASSED${RST}: detects known-bad, no false positives"; return 0
   else echo "${RED}selftest FAILED${RST}: do not trust this scanner"; return 2; fi
@@ -282,9 +347,28 @@ selftest() {
 
 case "$MODE" in
   selftest) selftest; exit $? ;;
+  prune)    prune; exit 0 ;;
   procs)    scan_procs ;;
   scan)
-    scan_tree "$TARGET"
+    CKEY=""
+    if [ "$QUIET" = 1 ] && [ "$FRESH" = 0 ] && [ "$SCAN_TOOLING" = 0 ] && [ -d "$TARGET" ] && [ "$TARGET" != "$HOME" ]; then
+      CKEY="$CACHE_DIR/$(cache_key)"
+      if [ -f "$CKEY.start" ] && [ -f "$CKEY.rc" ] && [ -z "$(tree_changed_since "$CKEY.start")" ]; then
+        # .rc holds the tree's finding count and unreadable-path count from that scan.
+        cat "$CKEY.out" 2>/dev/null
+        read -r n p < "$CKEY.rc"
+        FINDINGS=$((FINDINGS + ${n:-0}))
+        [ "${p:-0}" -gt 0 ] && { SCAN_PARTIAL=1; PARTIAL_COUNT=$p; }
+      else
+        rm -f "$CKEY.start" "$CKEY.rc" "$CKEY.out"
+        touch "$CKEY.start"
+        scan_tree "$TARGET" > "$CKEY.out"
+        cat "$CKEY.out"
+        echo "$FINDINGS $PARTIAL_COUNT" > "$CKEY.rc"
+      fi
+    else
+      scan_tree "$TARGET"
+    fi
     # Global tooling lives OUTSIDE $HOME. npm's own cli.js was infected there on
     # 2026-08-04: a $HOME-only sweep would have missed the dropper entirely.
     if [ "$SCAN_TOOLING" = 1 ]; then
